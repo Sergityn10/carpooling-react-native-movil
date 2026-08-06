@@ -12,11 +12,22 @@ async function login(email, password, auth_method = "PASSWORD") {
 }
 
 // Registro — POST /api/auth/register
-// Solo email + password. Retorna: { status, message, token, userId }
-async function register(email, password) {
+// Retorna: { status, message, token, role, userId }
+async function register(email, password, options = {}) {
+  const body = {
+    email,
+    password,
+    consents: {
+      privacy_policy_accepted: options.acceptPrivacy ?? true,
+      terms_of_service_accepted: options.acceptTerms ?? true,
+      marketing_accepted: options.acceptMarketing ?? false,
+      privacy_version: "v1.0",
+      terms_version: "v1.0",
+    },
+  };
   return httpClient.request("/api/auth/register", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -48,10 +59,24 @@ async function validateToken() {
 // OAuth Google Android — POST /api/auth/oauth/android
 // Recibe el id_token del SDK de Google Sign-In y method (login|register)
 // Retorna: { status, message, token, userId, img_perfil, onboarding_ended }
-async function loginWithGoogleAndroid(id_token, method = "login") {
+async function loginWithGoogleAndroid(
+  id_token,
+  method = "login",
+  options = {},
+) {
+  const body = { id_token, method };
+  if (method === "register") {
+    body.consents = {
+      privacy_policy_accepted: options.acceptPrivacy ?? true,
+      terms_of_service_accepted: options.acceptTerms ?? true,
+      marketing_accepted: options.acceptMarketing ?? false,
+      privacy_version: "v1.0",
+      terms_version: "v1.0",
+    };
+  }
   return httpClient.request("/api/auth/oauth/android", {
     method: "POST",
-    body: JSON.stringify({ id_token, method }),
+    body: JSON.stringify(body),
   });
 }
 

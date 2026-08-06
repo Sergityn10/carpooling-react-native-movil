@@ -67,7 +67,11 @@ Endpoints para gestión de pagos, cuentas Stripe Connect, clientes Stripe, moned
 
 **Autenticación:** Requerida (`isLoged`).
 
-**Descripción:** Genera un link de onboarding para la cuenta Stripe Connect del usuario autenticado. Útil para reanudar el onboarding si no se completó.
+**Descripción:** Genera un link de onboarding para la cuenta Stripe Connect del usuario autenticado. Útil para reanudar el onboarding si no se completó. Acepta `return_url` y `refresh_url` opcionales como query params; si no se proporcionan, se usa `process.env.ORIGIN`.
+
+**Query params (opcionales):**
+- `return_url` — URL de retorno tras completar el onboarding (default: `process.env.ORIGIN`).
+- `refresh_url` — URL de refresco si el link expira (default: `process.env.ORIGIN`).
 
 **Salida (200):**
 ```json
@@ -168,7 +172,7 @@ Endpoints para gestión de pagos, cuentas Stripe Connect, clientes Stripe, moned
 
 **Autenticación:** Requerida (`isLoged`).
 
-**Descripción:** Genera un link de onboarding para la cuenta Stripe Connect del usuario.
+**Descripción:** Genera un link de onboarding para la cuenta Stripe Connect del usuario. Acepta `return_url` y `refresh_url` opcionales; si no se proporcionan, se usa `process.env.ORIGIN`.
 
 **Entrada (body JSON):**
 ```json
@@ -223,7 +227,7 @@ Endpoints para gestión de pagos, cuentas Stripe Connect, clientes Stripe, moned
 
 **Autenticación:** Requerida (`isLoged`).
 
-**Descripción:** Genera un link de login al dashboard de Stripe para la cuenta Connect del usuario.
+**Descripción:** Genera un link de login al dashboard de Stripe para la cuenta Connect del usuario. **Requiere que el onboarding esté completado** (`onboarding_ended: true`). Si no se ha completado, devuelve error indicando que debe usar `POST /api/payment/stripe-connect-link` primero.
 
 **Entrada (body JSON, opcional):**
 ```json
@@ -237,12 +241,13 @@ Endpoints para gestión de pagos, cuentas Stripe Connect, clientes Stripe, moned
 ```json
 {
   "status": "Success",
-  "message": "Stripe customer created successfully",
+  "message": "Stripe login link created successfully",
   "loginLink": { ... }
 }
 ```
 
 **Errores:**
+- `400` — Onboarding no completado o error de Stripe.
 - `404` — No tiene cuenta Stripe.
 
 ---
@@ -296,7 +301,7 @@ Endpoints para gestión de pagos, cuentas Stripe Connect, clientes Stripe, moned
 
 **Autenticación:** Requerida (`isLoged`).
 
-**Descripción:** Devuelve el balance del monedero virtual del usuario desde la tabla local `wallet_accounts`. Si no existe, hace fallback a `wallet_recharges` con status `succeeded`.
+**Descripción:** Devuelve el balance del monedero virtual del usuario desde la tabla local `wallet_accounts`. Si no existe, hace fallback a `wallet_recharges` con status `succeeded`. Adicionalmente, consulta el microservicio de trayectos para obtener el balance de informes CAE (Certificados de Ahorro de Energía) del conductor.
 
 **Salida (200):**
 ```json
@@ -304,9 +309,31 @@ Endpoints para gestión de pagos, cuentas Stripe Connect, clientes Stripe, moned
   "status": "Success",
   "balances": [
     { "currency": "eur", "balance_cents": 15000 }
-  ]
+  ],
+  "cae": {
+    "status": "Success",
+    "en_revision": 12.50,
+    "disponible": 45.30,
+    "cancelado": 2.00,
+    "total": 57.80,
+    "detalles": [
+      {
+        "id": "uuid",
+        "id_trayecto": "uuid",
+        "km_recorridos": 120.5,
+        "km_with_company": 85.2,
+        "kwh_generated": 59.64,
+        "eur_generated": 3.41,
+        "status": "completed",
+        "created_at": "2026-07-18T10:00:00Z",
+        "updated_at": "2026-07-18T10:05:00Z"
+      }
+    ]
+  }
 }
 ```
+
+> **Nota:** El campo `cae` puede ser `null` si el microservicio de trayectos no está disponible o el usuario no tiene informes CAE. Los importes de CAE (`en_revision`, `disponible`, `cancelado`, `total`) están en euros (no en céntimos), a diferencia del balance del monedero que está en céntimos.
 
 ---
 
@@ -440,12 +467,12 @@ Endpoints para gestión de pagos, cuentas Stripe Connect, clientes Stripe, moned
 
 **Autenticación:** Requerida (`isLoged`).
 
-**Descripción:** Crea un Payment Intent en Stripe con retención manual (`capture_method: manual`), comisión del 10% y transferencia a una cuenta destino.
+**Descripción:** Crea un Payment Intent en Stripe con retención manual (`capture_method: manual`). El `amount` recibido es el **precio neto** (en céntimos), que ya incluye el margen de plataforma del 15%. El backend solo añade las comisiones de Stripe para calcular el total que paga el pasajero, y comunica a Stripe el `application_fee_amount` correspondiente al margen de la plataforma (ver sección [Cálculo de precios](#cálculo-de-precios)).
 
 **Entrada (body JSON):**
 ```json
 {
-  "amount": "number (céntimos)",
+  "amount": "number (precio neto en céntimos, ya incluye margen plataforma)",
   "currency": "string (ej: eur)",
   "destination": "string (Stripe account ID destino)"
 }
@@ -456,7 +483,21 @@ Endpoints para gestión de pagos, cuentas Stripe Connect, clientes Stripe, moned
 {
   "status": "Success",
   "message": "Stripe payment intent created successfully",
-  "paymentIntent": { ... }
+  "paymentIntent": { ... },
+  "pricing": {
+    "total_cents": 2361,
+    "net_price_cents": 2300,
+    "driver_price_cents": 2000,
+    "application_fee_cents": 361,
+    "platform_fee_cents": 300,
+    "stripe_fee_cents": 61,
+    "total_eur": 23.61,
+    "net_price_eur": 23.00,
+    "driver_price_eur": 20.00,
+    "application_fee_eur": 3.61,
+    "platform_fee_eur": 3.00,
+    "stripe_fee_eur": 0.61
+  }
 }
 ```
 
@@ -468,25 +509,47 @@ Endpoints para gestión de pagos, cuentas Stripe Connect, clientes Stripe, moned
 
 **Autenticación:** Requerida (`isLoged`).
 
-**Descripción:** Crea una sesión de Stripe Checkout para una reserva de trayecto. Usa retención manual (`capture_method: manual`), comisión del 15% y transferencia a la cuenta destino del conductor.
+**Descripción:** Crea una sesión de Stripe Checkout para una reserva de trayecto. Usa retención manual (`capture_method: manual`) y **Destination Charges**: cobra al pasajero el precio total calculado y transfiere automáticamente el precio del conductor a su cuenta Stripe Connect. El `application_fee_amount` comunicado a Stripe incluye el margen de la plataforma (15%) más las comisiones de Stripe.
+
+El `amount` recibido es el **precio neto** (en céntimos), que ya incluye el margen de plataforma del 15%. El backend solo añade las comisiones de Stripe para calcular el total que paga el pasajero (ver sección [Cálculo de precios](#cálculo-de-precios)).
 
 **Entrada (body JSON):**
 ```json
 {
-  "amount": "number (céntimos)",
+  "amount": "number (precio neto en céntimos, ya incluye margen plataforma)",
   "id_reserva": "string (ID de la reserva)",
   "description": "string",
-  "destination": "string (Stripe account ID del conductor)",
+  "recipient_user_id": "string (ID del usuario conductor)",
   "id_trayecto": "number (ID del trayecto)",
   "success_url": "string",
   "cancel_url": "string"
 }
 ```
 
-**Salida (200):** Objeto sesión de Stripe Checkout.
+**Salida (200):**
+```json
+{
+  ...checkout_session,
+  "pricing": {
+    "total_cents": 2361,
+    "net_price_cents": 2300,
+    "driver_price_cents": 2000,
+    "application_fee_cents": 361,
+    "platform_fee_cents": 300,
+    "stripe_fee_cents": 61,
+    "total_eur": 23.61,
+    "net_price_eur": 23.00,
+    "driver_price_eur": 20.00,
+    "application_fee_eur": 3.61,
+    "platform_fee_eur": 3.00,
+    "stripe_fee_eur": 0.61
+  }
+}
+```
 
 **Errores:**
-- `400` — Falta `id_trayecto` o es inválido.
+- `400` — Falta `id_trayecto`, `recipient_user_id`, `amount` inválido, o el conductor no tiene la capability `transfers` activa (onboarding no completado).
+- `404` — Usuario remitente o destinatario no encontrado.
 
 ---
 
@@ -519,7 +582,54 @@ Endpoints para gestión de pagos, cuentas Stripe Connect, clientes Stripe, moned
 
 ---
 
-## 19. Cancelar Payment Intent
+## 19. Capturar pagos de un trayecto
+
+**URL:** `POST /api/payment/trayecto/capture`
+
+**Autenticación:** Requerida (`isLoged`).
+
+**Descripción:** Captura todos los Payment Intents pendientes (`requires_capture`) de las reservas asociadas a un trayecto. Consulta al microservicio de trayectos para obtener las reservas del trayecto, busca los Payment Intents en BD, y captura cada uno en Stripe. Debe llamarse cuando el trayecto se finaliza.
+
+**Entrada (body JSON):**
+```json
+{
+  "id_trayecto": "string (ID del trayecto)"
+}
+```
+
+**Salida (200):**
+```json
+{
+  "status": "Success",
+  "message": "Capturados: 3, Omitidos: 1, Errores: 0",
+  "trayecto_id": "uuid",
+  "captured": [
+    {
+      "payment_intent_id": "pi_xxx",
+      "id_reserva": "uuid",
+      "status": "succeeded",
+      "amount": 2361
+    }
+  ],
+  "skipped": [
+    {
+      "payment_intent_id": "pi_yyy",
+      "id_reserva": "uuid",
+      "status": "succeeded",
+      "reason": "not_in_requires_capture_state"
+    }
+  ],
+  "errors": []
+}
+```
+
+**Errores:**
+- `400` — Falta `id_trayecto`.
+- `502` — No se pudieron obtener las reservas del microservicio de trayectos.
+
+---
+
+## 20. Cancelar Payment Intent
 
 **URL:** `POST /api/payment/payment-intent/cancel`
 
@@ -672,10 +782,174 @@ Endpoints para gestión de pagos, cuentas Stripe Connect, clientes Stripe, moned
 - Las cuentas bancarias incluyen `banco`, `ultimos4`, `moneda` y `estado` (`new`, `validated`, `errored`).
 - Si el usuario no tiene ninguna cuenta vinculada, se devuelve `cuentas: []`.
 
+---
+
+## 24. Calcular precio de un trayecto
+
+**URL:** `POST /api/payment/calculate-price`
+
+**Autenticación:** Requerida (`isLoged`).
+
+**Descripción:** Calcula el precio total que debe pagar el pasajero a partir del precio neto (que ya incluye el margen de plataforma del 15%), aplicando la fórmula de fees de Stripe y el margen de plataforma. Útil para que el backend calcule el desglose completo antes del checkout.
+
+**Entrada (body JSON):**
+```json
+{
+  "driver_price_cents": "number (precio neto en céntimos, ya incluye margen plataforma)"
+}
+```
+
+**Salida (200):**
+```json
+{
+  "status": "Success",
+  "pricing": {
+    "total_cents": 2361,
+    "net_price_cents": 2300,
+    "driver_price_cents": 2000,
+    "application_fee_cents": 361,
+    "platform_fee_cents": 300,
+    "stripe_fee_cents": 61,
+    "total_eur": 23.61,
+    "net_price_eur": 23.00,
+    "driver_price_eur": 20.00,
+    "application_fee_eur": 3.61,
+    "platform_fee_eur": 3.00,
+    "stripe_fee_eur": 0.61
+  }
+}
+```
+
+**Errores:**
+- `400` — Falta `driver_price_cents` o es inválido.
+
+---
+
+## 25. Cotizar precio (solo comisiones de Stripe)
+
+**URL:** `GET /api/payment/cotizar?neto=XX`
+
+**Autenticación:** No requerida.
+
+**Descripción:** Calcula el precio total que debe pagar el pasajero a partir del precio neto (que ya incluye el margen de plataforma), añadiendo **únicamente las comisiones de Stripe**. Pensado para ser usado desde el frontend en la lista de búsqueda de trayectos, para mostrar al pasajero el precio final antes de ir al checkout.
+
+**Query params:**
+- `neto` — Precio neto en céntimos (ya incluye margen plataforma, entero positivo).
+
+**Ejemplo:** `GET /api/payment/cotizar?neto=2000`
+
+**Salida (200):**
+```json
+{
+  "status": "Success",
+  "neto_cents": 2000,
+  "total_cents": 2061,
+  "stripe_fee_cents": 61,
+  "neto_eur": 20.00,
+  "total_eur": 20.61,
+  "stripe_fee_eur": 0.61
+}
+```
+
+**Fórmula usada:**
+```
+T = (P + Sf) / (1 - S%)
+```
+Donde `P` = precio neto, `Sf` = 25 céntimos (tarifa fija Stripe), `S%` = 1.5% (porcentaje Stripe).
+
+**Errores:**
+- `400` — Falta `neto` o es inválido (debe ser un entero positivo).
+
+---
+
+## Cálculo de precios
+
+El sistema calcula el precio que paga el pasajero recibiendo un **precio neto** que ya incluye el margen de plataforma (15%). El backend solo añade las comisiones de Stripe, y comunica a Stripe el `application_fee_amount` correspondiente al margen de plataforma.
+
+### Variables
+
+| Variable | Descripción                                                | Valor por defecto                              |
+| -------- | ---------------------------------------------------------- | ---------------------------------------------- |
+| `N`      | Precio neto (ya incluye margen plataforma)                 | Input del cliente                              |
+| `P`      | Precio del conductor = `N / (1 + PLATFORM_MARGIN_PERCENT)` | Calculado                                      |
+| `M`      | Margen de la plataforma = `N - P`                          | 15% del precio del conductor                   |
+| `S%`     | Porcentaje que cobra Stripe                                | 1.5% (`STRIPE_FEE_PERCENT`)                    |
+| `Sf`     | Tarifa fija de Stripe                                      | 0.25€ = 25 céntimos (`STRIPE_FEE_FIXED_CENTS`) |
+| `T`      | Precio total que paga el pasajero                          | Calculado                                      |
+| `AF`     | Application fee para Stripe = `T - P`                      | Calculado                                      |
+
+### Fórmula
+
+```
+P = N / (1 + M%)
+T = (N + Sf) / (1 - S%)
+AF = T - P
+```
+
+### Ejemplo práctico
+
+El frontend envía un precio neto de 23€ (2300 céntimos), que ya incluye el 15% de margen:
+
+```
+P = 2300 / 1.15 = 2000 céntimos (20.00€) — precio del conductor
+M = 2300 - 2000 = 300 céntimos (3.00€) — margen plataforma
+T = (2300 + 25) / (1 - 0.015) = 2325 / 0.985 = 2361 céntimos (23.61€) — total pasajero
+AF = 2361 - 2000 = 361 céntimos (3.61€) — application_fee_amount para Stripe
+```
+
+Desglose del pago:
+
+| Concepto                 | Importe                          |
+| ------------------------ | -------------------------------- |
+| Paga el pasajero         | 23.61€                           |
+| Recibe el conductor      | 20.00€                           |
+| Margen plataforma (neto) | 3.00€                            |
+| Comisión Stripe          | 0.61€                            |
+| Application fee (Stripe) | 3.61€ (margen + comisión Stripe) |
+
+### Configuración (`.env`)
+
+| Variable                  | Descripción                       | Default |
+| ------------------------- | --------------------------------- | ------- |
+| `STRIPE_FEE_PERCENT`      | Porcentaje de comisión de Stripe  | `0.015` |
+| `STRIPE_FEE_FIXED_CENTS`  | Tarifa fija de Stripe en céntimos | `25`    |
+| `PLATFORM_MARGIN_PERCENT` | Margen de la plataforma           | `0.15`  |
+
+### Arquitectura: Destination Charges
+
+Se usa el modelo **Destination Charges** de Stripe Connect:
+
+1. La plataforma cobra los `T` céntimos al pasajero vía Stripe Checkout.
+2. En la misma llamada, Stripe transfiere automáticamente `P` céntimos a la cuenta Connect del conductor.
+3. La plataforma retiene `application_fee_amount = T - P` (margen plataforma + comisión Stripe).
+4. Stripe descuenta su comisión (`S% × T + Sf`) del `application_fee_amount`.
+5. La plataforma se queda con `M = application_fee_amount - comisión Stripe`.
+
+### Metadatos del Payment Intent
+
+Los Payment Intents incluyen los siguientes metadatos para trazabilidad:
+
+| Campo                   | Descripción                                                    |
+| ----------------------- | -------------------------------------------------------------- |
+| `net_price_cents`       | Precio neto recibido del frontend (incluye margen plataforma)  |
+| `driver_price_cents`    | Precio del conductor (sin margen)                              |
+| `total_cents`           | Precio total pagado por el pasajero                            |
+| `application_fee_cents` | Application fee comunicada a Stripe (margen + comisión Stripe) |
+| `platform_fee_cents`    | Margen neto de la plataforma (después de comisión Stripe)      |
+| `stripe_fee_cents`      | Comisión estimada de Stripe                                    |
+| `id_reserva`            | ID de la reserva asociada                                      |
+| `id_trayecto`           | ID del trayecto                                                |
+| `recipient_user_id`     | ID del usuario conductor                                       |
+| `sender_account`        | Stripe account ID del pasajero                                 |
+| `destination_account`   | Stripe account ID del conductor                                |
+
+---
+
 ## Notas generales
 
-- **Stripe Connect:** Los usuarios tienen cuentas tipo "express" para recibir pagos.
-- **Comisión de plataforma:** 10% en payment intents directos, 15% en checkout de reservas.
+- **Stripe Connect:** Los usuarios tienen cuentas tipo "express" con `business_type: individual`. Se crean automáticamente al registrarse (tanto password como Google OAuth) con `capabilities: card_payments` y `transfers` habilitadas, y `business_profile` pre-rellenado (MCC `4121`, descripción del producto, URL de la plataforma). El usuario debe completar el onboarding mediante `POST /api/payment/stripe-connect-link` o `GET /api/payment/stripe-connect-link`.
+- **Sincronización de perfil:** Al actualizar el perfil de usuario (`PATCH /api/users` o `PATCH /api/users/:id`), se sincronizan automáticamente los datos con la cuenta Stripe Connect (`individual.first_name`, `individual.last_name`, `individual.email`, `individual.phone`, `individual.address`, `individual.dob`, `business_profile`).
+- **Comisión de plataforma:** 15% del precio del conductor, ya incluido en el precio neto que envía el frontend. El backend lo comunica a Stripe via `application_fee_amount = T - P`. Ver sección [Cálculo de precios](#cálculo-de-precios).
 - **Monedero virtual:** Tablas `wallet_accounts`, `wallet_transactions`, `wallet_recharges`, `wallet_payouts`.
 - **Idempotencia:** Los payouts del monedero soportan idempotencia via `idempotency_key` (header o body).
 - **Sincronización:** Los webhooks de Stripe actualizan automáticamente los estados en BD (ver [webhooks.md](./webhooks.md)).

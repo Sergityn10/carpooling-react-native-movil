@@ -15,20 +15,26 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { Calendar, Phone } from "lucide-react-native";
+import { Calendar, Phone, User as UserIcon, IdCard } from "lucide-react-native";
 import { useUser } from "../context/UserContext";
 import { COLORS, SPACING, RADIUS, FONTS } from "../constants";
 import { Button } from "../components";
 
 const OnboardingScreen = () => {
-  const { actualizarUsuario } = useUser();
+  const { user, actualizarUsuario } = useUser();
   const [step, setStep] = useState(0);
   const [fechaNacimiento, setFechaNacimiento] = useState(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [telefono, setTelefono] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const totalSteps = 2;
+  const needsNameStep = !user?.name;
+  const [nombre, setNombre] = useState(user?.name || "");
+  const [apellido, setApellido] = useState(user?.surname || "");
+  const [dni, setDni] = useState("");
+
+  const totalSteps = needsNameStep ? 4 : 2;
+  const stepOffset = needsNameStep ? 2 : 0;
 
   const formatDate = (date) => {
     if (!date) return "";
@@ -71,16 +77,42 @@ const OnboardingScreen = () => {
     return cleaned.length >= 9 && /^\d+$/.test(cleaned);
   };
 
+  const validateDni = (value) => {
+    const cleaned = value.replace(/[\s\-]/g, "").toUpperCase();
+    return /^\d{8}[A-Z]$/.test(cleaned);
+  };
+
   const handleNext = () => {
-    if (step === 0) {
-      if (!fechaNacimiento) {
+    if (needsNameStep && step === 0) {
+      if (!nombre.trim() || !apellido.trim()) {
         Alert.alert(
-          "Fecha requerida",
-          "Por favor, selecciona tu fecha de nacimiento",
+          "Datos requeridos",
+          "Por favor, introduce tu nombre y apellidos",
         );
         return;
       }
       setStep(1);
+    } else if (needsNameStep && step === 1) {
+      if (!validateDni(dni)) {
+        Alert.alert(
+          "DNI inválido",
+          "Introduce un DNI válido (8 números y 1 letra)",
+        );
+        return;
+      }
+      setStep(2);
+    } else {
+      const fechaStep = stepOffset;
+      if (step === fechaStep) {
+        if (!fechaNacimiento) {
+          Alert.alert(
+            "Fecha requerida",
+            "Por favor, selecciona tu fecha de nacimiento",
+          );
+          return;
+        }
+        setStep(fechaStep + 1);
+      }
     }
   };
 
@@ -96,27 +128,55 @@ const OnboardingScreen = () => {
     setLoading(true);
     try {
       const cleanedPhone = telefono.replace(/[\s\-+()]/g, "");
-      await actualizarUsuario({
+      const updateData = {
         fecha_nacimiento: formatDate(fechaNacimiento),
         phone: cleanedPhone,
         onboarding_ended: true,
-      });
+      };
+      if (needsNameStep) {
+        updateData.name = nombre.trim();
+        updateData.surname = apellido.trim();
+        updateData.dni = dni.replace(/[\s\-]/g, "").toUpperCase();
+      }
+      await actualizarUsuario(updateData);
     } catch (e) {
-      Alert.alert(
-        "Error",
-        e.message || "No se pudo completar el onboarding. Inténtalo de nuevo.",
-      );
+      const status = e.status;
+      const msg = e.message || "";
+      if (status === 409 || /dni|nie/i.test(msg)) {
+        Alert.alert(
+          "DNI ya registrado",
+          "Ya existe un usuario con este DNI/NIE. Por favor, introduce un DNI diferente.",
+          [
+            {
+              text: "Ir al DNI",
+              onPress: () => setStep(1),
+            },
+          ],
+        );
+      } else if (status === 400) {
+        Alert.alert(
+          "Datos inválidos",
+          msg || "Revisa los datos introducidos e inténtalo de nuevo.",
+        );
+      } else {
+        Alert.alert(
+          "Error",
+          msg || "No se pudo completar el onboarding. Inténtalo de nuevo.",
+        );
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
+    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "android" ? StatusBar.currentHeight : undefined}
+        keyboardVerticalOffset={
+          Platform.OS === "android" ? StatusBar.currentHeight : undefined
+        }
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -135,8 +195,93 @@ const OnboardingScreen = () => {
             ))}
           </View>
 
-          {/* Step 0: Fecha de nacimiento */}
-          {step === 0 && (
+          {/* Step 0 (email only): Nombre y apellidos */}
+          {needsNameStep && step === 0 && (
+            <View style={styles.stepContainer}>
+              <View style={styles.iconWrapper}>
+                <UserIcon size={48} color={COLORS.primary} strokeWidth={2} />
+              </View>
+              <Text style={styles.title}>Tus datos personales</Text>
+              <Text style={styles.subtitle}>
+                Necesitamos tu nombre y apellidos para tu perfil
+              </Text>
+
+              <View style={styles.inputWrapper}>
+                <Text style={styles.inputLabel}>Nombre</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Tu nombre"
+                  placeholderTextColor={COLORS.gray400}
+                  value={nombre}
+                  onChangeText={setNombre}
+                  autoCapitalize="words"
+                />
+              </View>
+
+              <View style={styles.inputWrapper}>
+                <Text style={styles.inputLabel}>Apellidos</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Tus apellidos"
+                  placeholderTextColor={COLORS.gray400}
+                  value={apellido}
+                  onChangeText={setApellido}
+                  autoCapitalize="words"
+                />
+              </View>
+
+              <Button
+                title="Continuar"
+                onPress={handleNext}
+                disabled={!nombre.trim() || !apellido.trim()}
+                style={styles.button}
+              />
+            </View>
+          )}
+
+          {/* Step 1 (email only): DNI */}
+          {needsNameStep && step === 1 && (
+            <View style={styles.stepContainer}>
+              <View style={styles.iconWrapper}>
+                <IdCard size={48} color={COLORS.primary} strokeWidth={2} />
+              </View>
+              <Text style={styles.title}>Tu DNI</Text>
+              <Text style={styles.subtitle}>
+                Necesitamos tu DNI para verificar tu identidad
+              </Text>
+
+              <View style={styles.inputWrapper}>
+                <Text style={styles.inputLabel}>DNI</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="12345678A"
+                  placeholderTextColor={COLORS.gray400}
+                  value={dni}
+                  onChangeText={(v) => setDni(v.toUpperCase())}
+                  autoCapitalize="characters"
+                  maxLength={10}
+                />
+              </View>
+
+              <View style={styles.buttonContainer}>
+                <Button
+                  title="Atrás"
+                  onPress={() => setStep(0)}
+                  variant="outline"
+                  style={styles.backButton}
+                />
+                <Button
+                  title="Continuar"
+                  onPress={handleNext}
+                  disabled={!validateDni(dni)}
+                  style={styles.button}
+                />
+              </View>
+            </View>
+          )}
+
+          {/* Step 0/2: Fecha de nacimiento */}
+          {step === stepOffset && (
             <View style={styles.stepContainer}>
               <View style={styles.iconWrapper}>
                 <Calendar size={48} color={COLORS.primary} strokeWidth={2} />
@@ -187,17 +332,34 @@ const OnboardingScreen = () => {
                 </TouchableOpacity>
               )}
 
-              <Button
-                title="Continuar"
-                onPress={handleNext}
-                disabled={!fechaNacimiento}
-                style={styles.button}
-              />
+              {needsNameStep ? (
+                <View style={styles.buttonContainer}>
+                  <Button
+                    title="Atrás"
+                    onPress={() => setStep(1)}
+                    variant="outline"
+                    style={styles.backButton}
+                  />
+                  <Button
+                    title="Continuar"
+                    onPress={handleNext}
+                    disabled={!fechaNacimiento}
+                    style={styles.button}
+                  />
+                </View>
+              ) : (
+                <Button
+                  title="Continuar"
+                  onPress={handleNext}
+                  disabled={!fechaNacimiento}
+                  style={styles.button}
+                />
+              )}
             </View>
           )}
 
-          {/* Step 1: Teléfono */}
-          {step === 1 && (
+          {/* Step 1/3: Teléfono */}
+          {step === stepOffset + 1 && (
             <View style={styles.stepContainer}>
               <View style={styles.iconWrapper}>
                 <Phone size={48} color={COLORS.primary} strokeWidth={2} />
@@ -223,7 +385,7 @@ const OnboardingScreen = () => {
               <View style={styles.buttonContainer}>
                 <Button
                   title="Atrás"
-                  onPress={() => setStep(0)}
+                  onPress={() => setStep(stepOffset)}
                   variant="outline"
                   style={styles.backButton}
                 />

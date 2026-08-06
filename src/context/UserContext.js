@@ -1,11 +1,21 @@
 // YouConnext - User Context
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import httpClient from "../services/httpClient";
 import travelsHttpClient from "../services/travels/httpClient";
+import notificationsHttpClient from "../services/notifications/httpClient";
 import authService from "../services/authService";
 import usuarioService from "../services/usuarioService";
+import userCache from "../services/messages/userCache";
+import { homeCache } from "../services/homeCache";
+import socketService from "../services/messages/socketService";
+import {
+  registerPushDevice,
+  unregisterPushDevice,
+  listenForTokenRefresh,
+} from "../services/notifications/pushRegistration";
 
 const UserContext = createContext();
 
@@ -26,11 +36,47 @@ export const UserProvider = ({ children }) => {
     };
     httpClient.setUnauthorizedHandler(handleUnauthorized);
     travelsHttpClient.setUnauthorizedHandler(handleUnauthorized);
+    notificationsHttpClient.setUnauthorizedHandler(handleUnauthorized);
     return () => {
       httpClient.setUnauthorizedHandler(null);
       travelsHttpClient.setUnauthorizedHandler(null);
+      notificationsHttpClient.setUnauthorizedHandler(null);
     };
   }, []);
+
+  // Refrescar token proactivamente al volver a primer plano
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (nextAppState === "active" && isAuthenticated) {
+        httpClient.refreshToken().catch(() => {});
+      }
+    };
+    const subscription = AppState.addEventListener(
+      "change",
+      handleAppStateChange,
+    );
+    return () => subscription?.remove();
+  }, [isAuthenticated]);
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id) return;
+
+    let unsubscribeTokenRefresh = null;
+
+    const register = async () => {
+      const jwtToken = await AsyncStorage.getItem("@youconnext_token");
+      if (!jwtToken) return;
+      await registerPushDevice(user.id, jwtToken);
+      unsubscribeTokenRefresh = listenForTokenRefresh(user.id, jwtToken);
+    };
+
+    register();
+
+    return () => {
+      if (typeof unsubscribeTokenRefresh === "function") {
+        unsubscribeTokenRefresh();
+      }
+    };
+  }, [isAuthenticated, user?.id]);
 
   // Cargar usuario almacenado
   const loadUser = async () => {
@@ -40,6 +86,7 @@ export const UserProvider = ({ children }) => {
       if (token) {
         httpClient.setToken(token);
         travelsHttpClient.setToken(token);
+        notificationsHttpClient.setToken(token);
         try {
           // Validar token y obtener datos del usuario
           const validateRes = await authService.validateToken();
@@ -56,6 +103,9 @@ export const UserProvider = ({ children }) => {
               onboarding_ended: userData.onboarding_ended,
               role: userData.role,
               ...(infoRes.data || infoRes),
+              completitud: infoRes.completitud ?? null,
+              completitud_cae: infoRes.completitud_cae ?? null,
+              monedero: infoRes.monedero ?? null,
             };
             setUser(fullUser);
             setIsAuthenticated(true);
@@ -73,7 +123,25 @@ export const UserProvider = ({ children }) => {
           }
         } catch (error) {
           console.error("Error al validar token:", error);
-          await clearStoredSession();
+          // Solo cerrar sesión si es un error de autenticación (401),
+          // no por errores de red o del servidor
+          const isAuthError =
+            error?.message?.includes("401") ||
+            error?.message?.includes("token") ||
+            error?.message?.includes("Unauthorized") ||
+            error?.message?.includes("sesión");
+          if (isAuthError) {
+            await clearStoredSession();
+          } else {
+            // Error de red o servidor: mantener sesión, usar datos locales
+            const localUserData =
+              await AsyncStorage.getItem("@youconnext_user");
+            if (localUserData) {
+              const parsedUser = JSON.parse(localUserData);
+              setUser(parsedUser);
+              setIsAuthenticated(true);
+            }
+          }
         }
       } else {
         // Fallback: cargar usuario guardado localmente
@@ -94,11 +162,13 @@ export const UserProvider = ({ children }) => {
   // Guardar sesión (token + usuario)
   const saveSession = async (userData, token) => {
     try {
+      userCache.clear();
       await AsyncStorage.setItem("@youconnext_user", JSON.stringify(userData));
       if (token) {
         await AsyncStorage.setItem("@youconnext_token", token);
         httpClient.setToken(token);
         travelsHttpClient.setToken(token);
+        notificationsHttpClient.setToken(token);
       }
       setUser(userData);
       setIsAuthenticated(true);
@@ -113,14 +183,19 @@ export const UserProvider = ({ children }) => {
     await AsyncStorage.removeItem("@youconnext_user");
     await AsyncStorage.removeItem("@youconnext_token");
     httpClient.clearToken();
+    travelsHttpClient.clearToken();
+    notificationsHttpClient.clearToken();
+    userCache.clear();
+    homeCache.clear();
+    socketService.disconnect();
     setUser(null);
     setIsAuthenticated(false);
   };
 
   // Crear usuario (registro) — solo email + password
-  const crearUsuario = async (email, password) => {
+  const crearUsuario = async (email, password, options = {}) => {
     try {
-      const response = await authService.register(email, password);
+      const response = await authService.register(email, password, options);
       const token = response.token;
       httpClient.setToken(token);
       travelsHttpClient.setToken(token);
@@ -133,7 +208,13 @@ export const UserProvider = ({ children }) => {
 
       try {
         const infoRes = await usuarioService.getUserInfo();
-        userData = { ...userData, ...(infoRes.data || infoRes) };
+        userData = {
+          ...userData,
+          ...(infoRes.data || infoRes),
+          completitud: infoRes.completitud ?? null,
+          completitud_cae: infoRes.completitud_cae ?? null,
+          monedero: infoRes.monedero ?? null,
+        };
       } catch {
         // Si falla, usar datos básicos del registro
       }
@@ -164,7 +245,13 @@ export const UserProvider = ({ children }) => {
       // Obtener info completa del usuario
       try {
         const infoRes = await usuarioService.getUserInfo();
-        userData = { ...userData, ...(infoRes.data || infoRes) };
+        userData = {
+          ...userData,
+          ...(infoRes.data || infoRes),
+          completitud: infoRes.completitud ?? null,
+          completitud_cae: infoRes.completitud_cae ?? null,
+          monedero: infoRes.monedero ?? null,
+        };
       } catch {
         // Si falla, usar datos básicos del login
       }
@@ -190,14 +277,25 @@ export const UserProvider = ({ children }) => {
       } catch (e) {
         // Ignorar si no hay sesión de Google
       }
+      // Desregistrar token de notificaciones
+      try {
+        const jwtToken = await AsyncStorage.getItem("@youconnext_token");
+        await unregisterPushDevice(jwtToken);
+      } catch (e) {
+        // Ignorar si falla; clearStoredSession limpia el token igualmente
+      }
       await clearStoredSession();
     }
   };
 
   // Login con Google nativo — recibe idToken del SDK de Google Sign-In
-  const loginGoogleNative = async (idToken, method = "login") => {
+  const loginGoogleNative = async (idToken, method = "login", options = {}) => {
     try {
-      const res = await authService.loginWithGoogleAndroid(idToken, method);
+      const res = await authService.loginWithGoogleAndroid(
+        idToken,
+        method,
+        options,
+      );
       const { token, userId, img_perfil } = res;
 
       httpClient.setToken(token);
@@ -211,7 +309,13 @@ export const UserProvider = ({ children }) => {
       // Obtener info completa del usuario
       try {
         const infoRes = await usuarioService.getUserInfo();
-        userData = { ...userData, ...(infoRes.data || infoRes) };
+        userData = {
+          ...userData,
+          ...(infoRes.data || infoRes),
+          completitud: infoRes.completitud ?? null,
+          completitud_cae: infoRes.completitud_cae ?? null,
+          monedero: infoRes.monedero ?? null,
+        };
       } catch {
         // Si falla, usar datos básicos del login
       }
@@ -232,10 +336,14 @@ export const UserProvider = ({ children }) => {
       // Tras actualizar, refrescar datos del usuario
       try {
         const infoRes = await usuarioService.getUserInfo();
+        const infoData = infoRes.data || infoRes;
         const updatedUser = {
           ...user,
+          ...infoData,
           ...datos,
-          ...(infoRes.data || infoRes),
+          completitud: infoRes.completitud ?? null,
+          completitud_cae: infoRes.completitud_cae ?? null,
+          monedero: infoRes.monedero ?? null,
         };
         await AsyncStorage.setItem(
           "@youconnext_user",

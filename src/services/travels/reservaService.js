@@ -9,6 +9,14 @@ async function crearReserva(userId, trayectoId) {
   });
 }
 
+// Reserva mediante QR (unión y recogida inmediata) — POST /api/reserva/qr
+async function reservaQR(trayectoId, lat, lng) {
+  return httpClient.request("/api/reserva/qr", {
+    method: "POST",
+    body: JSON.stringify({ trayecto_id: trayectoId, lat, lng }),
+  });
+}
+
 // Obtener mis reservas — GET /api/reserva/userId/:userIdParam
 async function obtenerMisReservas(userId) {
   return httpClient.request(`/api/reserva/userId/${userId}`);
@@ -41,13 +49,31 @@ async function reclamarIncidencia(id, reason) {
   });
 }
 
+// Retomar pago de reserva — POST /api/reserva/resume
+async function resumePago(
+  idReserva,
+  returnUrl = "youconnext://perfil",
+  refreshUrl = "youconnext://perfil",
+) {
+  return httpClient.request("/api/reserva/resume", {
+    method: "POST",
+    body: JSON.stringify({
+      id_reserva: idReserva,
+      return_url: returnUrl,
+      refresh_url: refreshUrl,
+    }),
+  });
+}
+
 export const reservaService = {
   crearReserva,
+  reservaQR,
   obtenerMisReservas,
   obtenerReservasPorTrayecto,
   cancelarReserva,
   confirmarViajeExitoso,
   reclamarIncidencia,
+  resumePago,
 };
 
 export default reservaService;

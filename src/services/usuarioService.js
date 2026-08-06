@@ -17,6 +17,28 @@ async function getUserPublicInfo(id) {
   return httpClient.request(`/api/users/${id}/info`);
 }
 
+// Obtener info pública de un usuario (para chats) — GET /api/users/:id/public
+// Retorna: { status, user: { id, name, img_perfil } }
+async function getUserPublicChatInfo(id) {
+  return httpClient.request(`/api/users/${id}/public`);
+}
+
+// Info pública de múltiples usuarios (batch, para chats grupales) — POST /api/users/public/batch
+// Body: { ids: ["uuid1", "uuid2", ...] }
+// Retorna: { status, users: [{ id, name, img_perfil }, ...] }
+async function getUsersPublicBatch(ids) {
+  return httpClient.request("/api/users/public/batch", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+}
+
+// Perfil público completo de un usuario — GET /api/users/:id/profile
+// Retorna: { status, user: { id, name, img_perfil, about_me, genero, fecha_nacimiento, ciudad, provincia, pais, created_at, cars, stats, recent_comments } }
+async function getUserPublicProfile(id) {
+  return httpClient.request(`/api/users/${id}/profile`);
+}
+
 // Actualizar usuario autenticado — PATCH /api/users
 async function updateUser(datos) {
   return httpClient.request("/api/users", {
@@ -56,6 +78,9 @@ export const usuarioService = {
   getUserInfo,
   getUserById,
   getUserPublicInfo,
+  getUserPublicChatInfo,
+  getUsersPublicBatch,
+  getUserPublicProfile,
   updateUser,
   updateUserById,
   deleteUser,

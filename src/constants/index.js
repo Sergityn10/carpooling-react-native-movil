@@ -128,7 +128,8 @@ export const GPS_CONFIG = {
   ACCURACY_HIGH: 10,
   ACCURACY_MEDIUM: 50,
   ACCURACY_LOW: 100,
-  TRACKING_INTERVAL: 5000, // 5 segundos
+  TRACKING_INTERVAL: 5000, // 5 segundos (UI updates)
+  SAVE_INTERVAL: 60000, // 1 minuto (guardado al backend)
   MIN_DISTANCE: 10, // metros
 };
 

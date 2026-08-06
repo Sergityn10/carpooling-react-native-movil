@@ -12,25 +12,77 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { X, Search, MapPin, Calendar, Navigation } from "lucide-react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import {
+  X,
+  Search,
+  MapPin,
+  Calendar,
+  Navigation,
+  ChevronRight,
+} from "lucide-react-native";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../../constants";
 import LocationSelectSheet from "./LocationSelectSheet";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
-const SHEET_HEIGHT = SCREEN_HEIGHT * 0.55;
+const SHEET_HEIGHT = SCREEN_HEIGHT * 0.6;
 
-const SearchBottomSheet = ({ visible, onClose, onSearch }) => {
+const SearchBottomSheet = ({ visible, onClose, onSearch, initialParams }) => {
   const [slideAnim] = useState(new Animated.Value(SHEET_HEIGHT));
   const [originText, setOriginText] = useState("");
   const [originPlace, setOriginPlace] = useState(null);
   const [destText, setDestText] = useState("");
   const [destPlace, setDestPlace] = useState(null);
   const [selectedDate, setSelectedDate] = useState("");
-  const [activeSelectType, setActiveSelectType] = useState(null); // 'origin' o 'destination'
+  const [showNativeDatePicker, setShowNativeDatePicker] = useState(false);
+  const [activeSelectType, setActiveSelectType] = useState(null);
   const scrollViewRef = useRef(null);
+
+  const today = new Date();
+  const todayStr = today.toISOString().split("T")[0];
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().split("T")[0];
+  const dayAfter = new Date(today);
+  dayAfter.setDate(dayAfter.getDate() + 2);
+  const dayAfterStr = dayAfter.toISOString().split("T")[0];
+
+  const datePresets = [
+    {
+      label: "Hoy",
+      value: todayStr,
+      sublabel: today.toLocaleDateString("es-ES", {
+        day: "numeric",
+        month: "short",
+      }),
+    },
+    {
+      label: "Mañana",
+      value: tomorrowStr,
+      sublabel: tomorrow.toLocaleDateString("es-ES", {
+        day: "numeric",
+        month: "short",
+      }),
+    },
+    {
+      label: dayAfter.toLocaleDateString("es-ES", { weekday: "short" }),
+      value: dayAfterStr,
+      sublabel: dayAfter.toLocaleDateString("es-ES", {
+        day: "numeric",
+        month: "short",
+      }),
+    },
+  ];
 
   useEffect(() => {
     if (visible) {
+      if (initialParams) {
+        setOriginText(initialParams.origin || "");
+        setOriginPlace(initialParams.originPlace || null);
+        setDestText(initialParams.destination || "");
+        setDestPlace(initialParams.destPlace || null);
+        setSelectedDate(initialParams.date || "");
+      }
       Animated.timing(slideAnim, {
         toValue: 0,
         duration: 300,
@@ -43,7 +95,7 @@ const SearchBottomSheet = ({ visible, onClose, onSearch }) => {
         useNativeDriver: true,
       }).start();
     }
-  }, [visible]);
+  }, [visible, initialParams]);
 
   const handleClose = () => {
     Animated.timing(slideAnim, {
@@ -64,40 +116,16 @@ const SearchBottomSheet = ({ visible, onClose, onSearch }) => {
     handleClose();
   };
 
-  const showDatePicker = () => {
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const dayAfter = new Date(today);
-    dayAfter.setDate(dayAfter.getDate() + 2);
-
-    const options = [
-      { label: "Hoy", value: today.toISOString().split("T")[0] },
-      { label: "Mañana", value: tomorrow.toISOString().split("T")[0] },
-      {
-        label: dayAfter.toLocaleDateString("es-ES", {
-          weekday: "long",
-          day: "numeric",
-          month: "short",
-        }),
-        value: dayAfter.toISOString().split("T")[0],
-      },
-    ];
-
-    // Simple cycle through options
-    const currentIndex = options.findIndex((o) => o.value === selectedDate);
-    const nextIndex = (currentIndex + 1) % options.length;
-    setSelectedDate(options[nextIndex].value);
+  const handleNativeDateChange = (event, date) => {
+    setShowNativeDatePicker(false);
+    if (event.type === "set" && date) {
+      setSelectedDate(date.toISOString().split("T")[0]);
+    }
   };
 
   const dateLabel = () => {
     if (!selectedDate) return "Hoy";
-    const today = new Date().toISOString().split("T")[0];
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split("T")[0];
-
-    if (selectedDate === today) return "Hoy";
+    if (selectedDate === todayStr) return "Hoy";
     if (selectedDate === tomorrowStr) return "Mañana";
     const d = new Date(selectedDate);
     return d.toLocaleDateString("es-ES", {
@@ -191,20 +219,68 @@ const SearchBottomSheet = ({ visible, onClose, onSearch }) => {
                 </TouchableOpacity>
               </View>
 
-              {/* Fecha */}
-              <TouchableOpacity
-                style={styles.dateButton}
-                onPress={showDatePicker}
-              >
-                <View style={styles.inputIcon}>
+              {/* Fecha — chips horizontales */}
+              <Text style={styles.sectionLabel}>Fecha</Text>
+              <View style={styles.dateChipsRow}>
+                {datePresets.map((preset) => {
+                  const isActive = (selectedDate || todayStr) === preset.value;
+                  return (
+                    <TouchableOpacity
+                      key={preset.value}
+                      style={[
+                        styles.dateChip,
+                        isActive && styles.dateChipActive,
+                      ]}
+                      onPress={() => setSelectedDate(preset.value)}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.dateChipLabel,
+                          isActive && styles.dateChipLabelActive,
+                        ]}
+                      >
+                        {preset.label}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.dateChipSub,
+                          isActive && styles.dateChipSubActive,
+                        ]}
+                      >
+                        {preset.sublabel}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                <TouchableOpacity
+                  style={styles.dateChipMore}
+                  onPress={() => setShowNativeDatePicker(true)}
+                  activeOpacity={0.7}
+                >
                   <Calendar
                     size={18}
-                    color={COLORS.primary}
+                    color={COLORS.gray600}
                     strokeWidth={2.5}
                   />
-                </View>
-                <Text style={styles.dateText}>{dateLabel()}</Text>
-              </TouchableOpacity>
+                  <Text style={styles.dateChipMoreText}>Más</Text>
+                </TouchableOpacity>
+              </View>
+
+              {selectedDate &&
+                !datePresets.some((p) => p.value === selectedDate) && (
+                  <View style={styles.customDateRow}>
+                    <Calendar
+                      size={14}
+                      color={COLORS.primary}
+                      strokeWidth={2.5}
+                    />
+                    <Text style={styles.customDateText}>{dateLabel()}</Text>
+                    <TouchableOpacity onPress={() => setSelectedDate("")}>
+                      <X size={14} color={COLORS.gray400} strokeWidth={2.5} />
+                    </TouchableOpacity>
+                  </View>
+                )}
             </ScrollView>
 
             {/* Botón buscar */}
@@ -235,7 +311,6 @@ const SearchBottomSheet = ({ visible, onClose, onSearch }) => {
         onSelect={(location) => {
           if (activeSelectType === "origin") {
             setOriginPlace(location);
-            console.log(location);
             setOriginText(location.address);
           } else {
             setDestPlace(location);
@@ -243,6 +318,19 @@ const SearchBottomSheet = ({ visible, onClose, onSearch }) => {
           }
         }}
       />
+
+      {/* Native date picker */}
+      {showNativeDatePicker && (
+        <DateTimePicker
+          value={
+            selectedDate ? new Date(selectedDate + "T00:00:00") : new Date()
+          }
+          mode="date"
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          minimumDate={new Date()}
+          onChange={handleNativeDateChange}
+        />
+      )}
     </Modal>
   );
 };
@@ -312,7 +400,7 @@ const styles = StyleSheet.create({
   },
   fakeInput: {
     flex: 1,
-    height: 44,
+    height: 48,
     backgroundColor: COLORS.gray50,
     borderWidth: 1,
     borderColor: COLORS.gray200,
@@ -328,19 +416,79 @@ const styles = StyleSheet.create({
     color: COLORS.gray800,
     fontWeight: "500",
   },
-  dateButton: {
+  sectionLabel: {
+    fontSize: FONTS.xs,
+    color: COLORS.gray500,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    marginBottom: SPACING.sm,
+    marginTop: SPACING.xs,
+  },
+  dateChipsRow: {
     flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: COLORS.gray50,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
+    gap: SPACING.sm,
     marginBottom: SPACING.md,
   },
-  dateText: {
-    fontSize: FONTS.md,
-    color: COLORS.gray700,
-    marginLeft: SPACING.sm,
+  dateChip: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.md,
+    borderWidth: 1.5,
+    borderColor: COLORS.gray200,
+    backgroundColor: COLORS.white,
+  },
+  dateChipActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primarySoft,
+  },
+  dateChipLabel: {
+    fontSize: FONTS.sm,
+    fontWeight: "bold",
+    color: COLORS.gray600,
+  },
+  dateChipLabelActive: {
+    color: COLORS.primary,
+  },
+  dateChipSub: {
+    fontSize: 11,
+    color: COLORS.gray400,
+    marginTop: 2,
+  },
+  dateChipSubActive: {
+    color: COLORS.primaryDark,
+  },
+  dateChipMore: {
+    width: 56,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.md,
+    borderWidth: 1.5,
+    borderColor: COLORS.gray200,
+    backgroundColor: COLORS.white,
+    gap: 2,
+  },
+  dateChipMoreText: {
+    fontSize: 11,
+    color: COLORS.gray500,
+    fontWeight: "500",
+  },
+  customDateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.xs,
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  customDateText: {
+    flex: 1,
+    fontSize: FONTS.sm,
+    color: COLORS.primaryDark,
+    fontWeight: "600",
     textTransform: "capitalize",
   },
   searchButton: {

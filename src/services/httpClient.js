@@ -1,6 +1,7 @@
 // YouConnext - HTTP Client Base
 import { API_CONFIG } from "../constants";
 import { NativeModules, Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const getMetroHost = () => {
   const scriptURL = NativeModules?.SourceCode?.scriptURL;
@@ -37,6 +38,8 @@ class HttpClient {
 
     this.baseUrl = baseUrl;
     this.token = null;
+    this.refreshPromise = null;
+    this.tokenRefreshCallbacks = [];
 
     if (typeof __DEV__ !== "undefined" && __DEV__) {
       console.log("API baseUrl:", this.baseUrl);
@@ -55,6 +58,63 @@ class HttpClient {
 
   setUnauthorizedHandler(handler) {
     this.onUnauthorized = handler;
+  }
+
+  onTokenRefreshed(callback) {
+    this.tokenRefreshCallbacks.push(callback);
+  }
+
+  async refreshToken() {
+    if (this.refreshPromise) return this.refreshPromise;
+
+    this.refreshPromise = (async () => {
+      try {
+        const url = `${this.baseUrl}/api/auth/refresh`;
+        const headers = {};
+        if (this.token) {
+          headers["Authorization"] = `Bearer ${this.token}`;
+        }
+
+        const response = await fetch(url, { method: "POST", headers });
+        const rawText = await response.text();
+        let data = null;
+        if (rawText) {
+          try {
+            data = JSON.parse(rawText);
+          } catch {
+            data = rawText;
+          }
+        }
+
+        if (!response.ok) return null;
+
+        const newToken = data?.token;
+        if (!newToken) return null;
+
+        this.token = newToken;
+        try {
+          await AsyncStorage.setItem("@youconnext_token", newToken);
+        } catch {}
+
+        this.tokenRefreshCallbacks.forEach((cb) => {
+          try {
+            cb(newToken);
+          } catch {}
+        });
+
+        if (typeof __DEV__ !== "undefined" && __DEV__) {
+          console.log("[httpClient] Token refreshed successfully");
+        }
+        return newToken;
+      } catch (e) {
+        console.error("[httpClient] Refresh token failed:", e?.message);
+        throw e;
+      } finally {
+        this.refreshPromise = null;
+      }
+    })();
+
+    return this.refreshPromise;
   }
 
   async request(endpoint, options = {}) {
@@ -147,15 +207,42 @@ class HttpClient {
       }
 
       if (!response.ok) {
+        if (
+          response.status === 401 &&
+          !options._retried &&
+          !endpoint.includes("/api/auth/refresh")
+        ) {
+          try {
+            const newToken = await this.refreshToken();
+            if (newToken) {
+              return this.request(endpoint, { ...options, _retried: true });
+            }
+          } catch (refreshErr) {
+            if (typeof __DEV__ !== "undefined" && __DEV__) {
+              console.warn(
+                "[httpClient] Refresh failed (network?), not logging out:",
+                refreshErr?.message,
+              );
+            }
+            throw new Error("Error de conexión al refrescar la sesión");
+          }
+        }
+
         if (response.status === 401 && this.onUnauthorized) {
           this.onUnauthorized();
         }
         if (data && typeof data === "object") {
-          throw new Error(data.message || data.error || "Error en la peticion");
+          const err = new Error(
+            data.message || data.error || "Error en la peticion",
+          );
+          err.status = response.status;
+          throw err;
         }
-        throw new Error(
+        const err = new Error(
           typeof data === "string" && data ? data : "Error en la peticion",
         );
+        err.status = response.status;
+        throw err;
       }
       return data;
     } catch (error) {

@@ -22,6 +22,7 @@ import { useUser } from "../context/UserContext";
 import { useViaje } from "../context/ViajeContext";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../constants";
 import { Button } from "../components";
+import * as Location from "expo-location";
 
 const EscanearQRScreen = ({ navigation }) => {
   const { user } = useUser();
@@ -54,22 +55,35 @@ const EscanearQRScreen = ({ navigation }) => {
         return;
       }
 
-      const response = await unirseViajeQR(viajeId, user.id);
+      // Obtener ubicación actual del pasajero para registrar la recogida
+      let lat = 0;
+      let lng = 0;
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === "granted") {
+          const location = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.High,
+          });
+          lat = location.coords.latitude;
+          lng = location.coords.longitude;
+        }
+      } catch (e) {
+        console.warn("No se pudo obtener ubicación:", e?.message);
+      }
+
+      const response = await unirseViajeQR(viajeId, lat, lng);
 
       Alert.alert(
         "Te has unido",
         `Te has unido al viaje de ${response.viajePasajero?.viaje?.conductor?.nombre || "un conductor"}`,
         [
           {
-            text: "Ver viaje",
-            onPress: () =>
-              navigation.navigate("ViajeDetalle", {
-                viaje: response.viajePasajero?.viaje,
-              }),
-          },
-          {
             text: "OK",
-            style: "cancel",
+            onPress: () =>
+              navigation.reset({
+                index: 0,
+                routes: [{ name: "Main" }],
+              }),
           },
         ],
       );
@@ -91,9 +105,26 @@ const EscanearQRScreen = ({ navigation }) => {
     }
 
     try {
+      // Obtener ubicación actual del pasajero para registrar la recogida
+      let lat = 0;
+      let lng = 0;
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === "granted") {
+          const location = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.High,
+          });
+          lat = location.coords.latitude;
+          lng = location.coords.longitude;
+        }
+      } catch (e) {
+        console.warn("No se pudo obtener ubicación:", e?.message);
+      }
+
       const response = await unirseViajeQR(
         codigoManual.trim().toUpperCase(),
-        user.id,
+        lat,
+        lng,
       );
 
       Alert.alert(
@@ -101,20 +132,15 @@ const EscanearQRScreen = ({ navigation }) => {
         `Te has unido al viaje de ${response.viajePasajero?.viaje?.conductor?.nombre || "un conductor"}`,
         [
           {
-            text: "Ver viaje",
-            onPress: () =>
-              navigation.navigate("ViajeDetalle", {
-                viaje: response.viajePasajero?.viaje,
-              }),
-          },
-          {
             text: "OK",
-            style: "cancel",
+            onPress: () =>
+              navigation.reset({
+                index: 0,
+                routes: [{ name: "Main" }],
+              }),
           },
         ],
       );
-
-      setCodigoManual("");
     } catch (error) {
       Alert.alert(
         "Error",

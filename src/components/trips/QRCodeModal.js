@@ -60,26 +60,6 @@ const QRCodeModal = ({ visible, onClose, viaje, codigoQR }) => {
             </View>
           </View>
 
-          {/* Info del viaje */}
-          <View style={styles.infoSection}>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Matrícula</Text>
-              <Text style={styles.infoValue}>{viaje.matricula}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Conductor</Text>
-              <Text style={styles.infoValue}>
-                {viaje.conductor?.nombre || "Desconocido"}
-              </Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Pasajeros</Text>
-              <Text style={styles.infoValue}>
-                {viaje.pasajeros?.length || 0}
-              </Text>
-            </View>
-          </View>
-
           {/* Botón cerrar */}
           <TouchableOpacity style={styles.cerrarButton} onPress={onClose}>
             <Text style={styles.cerrarButtonText}>Cerrar</Text>

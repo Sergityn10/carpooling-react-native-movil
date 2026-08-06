@@ -58,7 +58,7 @@ Endpoints para consultar, actualizar y eliminar usuarios. La mayoría requieren 
 
 **Autenticación:** Requerida (`isLoged`).
 
-**Descripción:** Devuelve la información completa del usuario autenticado, incluyendo valoración media, número de opiniones, número de viajes y preferencias.
+**Descripción:** Devuelve la información completa del usuario autenticado, incluyendo DNI, ubicación (ciudad, provincia, código postal, dirección, país), valoración media, número de opiniones, número de viajes, preferencias, un objeto `completitud` que indica el porcentaje de perfil completado y los campos faltantes, un objeto `completitud_cae` para generación de CAEs, y un objeto `monedero` con el estado de la wallet y Stripe Connect.
 
 **Salida (200):**
 ```json
@@ -67,11 +67,19 @@ Endpoints para consultar, actualizar y eliminar usuarios. La mayoría requieren 
   "message": "User found successfully",
   "data": {
     "name": "Juan",
-    "surname": null,
+    "surname": "García",
     "phone": "600123456",
     "email": "user@example.com",
     "img_perfil": "url",
     "role": "user",
+    "fecha_nacimiento": "1990-01-15",
+    "genero": "Masculino",
+    "dni": "12345678A",
+    "ciudad": "Madrid",
+    "provincia": "Madrid",
+    "codigo_postal": "28001",
+    "direccion": "Calle Gran Vía 1",
+    "pais": "España",
     "averageRating": 8.5,
     "numOpinions": 10,
     "myNumOpinions": 5,
@@ -87,9 +95,72 @@ Endpoints para consultar, actualizar y eliminar usuarios. La mayoría requieren 
       "stops_allowed": "0",
       "max_detour_km": "0"
     }
+  },
+  "completitud": {
+    "porcentaje_total": 50,
+    "campos_faltantes": [
+      {
+        "campo": "dni",
+        "porcentaje_otorga": 35,
+        "mensaje_sugerido": "Añade tu DNI/NIE para poder realizar y recibir pagos."
+      },
+      {
+        "campo": "coche",
+        "porcentaje_otorga": 30,
+        "mensaje_sugerido": "Registra al menos un coche con matrícula para poder ofrecer trayectos."
+      },
+      {
+        "campo": "telefono",
+        "porcentaje_otorga": 15,
+        "mensaje_sugerido": "Añade tu teléfono para mejorar la seguridad de tu cuenta."
+      }
+    ]
   }
 }
 ```
+
+**Completitud del perfil:**
+
+El objeto `completitud` evalúa los siguientes campos y pesos:
+
+| Campo               | Peso | Criterio                    | Mensaje sugerido                                                       |
+| ------------------- | ---- | --------------------------- | ---------------------------------------------------------------------- |
+| `dni`               | 35%  | `user.dni` no null          | Añade tu DNI/NIE para poder realizar y recibir pagos.                  |
+| `coche` (matrícula) | 30%  | Al menos 1 coche registrado | Registra al menos un coche con matrícula para poder ofrecer trayectos. |
+| `telefono`          | 15%  | `user.phone` no null        | Añade tu teléfono para mejorar la seguridad de tu cuenta.              |
+| `avatar`            | 10%  | `user.img_perfil` no null   | Sube una foto de perfil para que otros usuarios te reconozcan.         |
+| `nombre`            | 5%   | `user.name` no null         | Añade tu nombre para personalizar tu perfil.                           |
+| `apellidos`         | 5%   | `user.surname` no null      | Añade tus apellidos para completar tu perfil.                          |
+
+El `porcentaje_total` es la suma de los pesos de los campos completados (máx. 100). `campos_faltantes` contiene únicamente los campos no completados, ordenados por peso descendente.
+
+**Completitud para generar CAEs (`completitud_cae`):**
+
+Evalúa si el usuario tiene la información necesaria para poder generar CAEs (Certificados de Ahorro de Energía) según los criterios del Anexo III antifraude (sin avatar):
+
+| Campo               | Peso | Criterio                    | Mensaje sugerido                                                                   |
+| ------------------- | ---- | --------------------------- | ---------------------------------------------------------------------------------- |
+| `dni`               | 35%  | `user.dni` no null          | Añade tu DNI/NIE para poder generar CAEs (requerido por el Anexo III antifraude).  |
+| `coche` (matrícula) | 30%  | Al menos 1 coche registrado | Registra al menos un coche con matrícula para poder generar CAEs de tus trayectos. |
+| `telefono`          | 15%  | `user.phone` no null        | Añade tu teléfono para incluirlo en el listado de viajeros del CAE.                |
+| `nombre`            | 10%  | `user.name` no null         | Añade tu nombre para incluirlo en el listado de viajeros del CAE.                  |
+| `apellidos`         | 10%  | `user.surname` no null      | Añade tus apellidos para completar el listado de viajeros del CAE.                 |
+
+**Disponibilidad del monedero (`monedero`):**
+
+Indica si el usuario tiene todo configurado para recibir ganancias:
+
+| Campo                   | Tipo    | Descripción                                               |
+| ----------------------- | ------- | --------------------------------------------------------- |
+| `disponible`            | Boolean | `true` si charges y transfers están habilitados           |
+| `stripe_account`        | Boolean | `true` si tiene cuenta Stripe Connect                     |
+| `onboarding_completado` | Boolean | `true` si el onboarding de Stripe ha finalizado           |
+| `charges_enabled`       | Boolean | `true` si Stripe permite cobros                           |
+| `transfers_enabled`     | Boolean | `true` si Stripe permite transferencias                   |
+| `details_submitted`     | Boolean | `true` si los datos de la cuenta Stripe están verificados |
+| `wallet_activa`         | Boolean | `true` si la wallet account está activa (no bloqueada)    |
+| `wallet_balance`        | Number  | Balance actual del monedero en céntimos (EUR)             |
+| `mensaje`               | String  | Mensaje explicativo del estado actual del monedero        |
 
 ---
 
@@ -118,7 +189,7 @@ Endpoints para consultar, actualizar y eliminar usuarios. La mayoría requieren 
 
 **Autenticación:** No requerida.
 
-**Descripción:** Devuelve información de perfil pública de un usuario: nombre, email, imagen, valoración media, número de opiniones, número de viajes, sobre mí y preferencias.
+**Descripción:** Devuelve información de perfil de un usuario: nombre, email, imagen, DNI, ubicación (ciudad, provincia, código postal, dirección, país), valoración media, número de opiniones, número de viajes, sobre mí y preferencias.
 
 **Parámetros de URL:**
 - `id` — ID numérico del usuario.
@@ -136,6 +207,14 @@ Endpoints para consultar, actualizar y eliminar usuarios. La mayoría requieren 
     "email": "user@example.com",
     "img_perfil": "url",
     "role": "user",
+    "fecha_nacimiento": "1990-01-15",
+    "genero": "Masculino",
+    "dni": "12345678A",
+    "ciudad": "Madrid",
+    "provincia": "Madrid",
+    "codigo_postal": "28001",
+    "direccion": "Calle Gran Vía 1",
+    "pais": "España",
     "averageRating": 8.5,
     "numOpinions": 10,
     "myNumOpinions": 5,
@@ -157,7 +236,7 @@ Endpoints para consultar, actualizar y eliminar usuarios. La mayoría requieren 
 
 **Autenticación:** Requerida (`isLoged`). El usuario autenticado debe ser el mismo que el `:id`.
 
-**Descripción:** Actualiza parcialmente los datos de un usuario. La contraseña se hashea antes de guardar. El DNI se encripta y se verifica que no exista ya en otro usuario. Los campos sensibles se encriptan antes de persistir.
+**Descripción:** Actualiza parcialmente los datos de un usuario. La contraseña se hashea antes de guardar. El DNI se encripta y se verifica que no exista ya en otro usuario. Los campos sensibles (`name`, `surname`, `dni`, `phone`, `direccion`, `provincia`, `codigo_postal`, `fecha_nacimiento`) se encriptan antes de persistir. Adicionalmente, sincroniza los datos del perfil con la cuenta Stripe Connect del usuario y el Stripe Customer mediante `updateStripeAccountFromProfile`, de forma no bloqueante.
 
 **Parámetros de URL:**
 - `id` — ID numérico del usuario.
@@ -166,11 +245,12 @@ Endpoints para consultar, actualizar y eliminar usuarios. La mayoría requieren 
 ```json
 {
   "name": "string",
+  "surname": "string",
   "phone": "string",
   "password": "string (mín. 6)",
   "img_perfil": "url",
   "fecha_nacimiento": "YYYY-MM-DD",
-  "dni": "string",
+  "dni": "string (8 dígitos + letra)",
   "genero": "Masculino | Femenino | Otro",
   "ciudad": "string",
   "provincia": "string",
@@ -185,16 +265,16 @@ Endpoints para consultar, actualizar y eliminar usuarios. La mayoría requieren 
 ```json
 {
   "status": "Success",
-  "message": "User updated successfully"
+  "message": "Usuario actualizado correctamente."
 }
 ```
 
 **Errores:**
-- `400` — Validación fallida o no hay campos para actualizar.
-- `401` — No autorizado (el usuario logueado no coincide con el ID).
-- `404` — Usuario no encontrado.
-- `409` — DNI ya existe en otro usuario.
-- `500` — Error al actualizar.
+- `400` — Los datos proporcionados no son válidos / No se han enviado campos para actualizar.
+- `401` — No tienes permiso para modificar este usuario.
+- `404` — El usuario no existe.
+- `409` — Ya existe un usuario registrado con este DNI/NIE / Constraint único (P2002).
+- `500` — No se pudo procesar la contraseña / No se pudo verificar el DNI / No se pudieron procesar los datos / No se pudo actualizar el usuario / Error inesperado.
 
 ---
 
@@ -204,7 +284,7 @@ Endpoints para consultar, actualizar y eliminar usuarios. La mayoría requieren 
 
 **Autenticación:** Requerida (`isLoged`).
 
-**Descripción:** Similar al endpoint anterior pero actualiza al usuario autenticado sin necesidad de especificar ID. Usa el email del token para identificar al usuario.
+**Descripción:** Similar al endpoint anterior pero actualiza al usuario autenticado sin necesidad de especificar ID. Usa el email del token para identificar al usuario. También sincroniza los datos con Stripe Connect.
 
 **Entrada:** Igual que `PATCH /api/users/:id`.
 
@@ -212,7 +292,7 @@ Endpoints para consultar, actualizar y eliminar usuarios. La mayoría requieren 
 ```json
 {
   "status": "Success",
-  "message": "User updated successfully"
+  "message": "Usuario actualizado correctamente."
 }
 ```
 
@@ -276,6 +356,7 @@ Endpoints para consultar, actualizar y eliminar usuarios. La mayoría requieren 
     {
       "id": 1,
       "name": "Juan",
+      "surname": "García",
       "img_perfil": "url",
       "ciudad": "Madrid"
     }
@@ -291,6 +372,158 @@ Endpoints para consultar, actualizar y eliminar usuarios. La mayoría requieren 
 
 ## Notas generales
 
-- **Campos sensibles encriptados:** `email`, `phone`, `dni`, `name`, `ciudad`, `provincia`, `codigo_postal`, `direccion`, `pais`, `about_me` (dependiendo de `USER_SENSITIVE_FIELDS`).
+- **Campos sensibles encriptados:** `dni`, `name`, `surname`, `phone`, `direccion`, `provincia`, `codigo_postal`, `fecha_nacimiento` (definidos en `USER_SENSITIVE_FIELDS`). Los valores encriptados se almacenan como strings en la BD (formato `iv_hex:encrypted_hex`).
+- **Sincronización con Stripe:** Al actualizar el perfil, se sincronizan automáticamente los datos con la cuenta Stripe Connect del usuario (`individual.first_name` ← `name`, `individual.last_name` ← `surname`, `individual.email`, `individual.phone`, `individual.address`, `individual.dob`, `individual.id_number` ← `dni`, `individual.gender` ← `genero`, `business_profile`) y con el Stripe Customer (`name`, `email`, `phone`). Para Express accounts, los campos `individual` solo se actualizan antes del onboarding; `business_profile` y `email` siempre se pueden actualizar.
 - **Preferencias:** Se almacenan en la tabla `user_preferences` con claves definidas en `preference_definitions`.
 - **Valoración media:** Calculada desde la tabla `comments` donde `user_id_trayect` = ID del usuario.
+
+---
+
+## 10. Obtener información pública básica de un usuario
+
+**URL:** `GET /api/users/:id/public`
+
+**Autenticación:** No requerida.
+
+**Descripción:** Devuelve información pública mínima de un usuario: `id`, `name`, `surname` (descifrados) e `img_perfil`. Pensado para mostrar avatares y nombres en chats, listas de participantes, etc.
+
+**Parámetros de URL:**
+- `id` — UUID del usuario.
+
+**Salida (200):**
+```json
+{
+  "status": "Success",
+  "user": {
+    "id": "uuid",
+    "name": "Juan",
+    "surname": "García",
+    "img_perfil": "base64... o null"
+  }
+}
+```
+
+**Errores:**
+- `404` — Usuario no encontrado.
+
+---
+
+## 11. Obtener información pública de múltiples usuarios (batch)
+
+**URL:** `POST /api/users/public/batch`
+
+**Autenticación:** No requerida.
+
+**Descripción:** Devuelve información pública básica (`id`, `name`, `surname` descifrados, `img_perfil`) para un conjunto de usuarios en una sola petición. Útil para chats y listas.
+
+**Entrada (body JSON):**
+```json
+{
+  "ids": ["uuid-1", "uuid-2", "uuid-3"]
+}
+```
+
+**Salida (200):**
+```json
+{
+  "status": "Success",
+  "users": [
+    { "id": "uuid-1", "name": "Juan", "surname": "García", "img_perfil": "base64..." },
+    { "id": "uuid-2", "name": "María", "surname": "López", "img_perfil": null }
+  ]
+}
+```
+
+**Errores:**
+- `400` — `ids` debe ser un array no vacío.
+
+---
+
+## 12. Obtener perfil público completo de un usuario
+
+**URL:** `GET /api/users/:id/profile`
+
+**Autenticación:** No requerida.
+
+**Descripción:** Devuelve el perfil público completo de un usuario, incluyendo datos personales públicos, coches (sin matrícula), estadísticas (valoración media, total de comentarios, eventos a los que asiste, viajes realizados y energía generada) y los 5 comentarios más recientes recibidos. Las estadísticas de viajes y energía se obtienen del microservicio de trayectos.
+
+**Parámetros de URL:**
+- `id` — UUID del usuario.
+
+**Salida (200):**
+```json
+{
+  "status": "Success",
+  "user": {
+    "id": "uuid",
+    "name": "Juan",
+    "surname": "García",
+    "img_perfil": "base64... o null",
+    "about_me": "Texto descriptivo del usuario",
+    "genero": "M",
+    "fecha_nacimiento": "1990-01-15",
+    "ciudad": "Madrid",
+    "provincia": "Madrid",
+    "pais": "España",
+    "created_at": "2024-01-01T00:00:00.000Z",
+    "cars": [
+      {
+        "id_coche": "uuid",
+        "marca": "Toyota",
+        "modelo": "Corolla",
+        "color": "Rojo",
+        "tipo_combustible": "GASOLINA",
+        "num_plazas": 5,
+        "year": 2022
+      }
+    ],
+    "stats": {
+      "avg_rating": 4.5,
+      "total_comments": 12,
+      "events_joined": 3,
+      "completed_trips": 15,
+      "kwh_generated": 59.64,
+      "eur_generated": 3.41
+    },
+    "recent_comments": [
+      {
+        "id_comment": "uuid",
+        "opinion": "Muy buen conductor",
+        "rating": 5,
+        "id_trayecto": "uuid-trayecto",
+        "user_id_commentator": "uuid-comentarista",
+        "created_at": "2025-07-10T12:00:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+**Campos devueltos:**
+
+| Campo                   | Tipo             | Descripción                            |
+| ----------------------- | ---------------- | -------------------------------------- |
+| `id`                    | UUID             | Identificador del usuario              |
+| `name`                  | String           | Nombre (descifrado)                    |
+| `surname`               | String\|null     | Apellidos (descifrado)                 |
+| `img_perfil`            | MediumText\|null | Foto de perfil (base64)                |
+| `about_me`              | Text\|null       | Biografía/descripción                  |
+| `genero`                | Enum\|null       | Género (`M`, `F`, `O`)                 |
+| `fecha_nacimiento`      | String\|null     | Fecha de nacimiento (descifrada)       |
+| `ciudad`                | String\|null     | Ciudad                                 |
+| `provincia`             | String\|null     | Provincia (descifrada)                 |
+| `pais`                  | String\|null     | País                                   |
+| `created_at`            | DateTime         | Fecha de registro                      |
+| `cars`                  | Array            | Coches del usuario (sin matrícula)     |
+| `stats.avg_rating`      | Number           | Media de valoraciones (0-5, 1 decimal) |
+| `stats.total_comments`  | Number           | Total de comentarios recibidos         |
+| `stats.events_joined`   | Number           | Total de eventos a los que asiste      |
+| `stats.completed_trips` | Number           | Viajes finalizados como conductor      |
+| `stats.kwh_generated`   | Number           | kWh totales generados (2 decimales)    |
+| `stats.eur_generated`   | Number           | EUR totales generados (2 decimales)    |
+| `recent_comments`       | Array            | Últimos 5 comentarios recibidos        |
+
+**Campos sensibles excluidos:** `email`, `password`, `phone`, `dni`, `direccion`, `codigo_postal`, `stripe_account`, `stripe_customer_account`, `google_id`, `auth_method`, `role_id`, `onboarding_ended`.
+
+**Errores:**
+- `404` — Usuario no encontrado.

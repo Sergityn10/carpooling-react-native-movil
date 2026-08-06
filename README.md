@@ -45,8 +45,11 @@ cd YouConnextApp
 npm install
 npx expo prebuild --clean
 npx expo prebuild --platform android --no-install
+eas build:configure
  eas build --platform android --profile preview
+ eas build --platform android --profile production
  # Para Windows (PowerShell)
+ 
 keytool -list -v -keystore "%USERPROFILE%\.android\debug.keystore" -alias androiddebugkey -storepass android -keypass android
 
 # Iniciar en desarrollo

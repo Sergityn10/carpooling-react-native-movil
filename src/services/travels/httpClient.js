@@ -39,6 +39,11 @@ class TravelsHttpClient {
     this.baseUrl = baseUrl;
     this.token = null;
 
+    // Cuando el httpClient principal refresque el token, actualizarlo aquí también
+    httpClient.onTokenRefreshed((newToken) => {
+      this.token = newToken;
+    });
+
     if (typeof __DEV__ !== "undefined" && __DEV__) {
       console.log("Travels API baseUrl:", this.baseUrl);
     }
@@ -148,11 +153,49 @@ class TravelsHttpClient {
       }
 
       if (!response.ok) {
+        if (typeof __DEV__ !== "undefined" && __DEV__) {
+          console.warn(
+            "Travels API error response:",
+            response.status,
+            rawText?.substring(0, 500),
+          );
+        }
+        if (
+          response.status === 401 &&
+          !options._retried &&
+          !endpoint.includes("/api/auth/refresh")
+        ) {
+          try {
+            const newToken = await httpClient.refreshToken();
+            if (newToken) {
+              this.token = newToken;
+              return this.request(endpoint, { ...options, _retried: true });
+            }
+          } catch (refreshErr) {
+            if (typeof __DEV__ !== "undefined" && __DEV__) {
+              console.warn(
+                "Travels API: Refresh failed (network?), not logging out:",
+                refreshErr?.message,
+              );
+            }
+            throw new Error("Error de conexión al refrescar la sesión");
+          }
+        }
         if (response.status === 401 && this.onUnauthorized) {
           this.onUnauthorized();
         }
         if (data && typeof data === "object") {
-          throw new Error(data.message || data.error || "Error en la peticion");
+          const msg = data.message || data.error;
+          if (typeof msg === "string") {
+            throw new Error(msg);
+          }
+          if (msg && typeof msg === "object") {
+            throw new Error(JSON.stringify(msg));
+          }
+          if (data.errors) {
+            throw new Error(JSON.stringify(data.errors));
+          }
+          throw new Error(JSON.stringify(data));
         }
         throw new Error(
           typeof data === "string" && data ? data : "Error en la peticion",

@@ -10,8 +10,14 @@ async function createStripeConnect(data) {
 }
 
 // Obtener link de onboarding — GET /api/payment/stripe-connect-link
-async function getStripeConnectLink() {
-  return httpClient.request("/api/payment/stripe-connect-link");
+async function getStripeConnectLink(params) {
+  const query = new URLSearchParams();
+  if (params?.return_url) query.set("return_url", params.return_url);
+  if (params?.refresh_url) query.set("refresh_url", params.refresh_url);
+  const qs = query.toString();
+  return httpClient.request(
+    `/api/payment/stripe-connect-link${qs ? `?${qs}` : ""}`,
+  );
 }
 
 // Obtener mi cuenta Stripe Connect — GET /api/payment/stripe-connect

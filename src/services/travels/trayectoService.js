@@ -41,6 +41,16 @@ async function obtenerTrayectoPorId(id) {
   return httpClient.request(`/api/trayecto/${id}`);
 }
 
+// Obtener trayecto completo (con pasajeros, eventos, comentarios) — GET /api/trayecto/:id/completo
+async function obtenerTrayectoCompleto(id) {
+  return httpClient.request(`/api/trayecto/${id}/completo`);
+}
+
+// Obtener estado del trayecto (perspectiva del pasajero) — GET /api/trayecto/:id/estado
+async function obtenerEstadoTrayecto(id) {
+  return httpClient.request(`/api/trayecto/${id}/estado`);
+}
+
 // Crear trayecto — POST /api/trayecto
 async function crearTrayecto(datos) {
   return httpClient.request("/api/trayecto", {
@@ -106,9 +116,44 @@ async function finalizarTrayecto(id) {
   });
 }
 
+// Crear evento de trayecto (recogida, etc.) — POST /api/trayecto/:id/recoger
+async function crearEventoTrayecto(id, { lat, lng, tipo_evento, id_reserva }) {
+  return httpClient.request(`/api/trayecto/${id}/recoger`, {
+    method: "POST",
+    body: JSON.stringify({ lat, lng, tipo_evento, id_reserva }),
+  });
+}
+
+// Obtener eventos de un trayecto — GET /api/trayecto/:id/recoger
+async function obtenerEventosTrayecto(id) {
+  return httpClient.request(`/api/trayecto/${id}/recoger`);
+}
+
+// Registrar llegada a destino — POST /api/trayecto/:id/llegada
+async function registrarLlegadaDestino(id, { lat, lng }) {
+  return httpClient.request(`/api/trayecto/${id}/llegada`, {
+    method: "POST",
+    body: JSON.stringify({ lat, lng }),
+  });
+}
+
 // Obtener trayectos por conductor — GET /api/trayecto/conductor/:id
 async function obtenerTrayectosPorConductor(conductorId) {
   return httpClient.request(`/api/trayecto/conductor/${conductorId}`);
+}
+
+// Obtener trayectos por evento — GET /api/trayecto/evento/:eventoId?direccion=ida|vuelta
+async function obtenerTrayectosPorEvento(eventoId, direccion) {
+  const query = direccion ? `?direccion=${direccion}` : "";
+  return httpClient.request(`/api/trayecto/evento/${eventoId}${query}`);
+}
+
+// Crear trayecto hacia un evento — POST /api/trayecto/evento
+async function crearTrayectoEvento(datos) {
+  return httpClient.request("/api/trayecto/evento", {
+    method: "POST",
+    body: JSON.stringify(datos),
+  });
 }
 
 // Eliminar trayecto — DELETE /api/trayecto/:id
@@ -124,6 +169,8 @@ export const trayectoService = {
   obtenerMisTrayectos,
   obtenerProximosTrayectos,
   obtenerTrayectoPorId,
+  obtenerTrayectoCompleto,
+  obtenerEstadoTrayecto,
   crearTrayecto,
   iniciarTrayecto,
   guardarRecorrido,
@@ -133,7 +180,12 @@ export const trayectoService = {
   actualizarTrayectoPut,
   actualizarTrayectoPatch,
   finalizarTrayecto,
+  crearEventoTrayecto,
+  obtenerEventosTrayecto,
+  registrarLlegadaDestino,
   obtenerTrayectosPorConductor,
+  obtenerTrayectosPorEvento,
+  crearTrayectoEvento,
   eliminarTrayecto,
 };
 

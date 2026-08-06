@@ -1,5 +1,5 @@
 // YouConnext - Crear Viaje Screen (Wizard multi-paso)
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,13 +8,16 @@ import {
   Alert,
   StatusBar,
   Platform,
-  Modal,
   TextInput,
   ScrollView,
-  FlatList,
   KeyboardAvoidingView,
+  ActivityIndicator,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Location from "expo-location";
 import {
   Calendar,
@@ -25,124 +28,109 @@ import {
   Car,
   Euro,
   Navigation as NavIcon,
+  ArrowRight,
+  ArrowLeft,
+  CheckCircle,
+  Gift,
 } from "lucide-react-native";
 import { useUser } from "../context/UserContext";
 import { useViaje } from "../context/ViajeContext";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../constants";
 import { Button, PlaceAutocompleteInput, TripMapPreview } from "../components";
 import { getDirectionsRoute } from "../services/googlePlaces";
+import { trayectoService } from "../services/travels/trayectoService";
+import { carService } from "../services/carService";
+import { ubicacionTravelService } from "../services/travels/ubicacionService";
+import { homeCache } from "../services/homeCache";
+import { localToUtcApi, parseTripDate } from "../services/dateUtils";
 
+const PRICE_PER_KM = parseFloat(
+  process.env.EXPO_PUBLIC_RECOMMENDED_PRICE_PER_KM || "0.06",
+);
+const MIN_PRICE_PER_KM = parseFloat(
+  process.env.EXPO_PUBLIC_MIN_PRICE_PER_KM || "0.06",
+);
+const MAX_PRICE_PER_KM = parseFloat(
+  process.env.EXPO_PUBLIC_MAX_PRICE_PER_KM || "0.08",
+);
+
+const esProximoViaje = (trayecto, fechaApi, horaApi) => {
+  try {
+    let fechaViaje;
+    if (trayecto && (trayecto.hora || trayecto.fecha)) {
+      fechaViaje = parseTripDate(trayecto);
+    } else if (fechaApi && horaApi) {
+      fechaViaje = new Date(`${fechaApi}T${horaApi}:00Z`);
+    } else {
+      return false;
+    }
+    if (isNaN(fechaViaje.getTime())) return false;
+    const ahora = Date.now();
+    const diffMs = fechaViaje.getTime() - ahora;
+    const dosDiasMs = 2 * 24 * 60 * 60 * 1000;
+    return diffMs >= 0 && diffMs <= dosDiasMs;
+  } catch {
+    return false;
+  }
+};
+
+const calculateRecommendedPrice = (distanceMeters) => {
+  if (!distanceMeters) return 0;
+  const km = distanceMeters / 1000;
+  return Math.round(km * PRICE_PER_KM * 100) / 100;
+};
+
+const calculateMinPrice = (distanceMeters) => {
+  if (!distanceMeters) return 0;
+  const km = distanceMeters / 1000;
+  return Math.round(km * MIN_PRICE_PER_KM * 100) / 100;
+};
+
+const calculateMaxPrice = (distanceMeters) => {
+  if (!distanceMeters) return 0;
+  const km = distanceMeters / 1000;
+  return Math.round(km * MAX_PRICE_PER_KM * 100) / 100;
+};
 const STEPS = {
   FECHA_HORA: 0,
   MAPA: 1,
-  PRECIO: 2,
+  VEHICULO: 2,
+  PRECIO: 3,
 };
 
-// ==================== Scroll Picker Component ====================
-const ScrollPicker = ({
-  items,
-  selectedValue,
-  onValueChange,
-  itemHeight = 44,
-}) => {
-  const flatListRef = useRef(null);
-  const isScrolling = useRef(false);
+const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 
-  const getItemLayout = (_, index) => ({
-    length: itemHeight,
-    offset: itemHeight * index,
-    index,
-  });
-
-  const handleScroll = (e) => {
-    if (isScrolling.current) return;
-    const y = e.nativeEvent.contentOffset.y;
-    const index = Math.round(y / itemHeight);
-    if (
-      index >= 0 &&
-      index < items.length &&
-      items[index].value !== selectedValue
-    ) {
-      onValueChange(items[index].value);
-    }
-  };
-
-  const onMomentumScrollEnd = (e) => {
-    const y = e.nativeEvent.contentOffset.y;
-    const index = Math.round(y / itemHeight);
-    if (index >= 0 && index < items.length) {
-      onValueChange(items[index].value);
-    }
-    isScrolling.current = false;
-  };
-
-  const onScrollBeginDrag = () => {
-    isScrolling.current = true;
-  };
-
-  return (
-    <View style={pickerStyles.container}>
-      <View style={pickerStyles.highlightRow} pointerEvents="none" />
-      <FlatList
-        ref={flatListRef}
-        data={items}
-        keyExtractor={(item) => String(item.value)}
-        getItemLayout={getItemLayout}
-        onScroll={handleScroll}
-        onMomentumScrollEnd={onMomentumScrollEnd}
-        onScrollBeginDrag={onScrollBeginDrag}
-        showsVerticalScrollIndicator={false}
-        snapToInterval={itemHeight}
-        decelerationRate="fast"
-        initialScrollIndex={Math.max(
-          0,
-          items.findIndex((i) => i.value === selectedValue),
-        )}
-        renderItem={({ item }) => {
-          const isSelected = item.value === selectedValue;
-          return (
-            <View style={{ height: itemHeight, justifyContent: "center" }}>
-              <Text
-                style={[
-                  pickerStyles.itemText,
-                  isSelected && pickerStyles.itemTextSelected,
-                ]}
-              >
-                {item.label}
-              </Text>
-            </View>
-          );
-        }}
-      />
-    </View>
+const validateEventTripDate = (evento, direccionEvento, fecha, hora) => {
+  if (!evento) return null;
+  const tripDate = new Date(fecha);
+  tripDate.setHours(
+    new Date(hora).getHours(),
+    new Date(hora).getMinutes(),
+    0,
+    0,
   );
-};
 
-const pickerStyles = StyleSheet.create({
-  container: {
-    height: 220,
-    position: "relative",
-  },
-  highlightRow: {
-    position: "absolute",
-    top: 88,
-    left: 0,
-    right: 0,
-    height: 44,
-    backgroundColor: COLORS.primarySoft,
-    borderRadius: RADIUS.sm,
-  },
-  itemText: {
-    textAlign: "center",
-    fontSize: FONTS.md,
-    color: COLORS.gray400,
-  },
-  itemTextSelected: {
-    fontSize: FONTS.lg,
-    fontWeight: "bold",
-    color: COLORS.gray800,
-  },
-});
+  const eventStart = new Date(evento.start_date);
+  const eventEnd = new Date(evento.end_date || evento.start_date);
+  if (isNaN(eventStart.getTime()) || isNaN(eventEnd.getTime())) return null;
+
+  const minDate = new Date(eventStart.getTime() - TWO_DAYS_MS);
+  const maxDate = new Date(eventEnd.getTime() + TWO_DAYS_MS);
+
+  if (tripDate < minDate || tripDate > maxDate) {
+    const minStr = minDate.toLocaleDateString("es-ES", {
+      day: "numeric",
+      month: "short",
+    });
+    const maxStr = maxDate.toLocaleDateString("es-ES", {
+      day: "numeric",
+      month: "short",
+    });
+    const dir = direccionEvento === "ida" ? "ida" : "vuelta";
+    return `La fecha del viaje de ${dir} debe estar entre el ${minStr} y el ${maxStr} (2 días antes hasta 2 días después del evento).`;
+  }
+  return null;
+};
 
 // ==================== Date/Time Picker Modal ====================
 const DateTimePickerModal = ({
@@ -152,174 +140,81 @@ const DateTimePickerModal = ({
   currentTime,
   onConfirm,
   onCancel,
+  minDate,
+  maxDate,
 }) => {
-  const [selectedDate, setSelectedDate] = useState(currentDate);
-  const [selectedHour, setSelectedHour] = useState(
-    new Date(currentTime).getHours(),
-  );
-  const [selectedMinute, setSelectedMinute] = useState(
-    new Date(currentTime).getMinutes(),
-  );
+  const currentValue =
+    mode === "date" ? new Date(currentDate) : new Date(currentTime);
 
-  useEffect(() => {
-    if (visible) {
-      setSelectedDate(currentDate);
-      setSelectedHour(new Date(currentTime).getHours());
-      setSelectedMinute(new Date(currentTime).getMinutes());
+  const handleChange = (event, date) => {
+    if (event.type === "dismissed" || event.type === "neutral") {
+      onCancel();
+      return;
     }
-  }, [visible]);
-
-  const dayItems = Array.from({ length: 30 }, (_, i) => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    d.setDate(d.getDate() + i);
-    const label = d.toLocaleDateString("es-ES", {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-    });
-    return { value: d.getTime(), label };
-  });
-
-  const hourItems = Array.from({ length: 24 }, (_, i) => ({
-    value: i,
-    label: String(i).padStart(2, "0"),
-  }));
-
-  const minuteItems = Array.from({ length: 60 }, (_, i) => ({
-    value: i,
-    label: String(i).padStart(2, "0"),
-  }));
-
-  const handleConfirm = () => {
-    const finalTime = new Date();
-    finalTime.setHours(selectedHour, selectedMinute, 0, 0);
-    onConfirm(selectedDate, finalTime);
+    if (event.type === "set" && date) {
+      if (mode === "date") {
+        const newDate = new Date(date);
+        const time = new Date(currentTime);
+        newDate.setHours(time.getHours(), time.getMinutes(), 0, 0);
+        onConfirm(newDate, time);
+      } else {
+        const newTime = new Date(date);
+        const d = new Date(currentDate);
+        onConfirm(d, newTime);
+      }
+    }
   };
 
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onCancel}
-    >
-      <View style={dtStyles.overlay}>
-        <View style={dtStyles.container}>
-          <View style={dtStyles.header}>
-            <TouchableOpacity onPress={onCancel}>
-              <Text style={dtStyles.cancelText}>Cancelar</Text>
-            </TouchableOpacity>
-            <Text style={dtStyles.title}>
-              {mode === "date" ? "Selecciona fecha" : "Selecciona hora"}
-            </Text>
-            <TouchableOpacity onPress={handleConfirm}>
-              <Text style={dtStyles.doneText}>Hecho</Text>
-            </TouchableOpacity>
-          </View>
+  if (!visible) return null;
 
-          {mode === "date" ? (
-            <ScrollPicker
-              items={dayItems}
-              selectedValue={selectedDate}
-              onValueChange={setSelectedDate}
-            />
-          ) : (
-            <View style={dtStyles.timeRow}>
-              <View style={dtStyles.timeColumn}>
-                <Text style={dtStyles.timeLabel}>Hora</Text>
-                <ScrollPicker
-                  items={hourItems}
-                  selectedValue={selectedHour}
-                  onValueChange={setSelectedHour}
-                />
-              </View>
-              <Text style={dtStyles.timeSeparator}>:</Text>
-              <View style={dtStyles.timeColumn}>
-                <Text style={dtStyles.timeLabel}>Min</Text>
-                <ScrollPicker
-                  items={minuteItems}
-                  selectedValue={selectedMinute}
-                  onValueChange={setSelectedMinute}
-                />
-              </View>
-            </View>
-          )}
-        </View>
-      </View>
-    </Modal>
+  return (
+    <DateTimePicker
+      value={currentValue}
+      mode={mode}
+      display={mode === "date" ? "calendar" : "spinner"}
+      minimumDate={mode === "date" ? minDate : undefined}
+      maximumDate={mode === "date" ? maxDate : undefined}
+      onChange={handleChange}
+      locale="es-ES"
+    />
   );
 };
 
-const dtStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  container: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: RADIUS.xl,
-    borderTopRightRadius: RADIUS.xl,
-    paddingBottom: SPACING.xl,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
-  },
-  title: {
-    fontSize: FONTS.md,
-    fontWeight: "bold",
-    color: COLORS.gray800,
-  },
-  cancelText: {
-    fontSize: FONTS.md,
-    color: COLORS.gray500,
-    fontWeight: "600",
-  },
-  doneText: {
-    fontSize: FONTS.md,
-    color: COLORS.primary,
-    fontWeight: "bold",
-  },
-  timeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: SPACING.xl,
-  },
-  timeColumn: {
-    flex: 1,
-    alignItems: "center",
-  },
-  timeLabel: {
-    fontSize: FONTS.xs,
-    color: COLORS.gray500,
-    fontWeight: "600",
-    marginBottom: SPACING.xs,
-  },
-  timeSeparator: {
-    fontSize: FONTS.xxl,
-    fontWeight: "bold",
-    color: COLORS.gray800,
-    paddingBottom: SPACING.xl,
-  },
-});
-
 // ==================== Main Screen ====================
-const CrearViajeScreen = ({ navigation }) => {
+const CrearViajeScreen = ({ navigation, route }) => {
   const { user } = useUser();
   const { crearViajeRapido } = useViaje();
+  const insets = useSafeAreaInsets();
+  const evento = route.params?.evento || null;
+  const [direccionEvento, setDireccionEvento] = useState("ida");
 
   const [step, setStep] = useState(STEPS.FECHA_HORA);
 
+  // Rango de fechas permitido para trayectos de evento
+  const eventoPickerMinDate = (() => {
+    if (!evento) return null;
+    const start = new Date(evento.start_date);
+    if (isNaN(start.getTime())) return null;
+    return new Date(start.getTime() - TWO_DAYS_MS);
+  })();
+
+  const eventoPickerMaxDate = (() => {
+    if (!evento) return null;
+    const end = new Date(evento.end_date || evento.start_date);
+    if (isNaN(end.getTime())) return null;
+    return new Date(end.getTime() + TWO_DAYS_MS);
+  })();
+
   // Step 1: Fecha y hora
-  const [fecha, setFecha] = useState(new Date());
+  const [fecha, setFecha] = useState(() => {
+    if (evento && eventoPickerMinDate) {
+      const now = new Date();
+      if (now < eventoPickerMinDate) return new Date(eventoPickerMinDate);
+      if (eventoPickerMaxDate && now > eventoPickerMaxDate)
+        return new Date(eventoPickerMinDate);
+    }
+    return new Date();
+  });
   const [hora, setHora] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -328,15 +223,75 @@ const CrearViajeScreen = ({ navigation }) => {
   const [ubicacionActual, setUbicacionActual] = useState(null);
   const [origenTexto, setOrigenTexto] = useState("");
   const [origenPlace, setOrigenPlace] = useState(null);
-  const [destinoTexto, setDestinoTexto] = useState("");
-  const [destinoPlace, setDestinoPlace] = useState(null);
+  const eventoPlace = evento
+    ? {
+        latitude: Number(evento.latitude),
+        longitude: Number(evento.longitude),
+        name: evento.name,
+        address: evento.name,
+      }
+    : null;
+  const [destinoTexto, setDestinoTexto] = useState(evento ? evento.name : "");
+  const [destinoPlace, setDestinoPlace] = useState(evento ? eventoPlace : null);
   const [rutaInfo, setRutaInfo] = useState(null);
   const [calculandoRuta, setCalculandoRuta] = useState(false);
 
-  // Step 3: Precio
+  // Step 3: Vehiculo
+  const [vehiculos, setVehiculos] = useState([]);
+  const [vehiculoSeleccionado, setVehiculoSeleccionado] = useState(null);
+  const [cargandoVehiculos, setCargandoVehiculos] = useState(true);
+
+  // Saved locations
+  const [savedLocations, setSavedLocations] = useState([]);
+
+  // Step 4: Precio
+  const [viajeGratis, setViajeGratis] = useState(false);
   const [precio, setPrecio] = useState("");
   const [plazas, setPlazas] = useState("4");
   const [creando, setCreando] = useState(false);
+
+  const monederoNoConfigurado = user?.monedero?.disponible === false;
+
+  const recommendedPrice = rutaInfo
+    ? calculateRecommendedPrice(rutaInfo.distanceMeters)
+    : 0;
+  const minPrice = rutaInfo ? calculateMinPrice(rutaInfo.distanceMeters) : 0;
+  const maxPrice = rutaInfo ? calculateMaxPrice(rutaInfo.distanceMeters) : 0;
+
+  // Cargar vehículos del usuario al montar
+  useEffect(() => {
+    if (!user?.id) return;
+    (async () => {
+      try {
+        const res = await carService.obtenerCochesUsuario(user.id);
+        const coches = res?.cars || [];
+        setVehiculos(coches);
+        if (coches.length === 1) {
+          setVehiculoSeleccionado(coches[0]);
+        }
+      } catch (err) {
+        console.warn("Error al cargar vehículos:", err.message);
+      } finally {
+        setCargandoVehiculos(false);
+      }
+    })();
+  }, [user?.id]);
+
+  // Cargar ubicaciones guardadas del usuario
+  useEffect(() => {
+    if (!user?.id) return;
+    (async () => {
+      try {
+        const res = await ubicacionTravelService.obtenerUbicacionesPorUsuario(
+          user.id,
+        );
+        const locs = Array.isArray(res) ? res : res?.data || [];
+        setSavedLocations(locs);
+      } catch (err) {
+        console.warn("Error al cargar ubicaciones guardadas:", err.message);
+      }
+    })();
+  }, [user?.id]);
 
   // Cargar ubicación actual al montar
   useEffect(() => {
@@ -371,18 +326,48 @@ const CrearViajeScreen = ({ navigation }) => {
           }
         } catch {}
 
-        setOrigenPlace({
+        const userPlace = {
           latitude: coords.latitude,
           longitude: coords.longitude,
           name: nombre,
           address: direccion,
-        });
+        };
+        setOrigenPlace(userPlace);
         setOrigenTexto(direccion || nombre);
+        if (evento && direccionEvento === "vuelta") {
+          setDestinoPlace(userPlace);
+          setDestinoTexto(direccion || nombre);
+        }
       } catch (error) {
         console.log("Error al obtener ubicación:", error);
       }
     })();
   }, []);
+
+  // Cuando se cambia de ida a vuelta, reajustar origen/destino y fecha
+  useEffect(() => {
+    if (!evento || !eventoPlace) return;
+    if (direccionEvento === "ida") {
+      setOrigenTexto("");
+      setOrigenPlace(null);
+      setDestinoTexto(evento.name);
+      setDestinoPlace(eventoPlace);
+    } else {
+      setOrigenTexto(evento.name);
+      setOrigenPlace(eventoPlace);
+      setDestinoTexto("");
+      setDestinoPlace(null);
+    }
+    // Ajustar fecha al nuevo rango
+    const minD = eventoPickerMinDate;
+    const maxD = eventoPickerMaxDate;
+    if (minD && maxD) {
+      const current = new Date(fecha);
+      if (current < minD || current > maxD) {
+        setFecha(new Date(minD));
+      }
+    }
+  }, [direccionEvento]);
 
   // Calcular ruta cuando se tienen origen y destino
   useEffect(() => {
@@ -410,6 +395,25 @@ const CrearViajeScreen = ({ navigation }) => {
     calcularRuta();
   }, [origenPlace, destinoPlace]);
 
+  // Forzar viaje gratis si no hay monedero configurado
+  useEffect(() => {
+    if (step === STEPS.PRECIO && monederoNoConfigurado) {
+      setViajeGratis(true);
+    }
+  }, [step, monederoNoConfigurado]);
+
+  // Autocompletar precio recomendado al llegar al step PRECIO
+  useEffect(() => {
+    if (
+      step === STEPS.PRECIO &&
+      rutaInfo &&
+      !precio &&
+      !monederoNoConfigurado
+    ) {
+      setPrecio(String(recommendedPrice));
+    }
+  }, [step, rutaInfo, monederoNoConfigurado]);
+
   const formatDate = (date) => {
     const d = new Date(date);
     return d.toLocaleDateString("es-ES", {
@@ -427,25 +431,41 @@ const CrearViajeScreen = ({ navigation }) => {
     });
   };
 
-  const formatDateForApi = (date, time) => {
-    const d = new Date(date);
-    const t = new Date(time);
-    const fechaStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    const horaStr = `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
-    return { fecha: fechaStr, hora: horaStr };
-  };
+  const formatDateForApi = (date, time) => localToUtcApi(date, time);
 
   const canNextStep = () => {
     if (step === STEPS.FECHA_HORA) return true;
-    if (step === STEPS.MAPA)
+    if (step === STEPS.MAPA) {
+      if (evento) {
+        if (direccionEvento === "ida") return !!origenPlace?.latitude;
+        return !!destinoPlace?.latitude;
+      }
       return origenPlace?.latitude && destinoPlace?.latitude;
-    if (step === STEPS.PRECIO) return precio !== "" && parseFloat(precio) >= 0;
+    }
+    if (step === STEPS.VEHICULO) return !!vehiculoSeleccionado;
+    if (step === STEPS.PRECIO) {
+      if (viajeGratis) return true;
+      const p = parseFloat(precio);
+      return precio !== "" && !isNaN(p) && p >= minPrice && p <= maxPrice;
+    }
     return false;
   };
 
   const handleNext = () => {
+    if (step === STEPS.FECHA_HORA && evento) {
+      const err = validateEventTripDate(evento, direccionEvento, fecha, hora);
+      if (err) {
+        Alert.alert("Fecha no válida", err);
+        return;
+      }
+    }
     if (step === STEPS.PRECIO) {
       handleCrearViaje();
+      return;
+    }
+    // Si el siguiente paso es VEHICULO y solo hay 1 coche, saltarlo
+    if (step === STEPS.MAPA && vehiculos.length === 1) {
+      setStep(STEPS.PRECIO);
       return;
     }
     setStep(step + 1);
@@ -454,6 +474,11 @@ const CrearViajeScreen = ({ navigation }) => {
   const handleBack = () => {
     if (step === STEPS.FECHA_HORA) {
       navigation.goBack();
+      return;
+    }
+    // Si el paso anterior es VEHICULO y solo hay 1 coche, saltarlo
+    if (step === STEPS.PRECIO && vehiculos.length === 1) {
+      setStep(STEPS.MAPA);
       return;
     }
     setStep(step - 1);
@@ -465,30 +490,118 @@ const CrearViajeScreen = ({ navigation }) => {
       return;
     }
 
-    if (!origenPlace?.latitude || !destinoPlace?.latitude) {
-      Alert.alert("Faltan datos", "Selecciona origen y destino.");
+    if (evento && direccionEvento === "vuelta") {
+      if (!destinoPlace?.latitude) {
+        Alert.alert("Faltan datos", "Selecciona el destino.");
+        return;
+      }
+    } else {
+      if (!origenPlace?.latitude) {
+        Alert.alert("Faltan datos", "Selecciona el origen.");
+        return;
+      }
+    }
+
+    if (!evento && !destinoPlace?.latitude) {
+      Alert.alert("Faltan datos", "Selecciona el destino.");
+      return;
+    }
+
+    if (!vehiculoSeleccionado) {
+      Alert.alert("Faltan datos", "Selecciona un vehículo.");
       return;
     }
 
     const { fecha: fechaApi, hora: horaApi } = formatDateForApi(fecha, hora);
-    const precioNum = parseFloat(precio) || 0;
+    const precioNum = viajeGratis ? 0 : parseFloat(precio) || 0;
     const plazasNum = parseInt(plazas) || 4;
 
     setCreando(true);
     try {
-      const response = await crearViajeRapido({
-        conductorId: user.id,
-        origen: origenPlace.address || origenPlace.name || origenTexto,
-        destino: destinoPlace.address || destinoPlace.name || destinoTexto,
-        fecha: fechaApi,
-        hora: horaApi,
-        plazas: plazasNum,
-        precio: precioNum,
-      });
+      if (evento) {
+        const eventoLat =
+          typeof evento.latitude === "number"
+            ? evento.latitude
+            : parseFloat(evento.latitude);
+        const eventoLng =
+          typeof evento.longitude === "number"
+            ? evento.longitude
+            : parseFloat(evento.longitude);
 
-      Alert.alert("Viaje creado", "Tu viaje se ha creado correctamente.", [
-        { text: "OK", onPress: () => navigation.goBack() },
-      ]);
+        let payload;
+        if (direccionEvento === "ida") {
+          payload = {
+            evento_id: evento.id,
+            origen: origenPlace?.address || origenPlace?.name || origenTexto,
+            origen_lat: Number(origenPlace?.latitude),
+            origen_lng: Number(origenPlace?.longitude),
+            destino_lat: eventoLat,
+            destino_lng: eventoLng,
+            fecha: fechaApi,
+            hora: horaApi,
+            plazas: plazasNum,
+            conductor: user.id,
+            vehiculo_id: vehiculoSeleccionado.id_coche,
+            disponible: plazasNum,
+            precio: precioNum,
+          };
+        } else {
+          payload = {
+            evento_id: evento.id,
+            origen: evento.name,
+            origen_lat: eventoLat,
+            origen_lng: eventoLng,
+            destino:
+              destinoPlace?.address || destinoPlace?.name || destinoTexto,
+            destino_lat: Number(destinoPlace?.latitude),
+            destino_lng: Number(destinoPlace?.longitude),
+            fecha: fechaApi,
+            hora: horaApi,
+            plazas: plazasNum,
+            conductor: user.id,
+            vehiculo_id: vehiculoSeleccionado.id_coche,
+            disponible: plazasNum,
+            precio: precioNum,
+          };
+        }
+
+        const response = await trayectoService.crearTrayectoEvento(payload);
+        const trayecto = response.trayecto || response.viaje || response;
+        if (esProximoViaje(trayecto, fechaApi, horaApi)) {
+          homeCache.addProximoViaje(trayecto);
+        }
+        Alert.alert(
+          "Viaje creado",
+          direccionEvento === "ida"
+            ? "Tu viaje hacia el evento se ha creado correctamente."
+            : "Tu viaje de vuelta desde el evento se ha creado correctamente.",
+          [{ text: "OK", onPress: () => navigation.goBack() }],
+        );
+      } else {
+        const response = await crearViajeRapido({
+          conductorId: user.id,
+          origen: origenPlace?.address || origenPlace?.name || origenTexto,
+          destino: destinoPlace?.address || destinoPlace?.name || destinoTexto,
+          fecha: fechaApi,
+          hora: horaApi,
+          plazas: plazasNum,
+          precio: precioNum,
+          vehiculoId: vehiculoSeleccionado.id_coche,
+        });
+
+        const trayectoCreado =
+          response?.viaje || response?.trayecto || response;
+        if (
+          trayectoCreado &&
+          esProximoViaje(trayectoCreado, fechaApi, horaApi)
+        ) {
+          homeCache.addProximoViaje(trayectoCreado);
+        }
+
+        Alert.alert("Viaje creado", "Tu viaje se ha creado correctamente.", [
+          { text: "OK", onPress: () => navigation.goBack() },
+        ]);
+      }
     } catch (error) {
       Alert.alert(
         "Error",
@@ -499,16 +612,54 @@ const CrearViajeScreen = ({ navigation }) => {
     }
   };
 
-  const renderStepIndicator = () => (
-    <View style={styles.stepIndicator}>
-      {[STEPS.FECHA_HORA, STEPS.MAPA, STEPS.PRECIO].map((s) => (
-        <View
-          key={s}
-          style={[styles.stepDot, step >= s && styles.stepDotActive]}
-        />
-      ))}
-    </View>
-  );
+  const renderStepIndicator = () => {
+    const stepLabels =
+      vehiculos.length === 1
+        ? [
+            { step: STEPS.FECHA_HORA, label: "Fecha" },
+            { step: STEPS.MAPA, label: "Ruta" },
+            { step: STEPS.PRECIO, label: "Precio" },
+          ]
+        : [
+            { step: STEPS.FECHA_HORA, label: "Fecha" },
+            { step: STEPS.MAPA, label: "Ruta" },
+            { step: STEPS.VEHICULO, label: "Coche" },
+            { step: STEPS.PRECIO, label: "Precio" },
+          ];
+    return (
+      <View style={styles.stepIndicator}>
+        {stepLabels.map((s, index) => (
+          <React.Fragment key={s.step}>
+            <View style={styles.stepItem}>
+              <View
+                style={[styles.stepDot, step >= s.step && styles.stepDotActive]}
+              >
+                {step > s.step && (
+                  <CheckCircle size={12} color={COLORS.white} strokeWidth={3} />
+                )}
+              </View>
+              <Text
+                style={[
+                  styles.stepLabel,
+                  step >= s.step && styles.stepLabelActive,
+                ]}
+              >
+                {s.label}
+              </Text>
+            </View>
+            {index < stepLabels.length - 1 && (
+              <View
+                style={[
+                  styles.stepConnector,
+                  step > s.step && styles.stepConnectorActive,
+                ]}
+              />
+            )}
+          </React.Fragment>
+        ))}
+      </View>
+    );
+  };
 
   const renderFechaHoraStep = () => (
     <ScrollView
@@ -559,6 +710,8 @@ const CrearViajeScreen = ({ navigation }) => {
         mode="date"
         currentDate={fecha}
         currentTime={hora}
+        minDate={eventoPickerMinDate}
+        maxDate={eventoPickerMaxDate}
         onConfirm={(newDate) => {
           setFecha(new Date(newDate));
           setShowDatePicker(false);
@@ -581,14 +734,72 @@ const CrearViajeScreen = ({ navigation }) => {
   );
 
   const renderMapaStep = () => (
-    <View style={styles.stepContainer}>
+    <ScrollView
+      style={styles.stepContainer}
+      contentContainerStyle={styles.mapaStepContent}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.stepHeader}>
         <MapPin size={32} color={COLORS.primary} strokeWidth={2} />
         <Text style={styles.stepTitle}>Origen y destino</Text>
         <Text style={styles.stepSubtitle}>
-          Selecciona desde dónde y hacia dónde vas
+          {evento
+            ? direccionEvento === "ida"
+              ? "Selecciona desde dónde saldrás hacia el evento"
+              : "Selecciona a dónde volverás desde el evento"
+            : "Selecciona desde dónde y hacia dónde vas"}
         </Text>
       </View>
+
+      {evento && (
+        <View style={styles.direccionToggle}>
+          <TouchableOpacity
+            style={[
+              styles.direccionButton,
+              direccionEvento === "ida" && styles.direccionButtonActive,
+            ]}
+            onPress={() => setDireccionEvento("ida")}
+          >
+            <ArrowRight
+              size={16}
+              color={direccionEvento === "ida" ? COLORS.white : COLORS.gray500}
+              strokeWidth={2.5}
+            />
+            <Text
+              style={[
+                styles.direccionText,
+                direccionEvento === "ida" && styles.direccionTextActive,
+              ]}
+            >
+              Ida al evento
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.direccionButton,
+              direccionEvento === "vuelta" && styles.direccionButtonActive,
+            ]}
+            onPress={() => setDireccionEvento("vuelta")}
+          >
+            <ArrowLeft
+              size={16}
+              color={
+                direccionEvento === "vuelta" ? COLORS.white : COLORS.gray500
+              }
+              strokeWidth={2.5}
+            />
+            <Text
+              style={[
+                styles.direccionText,
+                direccionEvento === "vuelta" && styles.direccionTextActive,
+              ]}
+            >
+              Vuelta del evento
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <View style={styles.mapPreviewContainer}>
         <TripMapPreview
@@ -615,37 +826,211 @@ const CrearViajeScreen = ({ navigation }) => {
         </View>
       )}
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
+      {evento && direccionEvento === "vuelta" ? (
+        <View style={styles.eventDestinoCard}>
+          <View style={styles.eventDestinoIcon}>
+            <MapPin size={20} color={COLORS.primary} strokeWidth={2.5} />
+          </View>
+          <View style={styles.eventDestinoContent}>
+            <Text style={styles.eventDestinoLabel}>Origen (Evento)</Text>
+            <Text style={styles.eventDestinoValue} numberOfLines={2}>
+              {evento.name}
+            </Text>
+          </View>
+        </View>
+      ) : (
         <PlaceAutocompleteInput
           label="Origen"
           placeholder="Tu ubicación"
           value={origenTexto}
-          onChangeText={setOrigenTexto}
+          onChangeText={(v) => {
+            setOrigenTexto(v);
+            if (!v.trim()) setOrigenPlace(null);
+          }}
           biasLocation={ubicacionActual}
           onSelectPlace={(p) => {
             setOrigenPlace(p);
-            setOrigenTexto(p.address || p.name || "");
+            setOrigenTexto(p?.address || p?.name || "");
           }}
           components="country:es"
+          savedLocations={savedLocations}
+          showCurrentLocation={true}
+          onUseCurrentLocation={async () => {
+            if (!ubicacionActual) return;
+            let nombre = "Mi ubicación";
+            let direccion;
+            try {
+              const reversed = await Location.reverseGeocodeAsync({
+                latitude: ubicacionActual.latitude,
+                longitude: ubicacionActual.longitude,
+              });
+              const first = reversed?.[0];
+              if (first) {
+                const parts = [
+                  first.street,
+                  first.streetNumber,
+                  first.city,
+                ].filter(Boolean);
+                direccion = parts.join(" ");
+                if (first.name) nombre = first.name;
+              }
+            } catch {}
+            const userPlace = {
+              latitude: ubicacionActual.latitude,
+              longitude: ubicacionActual.longitude,
+              name: nombre,
+              address: direccion || nombre,
+            };
+            setOrigenPlace(userPlace);
+            setOrigenTexto(direccion || nombre);
+          }}
         />
+      )}
 
+      {evento ? (
+        direccionEvento === "ida" ? (
+          <View style={styles.eventDestinoCard}>
+            <View style={styles.eventDestinoIcon}>
+              <MapPin size={20} color={COLORS.primary} strokeWidth={2.5} />
+            </View>
+            <View style={styles.eventDestinoContent}>
+              <Text style={styles.eventDestinoLabel}>Destino (Evento)</Text>
+              <Text style={styles.eventDestinoValue} numberOfLines={2}>
+                {evento.name}
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <PlaceAutocompleteInput
+            label="Destino"
+            placeholder="¿A dónde vuelves?"
+            value={destinoTexto}
+            onChangeText={(v) => {
+              setDestinoTexto(v);
+              if (!v.trim()) setDestinoPlace(null);
+            }}
+            biasLocation={ubicacionActual}
+            onSelectPlace={(p) => {
+              setDestinoPlace(p);
+              setDestinoTexto(p?.address || p?.name || "");
+            }}
+            components="country:es"
+            savedLocations={savedLocations}
+          />
+        )
+      ) : (
         <PlaceAutocompleteInput
           label="Destino"
           placeholder="¿A dónde vas?"
           value={destinoTexto}
-          onChangeText={setDestinoTexto}
+          onChangeText={(v) => {
+            setDestinoTexto(v);
+            if (!v.trim()) setDestinoPlace(null);
+          }}
           biasLocation={ubicacionActual}
           onSelectPlace={(p) => {
             setDestinoPlace(p);
-            setDestinoTexto(p.address || p.name || "");
+            setDestinoTexto(p?.address || p?.name || "");
           }}
           components="country:es"
+          savedLocations={savedLocations}
         />
-      </ScrollView>
-    </View>
+      )}
+    </ScrollView>
+  );
+
+  const renderVehiculoStep = () => (
+    <ScrollView
+      style={styles.stepContainer}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.stepContent}
+    >
+      <View style={styles.stepHeader}>
+        <Car size={32} color={COLORS.primary} strokeWidth={2} />
+        <Text style={styles.stepTitle}>Elige tu vehículo</Text>
+        <Text style={styles.stepSubtitle}>
+          Selecciona el coche con el que harás este viaje
+        </Text>
+      </View>
+
+      {cargandoVehiculos ? (
+        <View style={styles.vehiculoLoading}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.vehiculoLoadingText}>Cargando vehículos...</Text>
+        </View>
+      ) : vehiculos.length === 0 ? (
+        <View style={styles.vehiculoEmpty}>
+          <Car size={48} color={COLORS.gray300} strokeWidth={1.5} />
+          <Text style={styles.vehiculoEmptyTitle}>No tienes vehículos</Text>
+          <Text style={styles.vehiculoEmptyText}>
+            Añade un coche en tu perfil para poder crear un viaje
+          </Text>
+          <TouchableOpacity
+            style={styles.vehiculoEmptyButton}
+            onPress={() => navigation.navigate("Perfil")}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.vehiculoEmptyButtonText}>Ir al perfil</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.vehiculoList}>
+          {vehiculos.map((coche) => {
+            const isSelected =
+              vehiculoSeleccionado?.id_coche === coche.id_coche;
+            const matricula = coche.matricula || "";
+            const matriculaFormateada =
+              matricula.length === 7
+                ? `${matricula.substring(0, 4)} ${matricula.substring(4)}`
+                : matricula;
+            return (
+              <TouchableOpacity
+                key={coche.id_coche}
+                style={[
+                  styles.vehiculoCard,
+                  isSelected && styles.vehiculoCardActive,
+                ]}
+                onPress={() => setVehiculoSeleccionado(coche)}
+                activeOpacity={0.7}
+              >
+                <View
+                  style={[
+                    styles.vehiculoIcon,
+                    isSelected && styles.vehiculoIconActive,
+                  ]}
+                >
+                  <Car
+                    size={24}
+                    color={isSelected ? COLORS.white : COLORS.primary}
+                    strokeWidth={2.5}
+                  />
+                </View>
+                <View style={styles.vehiculoInfo}>
+                  <Text style={styles.vehiculoName}>
+                    {coche.marca} {coche.modelo}
+                  </Text>
+                  <Text style={styles.vehiculoMatricula}>
+                    {matriculaFormateada}
+                  </Text>
+                  <Text style={styles.vehiculoDetails}>
+                    {coche.color || "—"} · {coche.num_plazas || "?"} plazas
+                  </Text>
+                </View>
+                {isSelected && (
+                  <View style={styles.vehiculoCheck}>
+                    <CheckCircle
+                      size={24}
+                      color={COLORS.primary}
+                      strokeWidth={2.5}
+                    />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+    </ScrollView>
   );
 
   const renderPrecioStep = () => (
@@ -657,9 +1042,9 @@ const CrearViajeScreen = ({ navigation }) => {
     >
       <View style={styles.stepHeader}>
         <Euro size={32} color={COLORS.primary} strokeWidth={2} />
-        <Text style={styles.stepTitle}>Precio por pasajero</Text>
+        <Text style={styles.stepTitle}>Tu precio por pasajero</Text>
         <Text style={styles.stepSubtitle}>
-          Define cuánto paga cada pasajero y cuántas plazas ofreces
+          Define cuánto quieres recibir por pasajero y cuántas plazas ofreces
         </Text>
       </View>
 
@@ -680,24 +1065,103 @@ const CrearViajeScreen = ({ navigation }) => {
         </View>
       )}
 
-      <View style={styles.inputCard}>
-        <Text style={styles.inputLabel}>Precio por pasajero (€)</Text>
-        <View style={styles.priceInputRow}>
-          <Euro size={20} color={COLORS.gray400} strokeWidth={2} />
-          <TextInput
-            style={styles.priceInput}
-            value={precio}
-            onChangeText={(text) => {
-              const cleaned = text.replace(/[^0-9.]/g, "");
-              setPrecio(cleaned);
-            }}
-            placeholder="0.00"
-            placeholderTextColor={COLORS.gray400}
-            keyboardType="decimal-pad"
-            returnKeyType="done"
-          />
+      {monederoNoConfigurado ? (
+        <View style={styles.inputCard}>
+          <View style={styles.monederoWarningRow}>
+            <Euro size={20} color={COLORS.warning} strokeWidth={2} />
+            <Text style={styles.monederoWarningTitle}>Viaje gratis</Text>
+          </View>
+          <Text style={styles.monederoWarningText}>
+            No tienes el monedero configurado. Para poder recibir los ingresos
+            de los pasajeros, configura tu monedero en el perfil. Hasta
+            entonces, este viaje será gratuito.
+          </Text>
         </View>
-      </View>
+      ) : (
+        <View style={styles.inputCard}>
+          <Text style={styles.inputLabel}>Modalidad de precio</Text>
+          <TouchableOpacity
+            style={[
+              styles.priceOption,
+              !viajeGratis && styles.priceOptionActive,
+            ]}
+            onPress={() => setViajeGratis(false)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.priceOptionLeft}>
+              <Euro
+                size={20}
+                color={!viajeGratis ? COLORS.primary : COLORS.gray400}
+                strokeWidth={2}
+              />
+              <View>
+                <Text style={styles.priceOptionTitle}>Precio</Text>
+                <Text style={styles.priceOptionSub}>
+                  Define tu precio por pasajero según la distancia
+                </Text>
+              </View>
+            </View>
+            {!viajeGratis && (
+              <CheckCircle size={20} color={COLORS.primary} strokeWidth={2.5} />
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.priceOption,
+              viajeGratis && styles.priceOptionActive,
+            ]}
+            onPress={() => setViajeGratis(true)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.priceOptionLeft}>
+              <Gift
+                size={20}
+                color={viajeGratis ? COLORS.primary : COLORS.gray400}
+                strokeWidth={2}
+              />
+              <View>
+                <Text style={styles.priceOptionTitle}>Viaje gratis</Text>
+                <Text style={styles.priceOptionSub}>
+                  Los pasajeros no pagan por este trayecto
+                </Text>
+              </View>
+            </View>
+            {viajeGratis && (
+              <CheckCircle size={20} color={COLORS.primary} strokeWidth={2.5} />
+            )}
+          </TouchableOpacity>
+
+          {!viajeGratis && (
+            <View style={styles.priceInputContainer}>
+              <Text style={styles.inputLabel}>Tu precio por pasajero (€)</Text>
+              <View style={styles.priceInputRow}>
+                <Euro size={20} color={COLORS.gray400} strokeWidth={2} />
+                <TextInput
+                  style={styles.priceInput}
+                  value={precio}
+                  onChangeText={(text) => {
+                    let cleaned = text.replace(/[^0-9.]/g, "");
+                    const parsed = parseFloat(cleaned);
+                    if (!isNaN(parsed) && parsed > maxPrice) {
+                      cleaned = String(maxPrice);
+                    }
+                    setPrecio(cleaned);
+                  }}
+                  placeholder={recommendedPrice.toFixed(2)}
+                  placeholderTextColor={COLORS.gray400}
+                  keyboardType="decimal-pad"
+                  returnKeyType="done"
+                />
+              </View>
+              <Text style={styles.priceHintText}>
+                Rango aceptable: {minPrice.toFixed(2)}€ – {maxPrice.toFixed(2)}€
+                {"  "}({MIN_PRICE_PER_KM.toFixed(2)}–
+                {MAX_PRICE_PER_KM.toFixed(2)}€/km)
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
 
       <View style={styles.inputCard}>
         <Text style={styles.inputLabel}>Plazas disponibles</Text>
@@ -725,26 +1189,65 @@ const CrearViajeScreen = ({ navigation }) => {
       </View>
 
       <View style={styles.resumenCard}>
-        <View style={styles.resumenRow}>
-          <Calendar size={18} color={COLORS.gray500} strokeWidth={2} />
-          <Text style={styles.resumenText}>{formatDate(fecha)}</Text>
+        <View style={styles.resumenHeader}>
+          <Text style={styles.resumenHeaderTitle}>Resumen del viaje</Text>
         </View>
-        <View style={styles.resumenRow}>
-          <Clock size={18} color={COLORS.gray500} strokeWidth={2} />
-          <Text style={styles.resumenText}>{formatTime(hora)}</Text>
+
+        <View style={styles.resumenRouteSection}>
+          <View style={styles.resumenRouteRow}>
+            <View style={styles.resumenRouteDot} />
+            <Text style={styles.resumenRouteText} numberOfLines={1}>
+              {origenTexto || "Origen"}
+            </Text>
+          </View>
+          <View style={styles.resumenRouteLine} />
+          <View style={styles.resumenRouteRow}>
+            <View
+              style={[
+                styles.resumenRouteDot,
+                { backgroundColor: COLORS.error },
+              ]}
+            />
+            <Text style={styles.resumenRouteText} numberOfLines={1}>
+              {destinoTexto || "Destino"}
+            </Text>
+          </View>
         </View>
-        <View style={styles.resumenRow}>
-          <MapPin size={18} color={COLORS.gray500} strokeWidth={2} />
-          <Text style={styles.resumenText} numberOfLines={1}>
-            {origenTexto || "Origen"} → {destinoTexto || "Destino"}
-          </Text>
+
+        <View style={styles.resumenDivider} />
+
+        <View style={styles.resumenInfoGrid}>
+          <View style={styles.resumenInfoItem}>
+            <Calendar size={16} color={COLORS.primary} strokeWidth={2} />
+            <Text style={styles.resumenInfoLabel}>Fecha</Text>
+            <Text style={styles.resumenInfoValue}>{formatDate(fecha)}</Text>
+          </View>
+          <View style={styles.resumenInfoItem}>
+            <Clock size={16} color={COLORS.primary} strokeWidth={2} />
+            <Text style={styles.resumenInfoLabel}>Hora</Text>
+            <Text style={styles.resumenInfoValue}>{formatTime(hora)}</Text>
+          </View>
         </View>
-        <View style={styles.resumenRow}>
-          <Car size={18} color={COLORS.gray500} strokeWidth={2} />
-          <Text style={styles.resumenText}>
-            {plazas} plaza{parseInt(plazas) !== 1 ? "s" : ""} ·{" "}
-            {precio ? `${precio}€` : "—"}
-          </Text>
+
+        <View style={styles.resumenDivider} />
+
+        <View style={styles.resumenInfoGrid}>
+          <View style={styles.resumenInfoItem}>
+            <Car size={16} color={COLORS.primary} strokeWidth={2} />
+            <Text style={styles.resumenInfoLabel}>Vehiculo</Text>
+            <Text style={styles.resumenInfoValue} numberOfLines={1}>
+              {vehiculoSeleccionado
+                ? `${vehiculoSeleccionado.marca} ${vehiculoSeleccionado.modelo}`
+                : "—"}
+            </Text>
+          </View>
+          <View style={styles.resumenInfoItem}>
+            <Euro size={16} color={COLORS.primary} strokeWidth={2} />
+            <Text style={styles.resumenInfoLabel}>Plazas</Text>
+            <Text style={styles.resumenInfoValue}>
+              {plazas} · {viajeGratis ? "Gratis" : `${precio || "—"}€`}
+            </Text>
+          </View>
         </View>
       </View>
     </ScrollView>
@@ -759,7 +1262,13 @@ const CrearViajeScreen = ({ navigation }) => {
         <TouchableOpacity style={styles.backButton} onPress={handleBack}>
           <ChevronLeft size={24} color={COLORS.gray700} strokeWidth={2.5} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Crear viaje</Text>
+        <Text style={styles.headerTitle}>
+          {evento
+            ? direccionEvento === "ida"
+              ? "Viaje a evento"
+              : "Vuelta del evento"
+            : "Crear viaje"}
+        </Text>
         <View style={styles.backButtonPlaceholder} />
       </View>
 
@@ -767,15 +1276,22 @@ const CrearViajeScreen = ({ navigation }) => {
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.select({ ios: "padding", android: "height" })}
+        keyboardVerticalOffset={Platform.select({ ios: 0, android: 80 })}
       >
         {step === STEPS.FECHA_HORA && renderFechaHoraStep()}
         {step === STEPS.MAPA && renderMapaStep()}
+        {step === STEPS.VEHICULO && renderVehiculoStep()}
         {step === STEPS.PRECIO && renderPrecioStep()}
       </KeyboardAvoidingView>
 
       {/* Footer con botón */}
-      <View style={styles.footer}>
+      <View
+        style={[
+          styles.footer,
+          { paddingBottom: SPACING.md + (insets.bottom || 0) },
+        ]}
+      >
         <Button
           title={step === STEPS.PRECIO ? "Crear viaje" : "Siguiente"}
           onPress={handleNext}
@@ -827,19 +1343,41 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingVertical: SPACING.md,
-    gap: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    gap: SPACING.xs,
+  },
+  stepItem: {
+    alignItems: "center",
+    gap: SPACING.xs,
   },
   stepDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: COLORS.gray200,
+    alignItems: "center",
+    justifyContent: "center",
   },
   stepDotActive: {
     backgroundColor: COLORS.primary,
-    width: 24,
-    height: 8,
-    borderRadius: 4,
+  },
+  stepLabel: {
+    fontSize: FONTS.xs,
+    color: COLORS.gray400,
+    fontWeight: "500",
+  },
+  stepLabelActive: {
+    color: COLORS.gray800,
+    fontWeight: "600",
+  },
+  stepConnector: {
+    flex: 1,
+    height: 2,
+    backgroundColor: COLORS.gray200,
+    marginBottom: SPACING.xxl,
+  },
+  stepConnectorActive: {
+    backgroundColor: COLORS.primary,
   },
   stepContainer: {
     flex: 1,
@@ -847,6 +1385,9 @@ const styles = StyleSheet.create({
   },
   stepContent: {
     paddingBottom: SPACING.xl,
+  },
+  mapaStepContent: {
+    paddingBottom: SPACING.xxl + 96,
   },
   stepHeader: {
     alignItems: "center",
@@ -954,6 +1495,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: SPACING.sm,
   },
+  priceInputContainer: {
+    marginTop: SPACING.md,
+  },
   priceInputRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -970,6 +1514,58 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: COLORS.gray800,
     padding: 0,
+  },
+  priceHintText: {
+    fontSize: FONTS.xs,
+    color: COLORS.gray500,
+    marginTop: SPACING.xs,
+  },
+  monederoWarningRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.xs,
+    marginBottom: SPACING.sm,
+  },
+  monederoWarningTitle: {
+    fontSize: FONTS.md,
+    fontWeight: "bold",
+    color: COLORS.warning,
+  },
+  monederoWarningText: {
+    fontSize: FONTS.sm,
+    color: COLORS.warning,
+    lineHeight: 20,
+  },
+  priceOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1.5,
+    borderColor: COLORS.gray200,
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  priceOptionActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primarySoft,
+  },
+  priceOptionLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    flex: 1,
+  },
+  priceOptionTitle: {
+    fontSize: FONTS.md,
+    fontWeight: "600",
+    color: COLORS.gray800,
+  },
+  priceOptionSub: {
+    fontSize: FONTS.xs,
+    color: COLORS.gray500,
+    marginTop: 2,
   },
   plazasRow: {
     flexDirection: "row",
@@ -1004,16 +1600,63 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
     ...SHADOWS.small,
   },
-  resumenRow: {
+  resumenHeader: {
+    marginBottom: SPACING.md,
+  },
+  resumenHeaderTitle: {
+    fontSize: FONTS.md,
+    fontWeight: "bold",
+    color: COLORS.gray800,
+  },
+  resumenRouteSection: {
+    paddingLeft: SPACING.xs,
+  },
+  resumenRouteRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: SPACING.sm,
-    paddingVertical: SPACING.xs,
+    height: 24,
   },
-  resumenText: {
+  resumenRouteDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.primary,
+  },
+  resumenRouteLine: {
+    width: 2,
+    height: 20,
+    backgroundColor: COLORS.gray200,
+    marginLeft: 3,
+  },
+  resumenRouteText: {
+    flex: 1,
     fontSize: FONTS.sm,
     color: COLORS.gray700,
+    fontWeight: "500",
+  },
+  resumenDivider: {
+    height: 1,
+    backgroundColor: COLORS.gray100,
+    marginVertical: SPACING.md,
+  },
+  resumenInfoGrid: {
+    flexDirection: "row",
+    gap: SPACING.md,
+  },
+  resumenInfoItem: {
     flex: 1,
+    gap: SPACING.xs,
+  },
+  resumenInfoLabel: {
+    fontSize: FONTS.xs,
+    color: COLORS.gray400,
+    fontWeight: "500",
+  },
+  resumenInfoValue: {
+    fontSize: FONTS.sm,
+    color: COLORS.gray800,
+    fontWeight: "600",
   },
   footer: {
     paddingHorizontal: SPACING.lg,
@@ -1023,6 +1666,158 @@ const styles = StyleSheet.create({
   },
   footerButton: {
     width: "100%",
+  },
+  direccionToggle: {
+    flexDirection: "row",
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  direccionButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: SPACING.xs,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.md,
+    borderWidth: 1.5,
+    borderColor: COLORS.gray200,
+    backgroundColor: COLORS.white,
+  },
+  direccionButtonActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary,
+  },
+  direccionText: {
+    fontSize: FONTS.xs,
+    fontWeight: "600",
+    color: COLORS.gray500,
+  },
+  direccionTextActive: {
+    color: COLORS.white,
+  },
+  eventDestinoCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    marginTop: SPACING.md,
+    ...SHADOWS.small,
+  },
+  eventDestinoIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: SPACING.sm,
+  },
+  eventDestinoContent: {
+    flex: 1,
+  },
+  eventDestinoLabel: {
+    fontSize: FONTS.xs,
+    color: COLORS.gray400,
+    fontWeight: "500",
+  },
+  eventDestinoValue: {
+    fontSize: FONTS.md,
+    color: COLORS.gray800,
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  vehiculoList: {
+    gap: SPACING.md,
+  },
+  vehiculoCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 2,
+    borderColor: COLORS.gray200,
+  },
+  vehiculoCardActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primarySoft,
+  },
+  vehiculoIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: SPACING.md,
+  },
+  vehiculoIconActive: {
+    backgroundColor: COLORS.primary,
+  },
+  vehiculoInfo: {
+    flex: 1,
+  },
+  vehiculoName: {
+    fontSize: FONTS.md,
+    fontWeight: "bold",
+    color: COLORS.gray800,
+  },
+  vehiculoMatricula: {
+    fontSize: FONTS.sm,
+    color: COLORS.gray500,
+    marginTop: 2,
+    letterSpacing: 1,
+  },
+  vehiculoDetails: {
+    fontSize: FONTS.xs,
+    color: COLORS.gray400,
+    marginTop: 2,
+  },
+  vehiculoCheck: {
+    marginLeft: SPACING.sm,
+  },
+  vehiculoLoading: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: SPACING.xxl,
+    gap: SPACING.md,
+  },
+  vehiculoLoadingText: {
+    fontSize: FONTS.sm,
+    color: COLORS.gray500,
+  },
+  vehiculoEmpty: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: SPACING.xxl,
+    gap: SPACING.sm,
+  },
+  vehiculoEmptyTitle: {
+    fontSize: FONTS.lg,
+    fontWeight: "bold",
+    color: COLORS.gray700,
+    marginTop: SPACING.md,
+  },
+  vehiculoEmptyText: {
+    fontSize: FONTS.sm,
+    color: COLORS.gray500,
+    textAlign: "center",
+    paddingHorizontal: SPACING.xl,
+  },
+  vehiculoEmptyButton: {
+    marginTop: SPACING.md,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.md,
+  },
+  vehiculoEmptyButtonText: {
+    color: COLORS.white,
+    fontSize: FONTS.sm,
+    fontWeight: "600",
   },
 });
 

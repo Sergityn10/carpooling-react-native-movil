@@ -10,9 +10,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import trayectoService from "../services/travels/trayectoService";
 import reservaService from "../services/travels/reservaService";
+import trackingSocketService from "../services/tracking/trackingSocketService";
 import { GPS_CONFIG, VIAJE_ESTADO } from "../constants";
 import { useUser } from "./UserContext";
 import { BACKGROUND_LOCATION_TASK } from "../services/locationBackgroundTask";
+import { homeCache } from "../services/homeCache";
 
 const ViajeContext = createContext();
 
@@ -47,7 +49,15 @@ export const ViajeProvider = ({ children }) => {
         setPasajeros(parsed.pasajeros || []);
         setUbicaciones(parsed.ubicaciones || []);
 
-        // Si el viaje estaba en curso, reanudar tracking
+        // Si es pasajero, reanudar tracking solo si fue recogido y no ha llegado
+        if (parsed.esPasajero) {
+          if (parsed.pasajeroRecogido && !parsed.pasajeroEnDestino) {
+            iniciarTracking();
+          }
+          return;
+        }
+
+        // Si el viaje estaba en curso (conductor), reanudar tracking
         if (
           parsed.viaje?.status === "en curso" ||
           parsed.viaje?.estado === VIAJE_ESTADO.ACTIVO
@@ -61,12 +71,18 @@ export const ViajeProvider = ({ children }) => {
   };
 
   // Guardar viaje activo
-  const saveViajeActivo = async (viaje, pasajeroList, ubicacionList) => {
+  const saveViajeActivo = async (
+    viaje,
+    pasajeroList,
+    ubicacionList,
+    extra = {},
+  ) => {
     try {
       const data = {
         viaje,
         pasajeros: pasajeroList,
         ubicaciones: ubicacionList,
+        ...extra,
       };
       await AsyncStorage.setItem(
         "@youconnext_viaje_activo",
@@ -95,6 +111,7 @@ export const ViajeProvider = ({ children }) => {
         hora: datos.hora,
         plazas: datos.plazas,
         conductor: datos.conductorId,
+        vehiculo_id: datos.vehiculoId,
         disponible: datos.plazas,
         precio: datos.precio ?? 0,
       };
@@ -140,8 +157,15 @@ export const ViajeProvider = ({ children }) => {
 
     try {
       await stopTracking();
+      try {
+        trackingSocketService.endTracking();
+        trackingSocketService.disconnect();
+      } catch {}
 
       const response = await trayectoService.finalizarTrayecto(viaje.id);
+
+      // Quitar del cache de próximos viajes
+      homeCache.removeProximoViaje(viaje.id);
 
       // Limpiar
       await AsyncStorage.removeItem("@youconnext_viaje_activo");
@@ -163,6 +187,10 @@ export const ViajeProvider = ({ children }) => {
 
     try {
       await stopTracking();
+      try {
+        trackingSocketService.endTracking();
+        trackingSocketService.disconnect();
+      } catch {}
 
       const response = await trayectoService.eliminarTrayecto(viajeActivo.id);
 
@@ -180,10 +208,10 @@ export const ViajeProvider = ({ children }) => {
     }
   };
 
-  // Unirse a un viaje via QR
-  const unirseViajeQR = async (codigoQR, usuarioId) => {
+  // Unirse a un viaje via QR (con ubicación de recogida)
+  const unirseViajeQR = async (trayectoId, lat, lng) => {
     try {
-      const response = await reservaService.crearReserva(usuarioId, codigoQR);
+      const response = await reservaService.reservaQR(trayectoId, lat, lng);
       return response;
     } catch (error) {
       console.error("Error al unirse al viaje:", error);
@@ -224,12 +252,12 @@ export const ViajeProvider = ({ children }) => {
 
       setTrackingActivo(true);
 
-      // Iniciar background location updates (cada 20s)
+      // Iniciar background location updates (cada SAVE_INTERVAL)
       await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
         accuracy: Location.Accuracy.High,
-        timeInterval: 20000,
+        timeInterval: GPS_CONFIG.SAVE_INTERVAL,
         distanceInterval: GPS_CONFIG.MIN_DISTANCE,
-        deferredUpdatesInterval: 20000,
+        deferredUpdatesInterval: GPS_CONFIG.SAVE_INTERVAL,
         showsBackgroundLocationIndicator: true,
         foregroundService: {
           notificationTitle: "YouConnext",
@@ -241,7 +269,7 @@ export const ViajeProvider = ({ children }) => {
       locationSubscription.current = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.High,
-          timeInterval: GPS_CONFIG.TRACKING_INTERVAL,
+          timeInterval: GPS_CONFIG.SAVE_INTERVAL,
           distanceInterval: GPS_CONFIG.MIN_DISTANCE,
         },
         (location) => {
@@ -316,6 +344,50 @@ export const ViajeProvider = ({ children }) => {
     }
   };
 
+  // Iniciar tracking para pasajero (solo cuando ha sido recogido)
+  const iniciarTrackingPasajero = async (viaje) => {
+    if (!viaje) return;
+    try {
+      setViajeActivo(viaje);
+      setUbicaciones([]);
+      setDistanciaTotal(0);
+      await saveViajeActivo(viaje, [], [], {
+        esPasajero: true,
+        pasajeroRecogido: true,
+        pasajeroEnDestino: false,
+      });
+      await iniciarTracking();
+    } catch (error) {
+      console.error("Error al iniciar tracking de pasajero:", error);
+      throw error;
+    }
+  };
+
+  // Detener tracking de pasajero (cuando llega a destino)
+  const detenerTrackingPasajero = async () => {
+    try {
+      await stopTracking();
+      const viajeData = await AsyncStorage.getItem("@youconnext_viaje_activo");
+      if (viajeData) {
+        const parsed = JSON.parse(viajeData);
+        if (parsed.esPasajero) {
+          await saveViajeActivo(
+            parsed.viaje,
+            parsed.pasajeros || [],
+            parsed.ubicaciones || [],
+            {
+              esPasajero: true,
+              pasajeroRecogido: true,
+              pasajeroEnDestino: true,
+            },
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Error al detener tracking de pasajero:", error);
+    }
+  };
+
   // Obtener ubicación actual
   const getUbicacionActual = async () => {
     try {
@@ -361,6 +433,8 @@ export const ViajeProvider = ({ children }) => {
     unirseViajeQR,
     iniciarTracking,
     stopTracking,
+    iniciarTrackingPasajero,
+    detenerTrackingPasajero,
     getUbicacionActual,
     refreshViaje: loadViajeActivo,
   };

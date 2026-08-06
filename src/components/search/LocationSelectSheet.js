@@ -33,6 +33,8 @@ import {
   reverseGeocode,
 } from "../../services/googlePlaces";
 import { useViaje } from "../../context/ViajeContext";
+import { useUser } from "../../context/UserContext";
+import { ubicacionTravelService } from "../../services/travels/ubicacionService";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.9;
@@ -77,6 +79,7 @@ const LocationSelectSheet = ({
   const [isAddingPlace, setIsAddingPlace] = useState(null); // Almacena el ID del slot que estamos editando
 
   const { getUbicacionActual } = useViaje();
+  const { user } = useUser();
   const requestIdRef = useRef(0);
 
   // Mapeo seguro de componentes de iconos de lucide-react-native
@@ -85,6 +88,14 @@ const LocationSelectSheet = ({
     BookOpen: BookOpen,
     Briefcase: Briefcase,
     Dumbbell: Dumbbell,
+  };
+
+  const IconNameMap = {
+    home: "Home",
+    work: "Briefcase",
+    university: "BookOpen",
+    gym: "Dumbbell",
+    other: "MapPin",
   };
 
   const SafeIconComp = ({ iconName, ...props }) => {
@@ -113,17 +124,36 @@ const LocationSelectSheet = ({
 
   const loadData = async () => {
     try {
-      const saved = await AsyncStorage.getItem("saved_places");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        // Mezclar valores por defecto con lo guardado
-        const merged = DEFAULT_SAVED_PLACES.map((def) => {
-          const found = parsed.find((p) => p.id === def.id);
-          return found ? { ...def, ...found } : def;
-        });
-        setSavedPlaces(merged);
+      // Cargar ubicaciones guardadas del API
+      if (user?.id) {
+        try {
+          const res = await ubicacionTravelService.obtenerUbicacionesPorUsuario(
+            user.id,
+          );
+          const apiLocations = res.data || res.ubicaciones || res || [];
+          if (Array.isArray(apiLocations) && apiLocations.length > 0) {
+            const mapped = apiLocations.map((loc) => ({
+              id: loc.id || loc.id_ubicacion,
+              label: loc.nombre || loc.tipo || "Otro",
+              iconName: IconNameMap[loc.tipo] || "MapPin",
+              address: loc.direccion || "",
+              coords: loc.latitud
+                ? {
+                    latitude: Number(loc.latitud),
+                    longitude: Number(loc.longitud),
+                  }
+                : null,
+              isCustom: false,
+              tipo: loc.tipo,
+            }));
+            setSavedPlaces(mapped);
+          }
+        } catch (e) {
+          console.log("Error al cargar ubicaciones del API:", e);
+        }
       }
 
+      // Cargar recientes desde AsyncStorage
       const recents = await AsyncStorage.getItem("recent_places");
       if (recents) {
         setRecentPlaces(JSON.parse(recents));

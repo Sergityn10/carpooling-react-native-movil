@@ -2,20 +2,21 @@
   "expo": {
     "name": "YouConnextApp",
     "slug": "YouConnextApp",
-    "version": "1.0.0",
+    "version": "1.0.13",
     "platforms": ["ios", "android"],
     "orientation": "portrait",
-    "icon": "./assets/icon2.png",
+    "icon": "./assets/logo-con-bg-ajustado.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "usesCleartextTraffic": true,
-      "package": "com.youconnext.app"
+      "package": "app.youconnext",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/logo-sin-bg-198px-ajustado.png"
     },
     "extra": {
       "eas": {
@@ -31,6 +32,19 @@
           "locationAlwaysAndWhenInUsePermission": "Allow YouConnext to use your location to track trips.",
           "isAndroidBackgroundLocationEnabled": true,
           "isIosBackgroundLocationEnabled": true
+        }
+      ],
+      [
+        "react-native-maps",
+        {
+          "androidGoogleMapsApiKey": "AIzaSyBtz5pxS6ZVcVBA9jdbQn7bQPC72c81BT8"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/logo-sin-bg-198px-ajustado.png",
+          "color": "#4A90D9"
         }
       ]
     ]

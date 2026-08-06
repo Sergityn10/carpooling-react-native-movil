@@ -105,7 +105,7 @@ export const reverseGeocode = async ({
 export const getPlaceDetails = async ({
   placeId,
   language = "es",
-  fields = "geometry,name,formatted_address",
+  fields = "geometry,name,formatted_address,address_components",
 }) => {
   assertApiKey();
   const key = getApiKey();
@@ -136,6 +136,7 @@ export const getPlaceDetails = async ({
     address: result?.formatted_address,
     latitude: result?.geometry?.location?.lat,
     longitude: result?.geometry?.location?.lng,
+    addressComponents: result?.address_components || [],
     raw: result,
   };
 };
