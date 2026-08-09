@@ -1,9 +1,13 @@
 // YouConnext - Trayecto Service (api-travels)
 import httpClient from "./httpClient";
 
-// Obtener todos los trayectos — GET /api/trayecto
-async function obtenerTrayectos() {
-  return httpClient.request("/api/trayecto");
+// Obtener todos los trayectos — GET /api/trayecto (paginado)
+async function obtenerTrayectos({ page, limit } = {}) {
+  const params = new URLSearchParams();
+  if (page) params.set("page", String(page));
+  if (limit) params.set("limit", String(limit));
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return httpClient.request(`/api/trayecto${query}`);
 }
 
 // Buscar trayectos — GET /api/trayecto/search
@@ -26,9 +30,13 @@ async function buscarTrayectos({
   return httpClient.request(`/api/trayecto/search?${params.toString()}`);
 }
 
-// Obtener mis trayectos (como conductor) — GET /api/trayecto/mis-trayectos
-async function obtenerMisTrayectos() {
-  return httpClient.request("/api/trayecto/mis-trayectos");
+// Obtener mis trayectos (como conductor) — GET /api/trayecto/mis-trayectos (paginado)
+async function obtenerMisTrayectos({ page, limit } = {}) {
+  const params = new URLSearchParams();
+  if (page) params.set("page", String(page));
+  if (limit) params.set("limit", String(limit));
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return httpClient.request(`/api/trayecto/mis-trayectos${query}`);
 }
 
 // Obtener próximos trayectos (conductor o pasajero) — GET /api/trayecto/proximos
@@ -137,9 +145,13 @@ async function registrarLlegadaDestino(id, { lat, lng }) {
   });
 }
 
-// Obtener trayectos por conductor — GET /api/trayecto/conductor/:id
-async function obtenerTrayectosPorConductor(conductorId) {
-  return httpClient.request(`/api/trayecto/conductor/${conductorId}`);
+// Obtener trayectos por conductor — GET /api/trayecto/conductor/:id (paginado)
+async function obtenerTrayectosPorConductor(conductorId, { page, limit } = {}) {
+  const params = new URLSearchParams();
+  if (page) params.set("page", String(page));
+  if (limit) params.set("limit", String(limit));
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return httpClient.request(`/api/trayecto/conductor/${conductorId}${query}`);
 }
 
 // Obtener trayectos por evento — GET /api/trayecto/evento/:eventoId?direccion=ida|vuelta

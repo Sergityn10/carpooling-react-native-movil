@@ -171,15 +171,27 @@ class TravelsHttpClient {
               this.token = newToken;
               return this.request(endpoint, { ...options, _retried: true });
             }
+            // Refresh devolvió null: sesión expirada
+            if (typeof __DEV__ !== "undefined" && __DEV__) {
+              console.warn(
+                "[Travels API] Refresh returned null, triggering logout",
+              );
+            }
           } catch (refreshErr) {
             if (typeof __DEV__ !== "undefined" && __DEV__) {
               console.warn(
-                "Travels API: Refresh failed (network?), not logging out:",
+                "[Travels API] Refresh failed:",
                 refreshErr?.message,
               );
             }
-            throw new Error("Error de conexión al refrescar la sesión");
           }
+          // Si llegamos aquí, el refresh falló: cerrar sesión
+          if (this.onUnauthorized) {
+            this.onUnauthorized();
+          }
+          const err = new Error("Sesión expirada");
+          err.status = 401;
+          throw err;
         }
         if (response.status === 401 && this.onUnauthorized) {
           this.onUnauthorized();

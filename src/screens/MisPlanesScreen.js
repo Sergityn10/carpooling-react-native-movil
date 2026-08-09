@@ -1,5 +1,5 @@
 // YouConnext - MisPlanesScreen (Mis viajes + Mis eventos)
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -17,7 +17,6 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect } from "@react-navigation/native";
 import {
   Calendar,
   Users,
@@ -41,6 +40,7 @@ import { eventService } from "../services/eventService";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { trayectoService } from "../services/travels/trayectoService";
 import { reservaService } from "../services/travels/reservaService";
+import { paymentService } from "../services/paymentService";
 import { parseTripDate, localToUtcApi } from "../services/dateUtils";
 
 const TAB_VIAJES = "viajes";
@@ -86,20 +86,36 @@ const MisPlanesScreen = ({ navigation }) => {
     setErrorViajes(null);
     try {
       const [conductorRes, pasajeroRes] = await Promise.allSettled([
-        trayectoService.obtenerMisTrayectos(),
-        reservaService.obtenerMisReservas(user.id),
+        trayectoService.obtenerMisTrayectos({ limit: 100 }),
+        reservaService.obtenerMisReservas(user.id, { limit: 100 }),
       ]);
 
       let misTrayectos = [];
       if (conductorRes.status === "fulfilled") {
-        misTrayectos = Array.isArray(conductorRes.value)
-          ? conductorRes.value
-          : [];
+        const raw = conductorRes.value;
+        misTrayectos = Array.isArray(raw)
+          ? raw
+          : Array.isArray(raw?.data)
+            ? raw.data
+            : Array.isArray(raw?.trayectos)
+              ? raw.trayectos
+              : [];
+      } else {
+        console.warn(
+          "Error al cargar trayectos como conductor:",
+          conductorRes.reason,
+        );
       }
 
       let misReservas = [];
       if (pasajeroRes.status === "fulfilled") {
-        misReservas = pasajeroRes.value?.pasajerosList || [];
+        const raw = pasajeroRes.value;
+        misReservas = raw?.pasajerosList || raw?.data?.pasajerosList || [];
+      } else {
+        console.warn(
+          "Error al cargar reservas como pasajero:",
+          pasajeroRes.reason,
+        );
       }
 
       const condViajes = misTrayectos.map((t) => ({
@@ -149,7 +165,7 @@ const MisPlanesScreen = ({ navigation }) => {
     } finally {
       setLoadingViajes(false);
     }
-  }, [user?.id, user?.name, user?.surname]);
+  }, [user?.id]);
 
   const fetchEventos = useCallback(async () => {
     setErrorEventos(null);
@@ -165,12 +181,10 @@ const MisPlanesScreen = ({ navigation }) => {
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchViajes();
-      fetchEventos();
-    }, [fetchViajes, fetchEventos]),
-  );
+  useEffect(() => {
+    fetchViajes();
+    fetchEventos();
+  }, [fetchViajes, fetchEventos]);
 
   const handleRefreshViajes = async () => {
     setRefreshingViajes(true);
@@ -187,16 +201,14 @@ const MisPlanesScreen = ({ navigation }) => {
   const handleRetomarPago = async (idReserva) => {
     setResumingPagoId(idReserva);
     try {
-      const response = await reservaService.resumePago(
-        idReserva,
-        "youconnext://mis-planes",
-      );
-      if (response?.stripe_url) {
-        await Linking.openURL(response.stripe_url);
+      await reservaService.resumePago(idReserva, "youconnext://mis-planes");
+      const checkoutRes = await paymentService.getCheckoutLink(idReserva);
+      if (checkoutRes?.checkout_url) {
+        await Linking.openURL(checkoutRes.checkout_url);
       } else {
         Alert.alert(
           "Error",
-          response?.message || "No se pudo retomar el pago.",
+          checkoutRes?.message || "No se pudo retomar el pago.",
         );
       }
     } catch (error) {

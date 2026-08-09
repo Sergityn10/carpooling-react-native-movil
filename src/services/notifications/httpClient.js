@@ -163,15 +163,25 @@ class NotificationsHttpClient {
               this.token = newToken;
               return this.request(endpoint, { ...options, _retried: true });
             }
+            if (typeof __DEV__ !== "undefined" && __DEV__) {
+              console.warn(
+                "[Notifications API] Refresh returned null, triggering logout",
+              );
+            }
           } catch (refreshErr) {
             if (typeof __DEV__ !== "undefined" && __DEV__) {
               console.warn(
-                "Notifications API: Refresh failed (network?), not logging out:",
+                "[Notifications API] Refresh failed:",
                 refreshErr?.message,
               );
             }
-            throw new Error("Error de conexión al refrescar la sesión");
           }
+          if (this.onUnauthorized) {
+            this.onUnauthorized();
+          }
+          const err = new Error("Sesión expirada");
+          err.status = 401;
+          throw err;
         }
         if (response.status === 401 && this.onUnauthorized) {
           this.onUnauthorized();

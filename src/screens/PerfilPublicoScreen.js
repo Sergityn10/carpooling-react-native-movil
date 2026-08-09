@@ -1,5 +1,5 @@
 // YouConnext - PerfilPublicoScreen (perfil público de otro usuario)
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -22,10 +22,13 @@ import {
   MessageSquare,
   Fuel,
   MessageCircle,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react-native";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../constants";
 import { usuarioService } from "../services/usuarioService";
 import { comentarioService } from "../services/travels/comentarioService";
+import reservaService from "../services/travels/reservaService";
 import userCache from "../services/messages/userCache";
 import { useUser } from "../context/UserContext";
 
@@ -55,9 +58,14 @@ const PerfilPublicoScreen = ({ route, navigation }) => {
   const [profile, setProfile] = useState(null);
   const [opinions, setOpinions] = useState([]);
   const [commentatorInfo, setCommentatorInfo] = useState({});
+  const [reservaStats, setReservaStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [opinionsExpanded, setOpinionsExpanded] = useState(false);
+  const OPINIONS_PREVIEW_COUNT = 3;
+  const scrollRef = useRef(null);
+  const opinionsSectionY = useRef(0);
 
   const isOwnProfile =
     currentUser?.id && userId && String(currentUser.id) === String(userId);
@@ -70,15 +78,26 @@ const PerfilPublicoScreen = ({ route, navigation }) => {
     if (!userId) return;
     setError(null);
     try {
-      const [res, opinionsRes] = await Promise.all([
+      const [res, opinionsRes, profileStatsRes] = await Promise.all([
         usuarioService.getUserPublicProfile(userId),
-        comentarioService.obtenerOpinionesPorValorado(userId),
+        comentarioService.obtenerOpinionesPorValorado(userId, { limit: 100 }),
+        reservaService.obtenerPerfilPublico(userId).catch(() => null),
       ]);
       const data = res?.user || res?.data?.user || null;
       setProfile(data);
+      const rawStats = profileStatsRes?.data || profileStatsRes || null;
+      setReservaStats(rawStats);
 
       const opinionList =
-        opinionsRes?.opinionList || opinionsRes?.data?.opinionList || [];
+        opinionsRes?.opinionList ||
+        opinionsRes?.data?.opinionList ||
+        opinionsRes?.data?.comments ||
+        opinionsRes?.comments ||
+        (Array.isArray(opinionsRes?.data)
+          ? opinionsRes.data
+          : Array.isArray(opinionsRes)
+            ? opinionsRes
+            : []);
       setOpinions(opinionList);
 
       const commentatorIds = [
@@ -165,7 +184,10 @@ const PerfilPublicoScreen = ({ route, navigation }) => {
     );
   }
 
-  const stats = profile.stats || {};
+  const stats = reservaStats || {};
+  const comentarios = stats.comentarios || {};
+  const trayectos = stats.trayectos || {};
+  const cae = stats.cae || {};
   const cars = profile.cars || [];
 
   const getCommentatorName = (commentatorId) => {
@@ -199,6 +221,7 @@ const PerfilPublicoScreen = ({ route, navigation }) => {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
@@ -247,7 +270,11 @@ const PerfilPublicoScreen = ({ route, navigation }) => {
             <View style={styles.statItem}>
               <Star size={18} color={COLORS.warning} strokeWidth={2.5} />
               <Text style={styles.statValue}>
-                {formatRating(stats.avg_rating)}
+                {formatRating(
+                  comentarios.rating_promedio
+                    ? comentarios.rating_promedio / 2
+                    : null,
+                )}
               </Text>
               <Text style={styles.statLabel}>Valoración</Text>
             </View>
@@ -258,14 +285,14 @@ const PerfilPublicoScreen = ({ route, navigation }) => {
                 color={COLORS.secondary}
                 strokeWidth={2.5}
               />
-              <Text style={styles.statValue}>{stats.total_comments ?? 0}</Text>
+              <Text style={styles.statValue}>{comentarios.recibidos ?? 0}</Text>
               <Text style={styles.statLabel}>Comentarios</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Users size={18} color={COLORS.primary} strokeWidth={2.5} />
-              <Text style={styles.statValue}>{stats.events_joined ?? 0}</Text>
-              <Text style={styles.statLabel}>Eventos</Text>
+              <Text style={styles.statValue}>{trayectos.finalizados ?? 0}</Text>
+              <Text style={styles.statLabel}>Viajes</Text>
             </View>
           </View>
         </View>
@@ -366,64 +393,54 @@ const PerfilPublicoScreen = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* Opiniones recibidas */}
-        {opinions.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              Opiniones ({opinions.length})
-            </Text>
-            {opinions.map((opinion, index) => {
-              const commentatorId = opinion.user_id_commentator;
-              const name = getCommentatorName(commentatorId);
-              const avatar = getCommentatorAvatar(commentatorId);
-              const filledStars = ratingToStars(opinion.rating);
-              return (
-                <View
-                  key={opinion.id_comment || index}
-                  style={styles.commentCard}
-                >
-                  <View style={styles.commentHeader}>
-                    <View style={styles.commentatorRow}>
-                      {avatar ? (
-                        <Image
-                          source={{ uri: avatar }}
-                          style={styles.commentatorAvatar}
-                        />
-                      ) : (
-                        <View style={styles.commentatorAvatarFallback}>
-                          <Text style={styles.commentatorAvatarText}>
-                            {name?.charAt(0)?.toUpperCase() || "?"}
-                          </Text>
-                        </View>
-                      )}
-                      <Text style={styles.commentatorName} numberOfLines={1}>
-                        {name}
-                      </Text>
-                    </View>
-                    <View style={styles.commentStars}>
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <Star
-                          key={star}
-                          size={12}
-                          color={
-                            star <= filledStars
-                              ? COLORS.warning
-                              : COLORS.gray200
-                          }
-                          strokeWidth={2}
-                          fill={star <= filledStars ? COLORS.warning : "none"}
-                        />
-                      ))}
-                    </View>
-                  </View>
-                  {opinion.opinion ? (
-                    <Text style={styles.commentText}>{opinion.opinion}</Text>
-                  ) : null}
-                </View>
-              );
-            })}
-          </View>
-        )}
+        {/* Sección de valoraciones - botón a pantalla aparte */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Valoraciones</Text>
+          <TouchableOpacity
+            style={styles.opinionsCard}
+            onPress={() => navigation.navigate("Opiniones", { userId })}
+            activeOpacity={0.7}
+          >
+            <View style={styles.opinionsCardLeft}>
+              <Text style={styles.opinionsBigRating}>
+                {comentarios.rating_promedio
+                  ? (comentarios.rating_promedio / 2).toFixed(1)
+                  : "—"}
+              </Text>
+              <View style={styles.opinionsCardStars}>
+                {[1, 2, 3, 4, 5].map((star) => {
+                  const avg = comentarios.rating_promedio
+                    ? comentarios.rating_promedio / 2
+                    : 0;
+                  return (
+                    <Star
+                      key={star}
+                      size={14}
+                      color={
+                        star <= Math.round(avg)
+                          ? COLORS.warning
+                          : COLORS.gray200
+                      }
+                      strokeWidth={2}
+                      fill={star <= Math.round(avg) ? COLORS.warning : "none"}
+                    />
+                  );
+                })}
+              </View>
+              <Text style={styles.opinionsCount}>
+                {comentarios.recibidos ?? 0} valoracion
+                {(comentarios.recibidos ?? 0) !== 1 ? "es" : ""}
+              </Text>
+            </View>
+            <View style={styles.opinionsCardRight}>
+              <ChevronRight
+                size={22}
+                color={COLORS.gray400}
+                strokeWidth={2.5}
+              />
+            </View>
+          </TouchableOpacity>
+        </View>
 
         <View style={{ height: SPACING.xl }} />
       </ScrollView>
@@ -702,6 +719,37 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sm,
     color: COLORS.gray700,
     lineHeight: 20,
+  },
+  // Opinions card (navigates to OpinionesScreen)
+  opinionsCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    ...SHADOWS.small,
+  },
+  opinionsCardLeft: {
+    alignItems: "center",
+    gap: 4,
+  },
+  opinionsBigRating: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: COLORS.gray800,
+  },
+  opinionsCardStars: {
+    flexDirection: "row",
+    gap: 2,
+  },
+  opinionsCount: {
+    fontSize: FONTS.xs,
+    color: COLORS.gray400,
+  },
+  opinionsCardRight: {
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
 

@@ -48,25 +48,46 @@ const getAvatarColor = (id) => {
 
 const OpinionesScreen = ({ route, navigation }) => {
   const { user } = useUser();
-  const userId = route.params?.userId || user?.id;
+  const routeUserId = route.params?.userId;
+  const isOwnProfile = !routeUserId || routeUserId === user?.id;
+  const userId = routeUserId || user?.id;
 
   const [activeTab, setActiveTab] = useState("received");
   const [opinions, setOpinions] = useState([]);
   const [userInfo, setUserInfo] = useState({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const fetchOpinions = useCallback(
-    async (tab) => {
+    async (tab, pageNum = 1, append = false) => {
       if (!userId) return;
       try {
+        if (append) setLoadingMore(true);
         const res =
           tab === "received"
-            ? await comentarioService.obtenerOpinionesPorValorado(userId)
-            : await comentarioService.obtenerOpinionesPorComentarista(userId);
+            ? await comentarioService.obtenerOpinionesPorValorado(userId, {
+                page: pageNum,
+                limit: 10,
+              })
+            : await comentarioService.obtenerOpinionesPorComentarista(userId, {
+                page: pageNum,
+                limit: 10,
+                includeComments: true,
+              });
 
-        const list = res?.opinionList || res?.data?.opinionList || [];
-        setOpinions(list);
+        const list =
+          res?.opinionList ||
+          res?.data?.opinionList ||
+          res?.data?.comments ||
+          res?.comments ||
+          (Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []);
+        const pagination = res?.pagination || res?.data?.pagination;
+        setOpinions((prev) => (append ? [...prev, ...list] : list));
+        setHasMore(!!pagination?.hasNext);
+        setPage(pageNum);
 
         const otherIds = [
           ...new Set(
@@ -92,15 +113,16 @@ const OpinionesScreen = ({ route, navigation }) => {
               };
             }
           }
-          setUserInfo(infoMap);
-        } else {
+          setUserInfo((prev) => (append ? { ...prev, ...infoMap } : infoMap));
+        } else if (!append) {
           setUserInfo({});
         }
       } catch (err) {
         console.warn("[Opiniones] Error:", err.message);
-        setOpinions([]);
+        if (!append) setOpinions([]);
       } finally {
         setLoading(false);
+        setLoadingMore(false);
       }
     },
     [userId],
@@ -110,13 +132,23 @@ const OpinionesScreen = ({ route, navigation }) => {
     setLoading(true);
     setOpinions([]);
     setUserInfo({});
-    fetchOpinions(activeTab);
+    setPage(1);
+    setHasMore(false);
+    fetchOpinions(activeTab, 1);
   }, [activeTab, fetchOpinions]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchOpinions(activeTab);
+    setPage(1);
+    setHasMore(false);
+    await fetchOpinions(activeTab, 1);
     setRefreshing(false);
+  };
+
+  const handleLoadMore = () => {
+    if (hasMore && !loadingMore) {
+      fetchOpinions(activeTab, page + 1, true);
+    }
   };
 
   const getOtherName = (opinion) => {
@@ -204,26 +236,28 @@ const OpinionesScreen = ({ route, navigation }) => {
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Tabs */}
-      <View style={styles.tabsContainer}>
-        {TABS.map((tab) => (
-          <TouchableOpacity
-            key={tab.key}
-            style={[styles.tab, activeTab === tab.key && styles.tabActive]}
-            onPress={() => setActiveTab(tab.key)}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === tab.key && styles.tabTextActive,
-              ]}
+      {/* Tabs - solo si es mi perfil */}
+      {isOwnProfile && (
+        <View style={styles.tabsContainer}>
+          {TABS.map((tab) => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[styles.tab, activeTab === tab.key && styles.tabActive]}
+              onPress={() => setActiveTab(tab.key)}
+              activeOpacity={0.7}
             >
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === tab.key && styles.tabTextActive,
+                ]}
+              >
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {loading ? (
         <View style={styles.centerContainer}>
@@ -232,9 +266,11 @@ const OpinionesScreen = ({ route, navigation }) => {
       ) : opinions.length === 0 ? (
         <View style={styles.centerContainer}>
           <Text style={styles.emptyText}>
-            {activeTab === "received"
-              ? "Aún no has recibido opiniones"
-              : "Aún no has escrito opiniones"}
+            {isOwnProfile
+              ? activeTab === "received"
+                ? "Aún no has recibido opiniones"
+                : "Aún no has escrito opiniones"
+              : "Aún no tiene opiniones"}
           </Text>
         </View>
       ) : (
@@ -243,6 +279,15 @@ const OpinionesScreen = ({ route, navigation }) => {
           keyExtractor={(item, index) => item.id_comment || `opinion_${index}`}
           renderItem={renderOpinion}
           contentContainerStyle={styles.listContent}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={{ paddingVertical: SPACING.md }}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              </View>
+            ) : null
+          }
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

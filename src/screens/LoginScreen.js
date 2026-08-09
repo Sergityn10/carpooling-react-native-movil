@@ -52,10 +52,10 @@ const LoginScreen = ({ navigation }) => {
     if (!email.trim()) {
       newErrors.email = "El email es requerido";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      newErrors.email = "Email no valido";
+      newErrors.email = "Email no válido";
     }
     if (!password.trim()) {
-      newErrors.password = "La contrasena es requerida";
+      newErrors.password = "La contraseña es requerida";
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -68,7 +68,7 @@ const LoginScreen = ({ navigation }) => {
     try {
       await iniciarSesion(email.trim(), password);
     } catch (error) {
-      Alert.alert("Error", error.message || "No se pudo iniciar sesion.");
+      Alert.alert("Error", error.message || "No se pudo iniciar sesión.");
     } finally {
       setLoading(false);
     }
@@ -104,7 +104,7 @@ const LoginScreen = ({ navigation }) => {
       if (error.code !== "12501") {
         Alert.alert(
           "Error",
-          error.message || "No se pudo completar la autenticacion con Google.",
+          error.message || "No se pudo completar la autenticación con Google.",
         );
       }
     } finally {
@@ -118,7 +118,7 @@ const LoginScreen = ({ navigation }) => {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.flex}
       >
-        {/* Header con boton back */}
+        {/* Header con botón back */}
         <View style={styles.headerBar}>
           <TouchableOpacity
             style={styles.backButton}
@@ -142,7 +142,7 @@ const LoginScreen = ({ navigation }) => {
               resizeMode="contain"
             />
             <Text style={styles.title}>Bienvenido de nuevo</Text>
-            <Text style={styles.subtitle}>Inicia sesion para continuar</Text>
+            <Text style={styles.subtitle}>Inicia sesión para continuar</Text>
           </View>
 
           {/* Formulario */}
@@ -181,7 +181,7 @@ const LoginScreen = ({ navigation }) => {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Contrasena</Text>
+              <Text style={styles.label}>Contraseña</Text>
               <View
                 style={[
                   styles.inputWrapper,
@@ -195,7 +195,7 @@ const LoginScreen = ({ navigation }) => {
                 />
                 <TextInput
                   style={styles.input}
-                  placeholder="Tu contrasena"
+                  placeholder="Tu contraseña"
                   placeholderTextColor={COLORS.gray400}
                   value={password}
                   onChangeText={(text) => {
@@ -224,7 +224,7 @@ const LoginScreen = ({ navigation }) => {
             </View>
 
             <Button
-              title="Iniciar sesion"
+              title="Iniciar sesión"
               onPress={handleSubmit}
               variant="primary"
               size="large"
@@ -236,11 +236,11 @@ const LoginScreen = ({ navigation }) => {
           {/* Separador */}
           <View style={styles.dividerContainer}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>o continua con</Text>
+            <Text style={styles.dividerText}>o continúa con</Text>
             <View style={styles.dividerLine} />
           </View>
 
-          {/* Boton Google */}
+          {/* Botón Google */}
           <TouchableOpacity
             style={styles.googleButton}
             onPress={handleGoogleAuth}
@@ -261,12 +261,12 @@ const LoginScreen = ({ navigation }) => {
 
           {/* Link a registro */}
           <View style={styles.toggleContainer}>
-            <Text style={styles.toggleText}>No tienes cuenta?</Text>
+            <Text style={styles.toggleText}>¿No tienes cuenta?</Text>
             <TouchableOpacity
               onPress={() => navigation.navigate("Register")}
               activeOpacity={0.7}
             >
-              <Text style={styles.toggleLink}>Registrate</Text>
+              <Text style={styles.toggleLink}>Regístrate</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

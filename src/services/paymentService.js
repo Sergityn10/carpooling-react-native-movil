@@ -120,6 +120,13 @@ async function getLinkedAccounts() {
   return httpClient.request("/api/monedero/cuenta-vinculada");
 }
 
+// Obtener link de checkout de una reserva — GET /api/payment/payment-intent/:id_reserva/checkout-link
+async function getCheckoutLink(idReserva) {
+  return httpClient.request(
+    `/api/payment/payment-intent/${idReserva}/checkout-link`,
+  );
+}
+
 export const paymentService = {
   createStripeConnect,
   getStripeConnectLink,
@@ -138,6 +145,7 @@ export const paymentService = {
   rechargeWallet,
   createBankAccount,
   getLinkedAccounts,
+  getCheckoutLink,
 };
 
 export default paymentService;

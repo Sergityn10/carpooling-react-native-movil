@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
@@ -64,12 +65,20 @@ const RegisterScreen = ({ navigation }) => {
     if (!email.trim()) {
       newErrors.email = "El email es requerido";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      newErrors.email = "Email no valido";
+      newErrors.email = "Email no válido";
     }
     if (!password.trim()) {
-      newErrors.password = "La contrasena es requerida";
-    } else if (password.length < 6) {
-      newErrors.password = "Minimo 6 caracteres";
+      newErrors.password = "La contraseña es requerida";
+    } else if (password.length < 8) {
+      newErrors.password = "Mínimo 8 caracteres";
+    } else if (!/[A-Z]/.test(password)) {
+      newErrors.password = "Debe incluir al menos una mayúscula";
+    } else if (!/[a-z]/.test(password)) {
+      newErrors.password = "Debe incluir al menos una minúscula";
+    } else if (!/\d/.test(password)) {
+      newErrors.password = "Debe incluir al menos un número";
+    } else if (!/[!@#$%^&*(),.?":{}|<>_\-\[\];'/\\]/.test(password)) {
+      newErrors.password = "Debe incluir al menos un carácter especial";
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -80,7 +89,7 @@ const RegisterScreen = ({ navigation }) => {
     if (!acceptTerms || !acceptPrivacy) {
       Alert.alert(
         "Consentimiento requerido",
-        "Debes aceptar los terminos de servicio y la politica de privacidad para registrarte.",
+        "Debes aceptar los términos de servicio y la política de privacidad para registrarte.",
       );
       return;
     }
@@ -107,7 +116,7 @@ const RegisterScreen = ({ navigation }) => {
     if (!acceptTerms || !acceptPrivacy) {
       Alert.alert(
         "Consentimiento requerido",
-        "Debes aceptar los terminos de servicio y la politica de privacidad para registrarte.",
+        "Debes aceptar los términos de servicio y la política de privacidad para registrarte.",
       );
       return;
     }
@@ -153,10 +162,23 @@ const RegisterScreen = ({ navigation }) => {
     }
   };
 
+  const hasMinLength = password.length >= 8;
+  const hasUpperCase = /[A-Z]/.test(password);
+  const hasLowerCase = /[a-z]/.test(password);
+  const hasNumber = /\d/.test(password);
+  const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>_\-\[\];'/\\]/.test(password);
+
   const passwordChecks = [
-    { label: "Minimo 6 caracteres", valid: password.length >= 6 },
+    { label: "Mínimo 8 caracteres", valid: hasMinLength },
+    { label: "Una mayúscula (A-Z)", valid: hasUpperCase },
+    { label: "Una minúscula (a-z)", valid: hasLowerCase },
+    { label: "Un número (0-9)", valid: hasNumber },
     {
-      label: "Un email valido",
+      label: "Un carácter especial (!@#$...)",
+      valid: hasSpecialChar,
+    },
+    {
+      label: "Un email válido",
       valid: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()),
     },
   ];
@@ -167,7 +189,7 @@ const RegisterScreen = ({ navigation }) => {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.flex}
       >
-        {/* Header con boton back */}
+        {/* Header con botón back */}
         <View style={styles.headerBar}>
           <TouchableOpacity
             style={styles.backButton}
@@ -183,7 +205,7 @@ const RegisterScreen = ({ navigation }) => {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Logo y titulo */}
+          {/* Logo y título */}
           <View style={styles.header}>
             <Image
               source={require("../../assets/logo-sin-bg-198px-ajustado.png")}
@@ -192,7 +214,7 @@ const RegisterScreen = ({ navigation }) => {
             />
             <Text style={styles.title}>Crea tu cuenta</Text>
             <Text style={styles.subtitle}>
-              Unete a la comunidad YouConnext. Podras completar tu perfil mas
+              Únete a la comunidad YouConnext. Podrás completar tu perfil más
               tarde.
             </Text>
           </View>
@@ -233,7 +255,7 @@ const RegisterScreen = ({ navigation }) => {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Contrasena</Text>
+              <Text style={styles.label}>Contraseña</Text>
               <View
                 style={[
                   styles.inputWrapper,
@@ -247,7 +269,7 @@ const RegisterScreen = ({ navigation }) => {
                 />
                 <TextInput
                   style={styles.input}
-                  placeholder="Minimo 6 caracteres"
+                  placeholder="Mínimo 8 caracteres"
                   placeholderTextColor={COLORS.gray400}
                   value={password}
                   onChangeText={(text) => {
@@ -324,7 +346,15 @@ const RegisterScreen = ({ navigation }) => {
                 )}
                 <Text style={styles.consentText}>
                   Acepto los{" "}
-                  <Text style={styles.consentLink}>terminos de servicio</Text> *
+                  <Text
+                    style={styles.consentLink}
+                    onPress={() =>
+                      Linking.openURL("https://app.youconnext.es/condiciones")
+                    }
+                  >
+                    términos de servicio
+                  </Text>
+                  {" *"}
                 </Text>
               </TouchableOpacity>
               {errors.terms && (
@@ -351,8 +381,15 @@ const RegisterScreen = ({ navigation }) => {
                 )}
                 <Text style={styles.consentText}>
                   Acepto la{" "}
-                  <Text style={styles.consentLink}>politica de privacidad</Text>{" "}
-                  *
+                  <Text
+                    style={styles.consentLink}
+                    onPress={() =>
+                      Linking.openURL("https://app.youconnext.es/privacidad")
+                    }
+                  >
+                    política de privacidad
+                  </Text>
+                  {" *"}
                 </Text>
               </TouchableOpacity>
               {errors.privacy && (
@@ -374,7 +411,7 @@ const RegisterScreen = ({ navigation }) => {
                   <Square size={22} color={COLORS.gray400} strokeWidth={2} />
                 )}
                 <Text style={styles.consentText}>
-                  Deseo recibir comunicaciones y noticias sobre la aplicacion
+                  Deseo recibir comunicaciones y noticias sobre la aplicación
                 </Text>
               </TouchableOpacity>
             </View>
@@ -392,11 +429,11 @@ const RegisterScreen = ({ navigation }) => {
           {/* Separador */}
           <View style={styles.dividerContainer}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>o continua con</Text>
+            <Text style={styles.dividerText}>o continúa con</Text>
             <View style={styles.dividerLine} />
           </View>
 
-          {/* Boton Google */}
+          {/* Botón Google */}
           <TouchableOpacity
             style={styles.googleButton}
             onPress={handleGoogleAuth}
@@ -417,12 +454,12 @@ const RegisterScreen = ({ navigation }) => {
 
           {/* Link a login */}
           <View style={styles.toggleContainer}>
-            <Text style={styles.toggleText}>Ya tienes cuenta?</Text>
+            <Text style={styles.toggleText}>¿Ya tienes cuenta?</Text>
             <TouchableOpacity
               onPress={() => navigation.navigate("Login")}
               activeOpacity={0.7}
             >
-              <Text style={styles.toggleLink}>Inicia sesion</Text>
+              <Text style={styles.toggleLink}>Inicia sesión</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

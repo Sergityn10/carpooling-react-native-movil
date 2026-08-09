@@ -22,9 +22,9 @@
         "EXPO_PUBLIC_NOTIFICATIONS_API_URL": "https://notifications.youconnext.es",
         "EXPO_PUBLIC_TRACKING_API_URL": "https://tracking.youconnext.es",
 
-        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyBtz5pxS6ZVcVBA9jdbQn7bQPC72c81BT8",
-        "EXPO_GOOGLE_OAUTH": "YOUR_OAUTH_SECRET",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "YOUR_GOOGLE_MAPS_API_KEY",
+        "EXPO_GOOGLE_OAUTH": "YOUR_GOOGLE_OAUTH_CLIENT_SECRET",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "YOUR_GOOGLE_WEB_CLIENT_ID.apps.googleusercontent.com",
         "EXPO_PUBLIC_RECOMMENDED_PRICE_PER_KM": "0.06",
         "EXPO_PUBLIC_MIN_PRICE_PER_KM": "0.06",
         "EXPO_PUBLIC_MAX_PRICE_PER_KM": "0.08"
@@ -39,9 +39,9 @@
         "EXPO_PUBLIC_MESSAGES_API_URL": "https://messages.youconnext.es",
         "EXPO_PUBLIC_NOTIFICATIONS_API_URL": "https://notifications.youconnext.es",
         "EXPO_PUBLIC_TRACKING_API_URL": "https://tracking.youconnext.es",
-        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyBtz5pxS6ZVcVBA9jdbQn7bQPC72c81BT8",
-        "EXPO_GOOGLE_OAUTH": "YOUR_OAUTH_SECRET",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "YOUR_GOOGLE_MAPS_API_KEY",
+        "EXPO_GOOGLE_OAUTH": "YOUR_GOOGLE_OAUTH_CLIENT_SECRET",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "YOUR_GOOGLE_WEB_CLIENT_ID.apps.googleusercontent.com",
         "EXPO_PUBLIC_RECOMMENDED_PRICE_PER_KM": "0.06",
         "EXPO_PUBLIC_MIN_PRICE_PER_KM": "0.06",
         "EXPO_PUBLIC_MAX_PRICE_PER_KM": "0.08"

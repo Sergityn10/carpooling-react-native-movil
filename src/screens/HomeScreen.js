@@ -14,7 +14,6 @@ import {
   Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect } from "@react-navigation/native";
 import * as Location from "expo-location";
 import {
   ScanLine,
@@ -56,28 +55,36 @@ const HomeScreen = ({ navigation }) => {
     homeCache.getProximosViajes() || [],
   );
   const [loadingProximos, setLoadingProximos] = useState(
-    !homeCache.getProximosViajes(),
+    !(
+      homeCache.getProximosViajes() && homeCache.getProximosViajes().length > 0
+    ),
   );
 
   const [joinedEvents, setJoinedEvents] = useState(
     homeCache.getJoinedEvents() || [],
   );
   const [loadingJoined, setLoadingJoined] = useState(
-    !homeCache.getJoinedEvents(),
+    !(homeCache.getJoinedEvents() && homeCache.getJoinedEvents().length > 0),
   );
 
   const [eventosCercanos, setEventosCercanos] = useState(
     homeCache.getEventosCercanos() || [],
   );
   const [loadingEventos, setLoadingEventos] = useState(
-    !homeCache.getEventosCercanos(),
+    !(
+      homeCache.getEventosCercanos() &&
+      homeCache.getEventosCercanos().length > 0
+    ),
   );
 
   const [viajesPopulares, setViajesPopulares] = useState(
     homeCache.getViajesPopulares() || [],
   );
   const [loadingPopulares, setLoadingPopulares] = useState(
-    !homeCache.getViajesPopulares(),
+    !(
+      homeCache.getViajesPopulares() &&
+      homeCache.getViajesPopulares().length > 0
+    ),
   );
 
   const handleSearch = (params) => {
@@ -86,7 +93,7 @@ const HomeScreen = ({ navigation }) => {
 
   const fetchProximosViajes = useCallback(async () => {
     const cached = homeCache.getProximosViajes();
-    if (cached) {
+    if (cached && cached.length > 0) {
       setProximosViajes(cached);
       setLoadingProximos(false);
       return;
@@ -94,7 +101,7 @@ const HomeScreen = ({ navigation }) => {
     setLoadingProximos(true);
     try {
       const res = await trayectoService.obtenerProximosTrayectos();
-      const data = Array.isArray(res) ? res : [];
+      const data = Array.isArray(res) ? res : res?.data ? res.data : [];
       setProximosViajes(data);
       homeCache.setProximosViajes(data);
     } catch (err) {
@@ -107,7 +114,7 @@ const HomeScreen = ({ navigation }) => {
 
   const fetchJoinedEvents = useCallback(async () => {
     const cached = homeCache.getJoinedEvents();
-    if (cached) {
+    if (cached && cached.length > 0) {
       setJoinedEvents(cached);
       setLoadingJoined(false);
       return;
@@ -129,7 +136,7 @@ const HomeScreen = ({ navigation }) => {
 
   const fetchEventosCercanos = useCallback(async () => {
     const cached = homeCache.getEventosCercanos();
-    if (cached) {
+    if (cached && cached.length > 0) {
       setEventosCercanos(cached);
       setLoadingEventos(false);
       return;
@@ -172,14 +179,14 @@ const HomeScreen = ({ navigation }) => {
 
   const fetchViajesPopulares = useCallback(async () => {
     const cached = homeCache.getViajesPopulares();
-    if (cached) {
+    if (cached && cached.length > 0) {
       setViajesPopulares(cached);
       setLoadingPopulares(false);
       return;
     }
     setLoadingPopulares(true);
     try {
-      const res = await trayectoService.obtenerTrayectos();
+      const res = await trayectoService.obtenerTrayectos({ limit: 100 });
       const data = res.data || res.trayectos || (Array.isArray(res) ? res : []);
       const now = Date.now();
       const safeData = (Array.isArray(data) ? data : [])
@@ -239,15 +246,6 @@ const HomeScreen = ({ navigation }) => {
     fetchEventosCercanos,
     fetchViajesPopulares,
   ]);
-
-  useFocusEffect(
-    useCallback(() => {
-      const cached = homeCache.getProximosViajes();
-      if (cached) {
-        setProximosViajes(cached);
-      }
-    }, []),
-  );
 
   const formatHora = (viaje) =>
     _formatTripTime(typeof viaje === "string" ? { hora: viaje } : viaje);

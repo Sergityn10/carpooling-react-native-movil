@@ -3,6 +3,7 @@
 // Common (Genéricos)
 export { default as Button } from "./common/Button";
 export { default as GoogleIcon } from "./GoogleIcon";
+export { default as Skeleton } from "./common/Skeleton";
 
 // Profile (Perfil de usuario)
 export { default as ProfileView } from "./profile/ProfileView";

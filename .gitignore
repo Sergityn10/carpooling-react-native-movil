@@ -31,8 +31,17 @@ yarn-error.*
 *.pem
 
 # local env files
-.env*.local
 .env
+.env*.local
+
+# EAS build config (contains secrets — use eas.json.example as template)
+eas.json
+
+# Firebase
+firebase-debug.log
+*firebase-service-account*.json
+GoogleService-Info.plist
+
 # typescript
 *.tsbuildinfo
 

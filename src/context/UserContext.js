@@ -87,6 +87,14 @@ export const UserProvider = ({ children }) => {
         httpClient.setToken(token);
         travelsHttpClient.setToken(token);
         notificationsHttpClient.setToken(token);
+
+        // Restaurar refresh token de AsyncStorage
+        const refreshTokenValue = await AsyncStorage.getItem(
+          "@youconnext_refresh_token",
+        );
+        if (refreshTokenValue) {
+          httpClient.setRefreshToken(refreshTokenValue);
+        }
         try {
           // Validar token y obtener datos del usuario
           const validateRes = await authService.validateToken();
@@ -109,7 +117,11 @@ export const UserProvider = ({ children }) => {
             };
             setUser(fullUser);
             setIsAuthenticated(true);
-          } catch {
+          } catch (infoErr) {
+            console.warn(
+              "[UserContext] getUserInfo fallo en loadUser:",
+              infoErr?.message,
+            );
             // Si getUserInfo falla, usar datos de validateToken
             setUser({
               id: userData.userId,
@@ -126,10 +138,10 @@ export const UserProvider = ({ children }) => {
           // Solo cerrar sesión si es un error de autenticación (401),
           // no por errores de red o del servidor
           const isAuthError =
+            error?.status === 401 ||
             error?.message?.includes("401") ||
-            error?.message?.includes("token") ||
             error?.message?.includes("Unauthorized") ||
-            error?.message?.includes("sesión");
+            error?.message?.includes("Sesión expirada");
           if (isAuthError) {
             await clearStoredSession();
           } else {
@@ -182,6 +194,7 @@ export const UserProvider = ({ children }) => {
   const clearStoredSession = async () => {
     await AsyncStorage.removeItem("@youconnext_user");
     await AsyncStorage.removeItem("@youconnext_token");
+    await AsyncStorage.removeItem("@youconnext_refresh_token");
     httpClient.clearToken();
     travelsHttpClient.clearToken();
     notificationsHttpClient.clearToken();
@@ -215,8 +228,11 @@ export const UserProvider = ({ children }) => {
           completitud_cae: infoRes.completitud_cae ?? null,
           monedero: infoRes.monedero ?? null,
         };
-      } catch {
-        // Si falla, usar datos básicos del registro
+      } catch (infoErr) {
+        console.warn(
+          "[UserContext] getUserInfo fallo en crearUsuario:",
+          infoErr?.message,
+        );
       }
 
       await saveSession(userData, token);
@@ -252,8 +268,11 @@ export const UserProvider = ({ children }) => {
           completitud_cae: infoRes.completitud_cae ?? null,
           monedero: infoRes.monedero ?? null,
         };
-      } catch {
-        // Si falla, usar datos básicos del login
+      } catch (infoErr) {
+        console.warn(
+          "[UserContext] getUserInfo fallo en iniciarSesion:",
+          infoErr?.message,
+        );
       }
 
       await saveSession(userData, token);
@@ -316,8 +335,11 @@ export const UserProvider = ({ children }) => {
           completitud_cae: infoRes.completitud_cae ?? null,
           monedero: infoRes.monedero ?? null,
         };
-      } catch {
-        // Si falla, usar datos básicos del login
+      } catch (infoErr) {
+        console.warn(
+          "[UserContext] getUserInfo fallo en loginGoogle:",
+          infoErr?.message,
+        );
       }
 
       await saveSession(userData, token);

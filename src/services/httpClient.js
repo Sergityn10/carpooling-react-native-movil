@@ -38,6 +38,7 @@ class HttpClient {
 
     this.baseUrl = baseUrl;
     this.token = null;
+    this.refreshTokenValue = null;
     this.refreshPromise = null;
     this.tokenRefreshCallbacks = [];
 
@@ -52,6 +53,29 @@ class HttpClient {
 
   clearToken() {
     this.token = null;
+    this.refreshTokenValue = null;
+  }
+
+  setRefreshToken(token) {
+    this.refreshTokenValue = token;
+  }
+
+  // Extraer refresh_token de la cabecera Set-Cookie
+  _extractRefreshToken(response) {
+    try {
+      const setCookie =
+        response.headers?.get("set-cookie") ||
+        response.headers?.get("Set-Cookie");
+      if (!setCookie) return null;
+      const cookies = Array.isArray(setCookie) ? setCookie : [setCookie];
+      for (const cookie of cookies) {
+        const match = cookie.match(/refresh_token=([^;]+)/);
+        if (match) return match[1];
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   onUnauthorized = null;
@@ -71,11 +95,17 @@ class HttpClient {
       try {
         const url = `${this.baseUrl}/api/auth/refresh`;
         const headers = {};
-        if (this.token) {
-          headers["Authorization"] = `Bearer ${this.token}`;
+
+        // Enviar el refresh_token como Bearer token
+        if (this.refreshTokenValue) {
+          headers["Authorization"] = `Bearer ${this.refreshTokenValue}`;
         }
 
-        const response = await fetch(url, { method: "POST", headers });
+        const response = await fetch(url, {
+          method: "POST",
+          headers,
+          credentials: "include",
+        });
         const rawText = await response.text();
         let data = null;
         if (rawText) {
@@ -86,7 +116,14 @@ class HttpClient {
           }
         }
 
-        if (!response.ok) return null;
+        if (!response.ok) {
+          console.warn(
+            "[httpClient] Refresh token failed:",
+            response.status,
+            rawText?.substring(0, 200),
+          );
+          return null;
+        }
 
         const newToken = data?.token;
         if (!newToken) return null;
@@ -95,6 +132,18 @@ class HttpClient {
         try {
           await AsyncStorage.setItem("@youconnext_token", newToken);
         } catch {}
+
+        // Capturar el nuevo refresh_token rotado de Set-Cookie
+        const newRefreshToken = this._extractRefreshToken(response);
+        if (newRefreshToken) {
+          this.refreshTokenValue = newRefreshToken;
+          try {
+            await AsyncStorage.setItem(
+              "@youconnext_refresh_token",
+              newRefreshToken,
+            );
+          } catch {}
+        }
 
         this.tokenRefreshCallbacks.forEach((cb) => {
           try {
@@ -107,8 +156,8 @@ class HttpClient {
         }
         return newToken;
       } catch (e) {
-        console.error("[httpClient] Refresh token failed:", e?.message);
-        throw e;
+        console.error("[httpClient] Refresh token error:", e?.message);
+        return null;
       } finally {
         this.refreshPromise = null;
       }
@@ -206,6 +255,17 @@ class HttpClient {
         }
       }
 
+      // Capturar refresh_token de Set-Cookie tras login/register
+      if (response.ok) {
+        const rt = this._extractRefreshToken(response);
+        if (rt) {
+          this.refreshTokenValue = rt;
+          try {
+            await AsyncStorage.setItem("@youconnext_refresh_token", rt);
+          } catch {}
+        }
+      }
+
       if (!response.ok) {
         if (
           response.status === 401 &&
@@ -217,15 +277,24 @@ class HttpClient {
             if (newToken) {
               return this.request(endpoint, { ...options, _retried: true });
             }
-          } catch (refreshErr) {
+            // Refresh devolvió null: sesión expirada de verdad
             if (typeof __DEV__ !== "undefined" && __DEV__) {
               console.warn(
-                "[httpClient] Refresh failed (network?), not logging out:",
-                refreshErr?.message,
+                "[httpClient] Refresh returned null, triggering logout",
               );
             }
-            throw new Error("Error de conexión al refrescar la sesión");
+          } catch (refreshErr) {
+            if (typeof __DEV__ !== "undefined" && __DEV__) {
+              console.warn("[httpClient] Refresh failed:", refreshErr?.message);
+            }
           }
+          // Si llegamos aquí, el refresh falló: cerrar sesión
+          if (this.onUnauthorized) {
+            this.onUnauthorized();
+          }
+          const err = new Error("Sesión expirada");
+          err.status = 401;
+          throw err;
         }
 
         if (response.status === 401 && this.onUnauthorized) {
@@ -249,6 +318,13 @@ class HttpClient {
       console.error("API Error:", error);
       throw error;
     }
+  }
+
+  async clearRefreshToken() {
+    this.refreshTokenValue = null;
+    try {
+      await AsyncStorage.removeItem("@youconnext_refresh_token");
+    } catch {}
   }
 
   async healthCheck() {

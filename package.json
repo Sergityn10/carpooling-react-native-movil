@@ -33,7 +33,10 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "setup:env": "copy .env.example .env",
+    "setup:eas": "copy eas.json.example eas.json",
+    "setup": "npm run setup:env && npm run setup:eas"
   },
   "private": true
 }

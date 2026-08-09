@@ -99,15 +99,25 @@ class MessagesHttpClient {
               this.token = newToken;
               return this.request(endpoint, { ...options, _retried: true });
             }
+            if (typeof __DEV__ !== "undefined" && __DEV__) {
+              console.warn(
+                "[Messages API] Refresh returned null, triggering logout",
+              );
+            }
           } catch (refreshErr) {
             if (typeof __DEV__ !== "undefined" && __DEV__) {
               console.warn(
-                "Messages API: Refresh failed (network?), not logging out:",
+                "[Messages API] Refresh failed:",
                 refreshErr?.message,
               );
             }
-            throw new Error("Error de conexión al refrescar la sesión");
           }
+          if (this.onUnauthorized) {
+            this.onUnauthorized();
+          }
+          const err = new Error("Sesión expirada");
+          err.status = 401;
+          throw err;
         }
 
         let errorData;

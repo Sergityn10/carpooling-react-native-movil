@@ -33,8 +33,8 @@ const OnboardingScreen = () => {
   const [apellido, setApellido] = useState(user?.surname || "");
   const [dni, setDni] = useState("");
 
-  const totalSteps = needsNameStep ? 4 : 2;
-  const stepOffset = needsNameStep ? 2 : 0;
+  const totalSteps = needsNameStep ? 4 : 3;
+  const stepOffset = needsNameStep ? 2 : 1;
 
   const formatDate = (date) => {
     if (!date) return "";
@@ -101,6 +101,15 @@ const OnboardingScreen = () => {
         return;
       }
       setStep(2);
+    } else if (!needsNameStep && step === 0) {
+      if (!validateDni(dni)) {
+        Alert.alert(
+          "DNI inválido",
+          "Introduce un DNI válido (8 números y 1 letra)",
+        );
+        return;
+      }
+      setStep(1);
     } else {
       const fechaStep = stepOffset;
       if (step === fechaStep) {
@@ -136,8 +145,8 @@ const OnboardingScreen = () => {
       if (needsNameStep) {
         updateData.name = nombre.trim();
         updateData.surname = apellido.trim();
-        updateData.dni = dni.replace(/[\s\-]/g, "").toUpperCase();
       }
+      updateData.dni = dni.replace(/[\s\-]/g, "").toUpperCase();
       await actualizarUsuario(updateData);
     } catch (e) {
       const status = e.status;
@@ -239,8 +248,8 @@ const OnboardingScreen = () => {
             </View>
           )}
 
-          {/* Step 1 (email only): DNI */}
-          {needsNameStep && step === 1 && (
+          {/* Step 1 (email) / Step 0 (google): DNI */}
+          {(needsNameStep ? step === 1 : step === 0) && (
             <View style={styles.stepContainer}>
               <View style={styles.iconWrapper}>
                 <IdCard size={48} color={COLORS.primary} strokeWidth={2} />
@@ -263,20 +272,29 @@ const OnboardingScreen = () => {
                 />
               </View>
 
-              <View style={styles.buttonContainer}>
-                <Button
-                  title="Atrás"
-                  onPress={() => setStep(0)}
-                  variant="outline"
-                  style={styles.backButton}
-                />
+              {needsNameStep ? (
+                <View style={styles.buttonContainer}>
+                  <Button
+                    title="Atrás"
+                    onPress={() => setStep(0)}
+                    variant="outline"
+                    style={styles.backButton}
+                  />
+                  <Button
+                    title="Continuar"
+                    onPress={handleNext}
+                    disabled={!validateDni(dni)}
+                    style={styles.button}
+                  />
+                </View>
+              ) : (
                 <Button
                   title="Continuar"
                   onPress={handleNext}
                   disabled={!validateDni(dni)}
                   style={styles.button}
                 />
-              </View>
+              )}
             </View>
           )}
 
@@ -332,29 +350,20 @@ const OnboardingScreen = () => {
                 </TouchableOpacity>
               )}
 
-              {needsNameStep ? (
-                <View style={styles.buttonContainer}>
-                  <Button
-                    title="Atrás"
-                    onPress={() => setStep(1)}
-                    variant="outline"
-                    style={styles.backButton}
-                  />
-                  <Button
-                    title="Continuar"
-                    onPress={handleNext}
-                    disabled={!fechaNacimiento}
-                    style={styles.button}
-                  />
-                </View>
-              ) : (
+              <View style={styles.buttonContainer}>
+                <Button
+                  title="Atrás"
+                  onPress={() => setStep(needsNameStep ? 1 : 0)}
+                  variant="outline"
+                  style={styles.backButton}
+                />
                 <Button
                   title="Continuar"
                   onPress={handleNext}
                   disabled={!fechaNacimiento}
                   style={styles.button}
                 />
-              )}
+              </View>
             </View>
           )}
 

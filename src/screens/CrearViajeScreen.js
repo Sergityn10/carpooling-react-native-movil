@@ -468,6 +468,27 @@ const CrearViajeScreen = ({ navigation, route }) => {
       setStep(STEPS.PRECIO);
       return;
     }
+    // Si el siguiente paso es VEHICULO y no hay coches, alertar y redirigir
+    if (step === STEPS.MAPA && vehiculos.length === 0 && !cargandoVehiculos) {
+      Alert.alert(
+        "Necesitas un vehículo",
+        "Debes añadir al menos un vehículo antes de crear un trayecto. ¿Quieres añadir uno ahora?",
+        [
+          { text: "Cancelar", style: "cancel" },
+          {
+            text: "Añadir vehículo",
+            style: "default",
+            onPress: () => {
+              navigation.navigate("Main", {
+                screen: "Perfil",
+                params: { initialSubView: "mis-vehiculos" },
+              });
+            },
+          },
+        ],
+      );
+      return;
+    }
     setStep(step + 1);
   };
 

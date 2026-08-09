@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   ScrollView,
   Image,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
@@ -166,8 +167,25 @@ const AuthScreen = ({ navigation }) => {
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            Al continuar aceptas nuestros terminos de servicio y politica de
-            privacidad.
+            Al continuar aceptas nuestros{" "}
+            <Text
+              style={styles.footerLink}
+              onPress={() =>
+                Linking.openURL("https://app.youconnext.es/condiciones")
+              }
+            >
+              términos de servicio
+            </Text>
+            {" y "}
+            <Text
+              style={styles.footerLink}
+              onPress={() =>
+                Linking.openURL("https://app.youconnext.es/privacidad")
+              }
+            >
+              política de privacidad
+            </Text>
+            .
           </Text>
         </View>
       </ScrollView>
@@ -283,6 +301,11 @@ const styles = StyleSheet.create({
     color: COLORS.gray400,
     textAlign: "center",
     lineHeight: 18,
+  },
+  footerLink: {
+    fontSize: FONTS.xs,
+    color: COLORS.primary,
+    textDecorationLine: "underline",
   },
 });
 

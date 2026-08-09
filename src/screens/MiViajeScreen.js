@@ -34,6 +34,7 @@ import { TripMapPreview } from "../components";
 import { trayectoService } from "../services/travels/trayectoService";
 import { reservaService } from "../services/travels/reservaService";
 import { carService } from "../services/carService";
+import { paymentService } from "../services/paymentService";
 import * as Location from "expo-location";
 import {
   parseTripDate,
@@ -271,16 +272,19 @@ const MiViajeScreen = ({ route, navigation }) => {
     if (!reservaExistente?.id_reserva) return;
     setReserving(true);
     try {
-      const response = await reservaService.resumePago(
+      await reservaService.resumePago(
         reservaExistente.id_reserva,
         "youconnext://perfil",
       );
-      if (response?.stripe_url) {
-        Linking.openURL(response.stripe_url);
+      const checkoutRes = await paymentService.getCheckoutLink(
+        reservaExistente.id_reserva,
+      );
+      if (checkoutRes?.checkout_url) {
+        Linking.openURL(checkoutRes.checkout_url);
       } else {
         Alert.alert(
           "Error",
-          response?.message || "No se pudo retomar el pago.",
+          checkoutRes?.message || "No se pudo retomar el pago.",
         );
       }
     } catch (error) {

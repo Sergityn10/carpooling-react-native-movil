@@ -32,11 +32,12 @@ import {
 import { useUser } from "../context/UserContext";
 import { useViaje } from "../context/ViajeContext";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../constants";
-import { TripMapPreview, QRCodeModal } from "../components";
+import { TripMapPreview, QRCodeModal, Skeleton } from "../components";
 import { trayectoService } from "../services/travels/trayectoService";
 import { reservaService } from "../services/travels/reservaService";
 import { carService } from "../services/carService";
 import { usuarioService } from "../services/usuarioService";
+import { paymentService } from "../services/paymentService";
 import * as Location from "expo-location";
 import {
   parseTripDate,
@@ -227,20 +228,38 @@ const ViajeDetalleScreen = ({ route, navigation }) => {
     setReserving(true);
     try {
       const response = await reservaService.crearReserva(user.id, viaje.id);
-      if (response?.stripe_url) {
-        Alert.alert(
-          "Reserva creada",
-          "Serás redirigido a la pasarela de pago para completar tu reserva.",
-          [
-            {
-              text: "Ir a pagar",
-              onPress: () => {
-                Linking.openURL(response.stripe_url);
-              },
-            },
-            { text: "Más tarde" },
-          ],
-        );
+      const idReserva =
+        response?.reserva?.id || response?.id_reserva || response?.id;
+      if (idReserva) {
+        try {
+          const checkoutRes = await paymentService.getCheckoutLink(idReserva);
+          const checkoutUrl = checkoutRes?.checkout_url;
+          if (checkoutUrl) {
+            Alert.alert(
+              "Reserva creada",
+              "Serás redirigido a la pasarela de pago para completar tu reserva.",
+              [
+                {
+                  text: "Ir a pagar",
+                  onPress: () => {
+                    Linking.openURL(checkoutUrl);
+                  },
+                },
+                { text: "Más tarde" },
+              ],
+            );
+          } else {
+            Alert.alert(
+              "Reserva creada",
+              response?.message || "Tu reserva se ha creado correctamente.",
+            );
+          }
+        } catch (checkoutErr) {
+          Alert.alert(
+            "Reserva creada",
+            "Tu reserva se ha creado correctamente, pero no se pudo obtener el link de pago.",
+          );
+        }
       } else {
         Alert.alert(
           "Reserva creada",
@@ -390,16 +409,19 @@ const ViajeDetalleScreen = ({ route, navigation }) => {
     if (!reservaExistente?.id_reserva) return;
     setReserving(true);
     try {
-      const response = await reservaService.resumePago(
+      await reservaService.resumePago(
         reservaExistente.id_reserva,
         "youconnext://perfil",
       );
-      if (response?.stripe_url) {
-        Linking.openURL(response.stripe_url);
+      const checkoutRes = await paymentService.getCheckoutLink(
+        reservaExistente.id_reserva,
+      );
+      if (checkoutRes?.checkout_url) {
+        Linking.openURL(checkoutRes.checkout_url);
       } else {
         Alert.alert(
           "Error",
-          response?.message || "No se pudo retomar el pago.",
+          checkoutRes?.message || "No se pudo retomar el pago.",
         );
       }
     } catch (error) {
@@ -506,13 +528,98 @@ const ViajeDetalleScreen = ({ route, navigation }) => {
             <ChevronLeft size={22} color={COLORS.gray800} strokeWidth={2.5} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Detalle del viaje</Text>
+          <Skeleton width={70} height={24} borderRadius={RADIUS.full} />
         </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>
-            Cargando detalle del trayecto...
-          </Text>
-        </View>
+
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.contentContainer}
+          scrollEnabled={false}
+        >
+          {/* Skeleton ruta */}
+          <View style={styles.routeCard}>
+            <View style={styles.routeRow}>
+              <View style={styles.timeline}>
+                <View style={styles.timelineDot} />
+                <View style={styles.timelineLine} />
+                <Flag size={13} color={COLORS.gray200} fill={COLORS.gray200} />
+              </View>
+              <View style={styles.routePoints}>
+                <View>
+                  <Skeleton width={50} height={10} />
+                  <Skeleton width={180} height={16} style={{ marginTop: 4 }} />
+                </View>
+                <View style={styles.routePointSpaced}>
+                  <Skeleton width={55} height={10} />
+                  <Skeleton width={160} height={16} style={{ marginTop: 4 }} />
+                </View>
+              </View>
+            </View>
+            <View style={styles.chipRow}>
+              <Skeleton width={90} height={26} borderRadius={RADIUS.full} />
+              <Skeleton width={70} height={26} borderRadius={RADIUS.full} />
+              <Skeleton width={80} height={26} borderRadius={RADIUS.full} />
+            </View>
+          </View>
+
+          {/* Skeleton mapa */}
+          <View style={[styles.mapPreview, { height: 170 }]}>
+            <Skeleton width="100%" height={170} borderRadius={RADIUS.lg} />
+          </View>
+
+          {/* Skeleton conductor y vehículo */}
+          <Skeleton
+            width={160}
+            height={11}
+            style={{ marginBottom: SPACING.sm, marginLeft: SPACING.xs }}
+          />
+          <View style={styles.card}>
+            <View style={styles.personRow}>
+              <Skeleton width={44} height={44} borderRadius={22} />
+              <View style={styles.personInfo}>
+                <Skeleton width={120} height={15} />
+                <Skeleton width={70} height={12} style={{ marginTop: 4 }} />
+              </View>
+            </View>
+            <View style={styles.cardDivider} />
+            <View style={styles.personRow}>
+              <Skeleton width={44} height={44} borderRadius={22} />
+              <View style={styles.personInfo}>
+                <Skeleton width={100} height={15} />
+                <Skeleton width={130} height={12} style={{ marginTop: 4 }} />
+              </View>
+            </View>
+          </View>
+
+          {/* Skeleton pasajeros */}
+          <Skeleton
+            width={120}
+            height={11}
+            style={{ marginBottom: SPACING.sm, marginLeft: SPACING.xs }}
+          />
+          <View style={styles.card}>
+            <View style={styles.personRow}>
+              <Skeleton width={40} height={40} borderRadius={20} />
+              <View style={styles.personInfo}>
+                <Skeleton width={110} height={15} />
+                <Skeleton width={80} height={12} style={{ marginTop: 4 }} />
+              </View>
+            </View>
+            <View style={[styles.personRow, styles.personRowBorder]}>
+              <Skeleton width={40} height={40} borderRadius={20} />
+              <View style={styles.personInfo}>
+                <Skeleton width={95} height={15} />
+                <Skeleton width={65} height={12} style={{ marginTop: 4 }} />
+              </View>
+            </View>
+          </View>
+
+          {/* Skeleton botón de acción */}
+          <View style={{ marginTop: SPACING.sm }}>
+            <Skeleton width="100%" height={48} borderRadius={RADIUS.full} />
+          </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }

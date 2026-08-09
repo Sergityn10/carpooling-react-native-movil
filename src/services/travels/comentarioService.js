@@ -10,13 +10,23 @@ async function crearOpinion(datos) {
 }
 
 // Obtener opiniones por usuario comentarista — GET /api/comments/user_id_commentator/:userId
-async function obtenerOpinionesPorComentarista(userId) {
-  return httpClient.request(`/api/comments/user_id_commentator/${userId}`);
+async function obtenerOpinionesPorComentarista(userId, { page, limit } = {}) {
+  const params = new URLSearchParams();
+  if (page) params.set("page", String(page));
+  if (limit) params.set("limit", String(limit));
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return httpClient.request(
+    `/api/comments/user_id_commentator/${userId}${query}`,
+  );
 }
 
 // Obtener opiniones por usuario valorado — GET /api/comments/user_id_trayect/:userId
-async function obtenerOpinionesPorValorado(userId) {
-  return httpClient.request(`/api/comments/user_id_trayect/${userId}`);
+async function obtenerOpinionesPorValorado(userId, { page, limit } = {}) {
+  const params = new URLSearchParams();
+  if (page) params.set("page", String(page));
+  if (limit) params.set("limit", String(limit));
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return httpClient.request(`/api/comments/user_id_trayect/${userId}${query}`);
 }
 
 // Obtener opiniones por trayecto — GET /api/comments/travelId/:travelId

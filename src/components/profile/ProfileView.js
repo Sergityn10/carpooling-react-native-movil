@@ -19,9 +19,14 @@ import VehiculosSection from "./sections/VehiculosSection";
 import MonederoSection from "./sections/MonederoSection";
 import BonoEnergeticoSection from "./sections/BonoEnergeticoSection";
 
-const ProfileView = ({ user, navigation, onLogout }) => {
+const ProfileView = ({
+  user,
+  navigation,
+  onLogout,
+  initialSubView = "menu",
+}) => {
   const { actualizarUsuario } = useUser();
-  const [currentSubView, setCurrentSubView] = useState("menu");
+  const [currentSubView, setCurrentSubView] = useState(initialSubView);
   const [editingSection, setEditingSection] = useState(null);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
@@ -97,6 +102,7 @@ const ProfileView = ({ user, navigation, onLogout }) => {
   const [caeData, setCaeData] = useState(null);
 
   // Sincronizar formData cuando el user del contexto se actualiza
+  // Solo dependemos de campos primitivos para evitar loops
   useEffect(() => {
     if (user) {
       setFormData({
@@ -119,7 +125,16 @@ const ProfileView = ({ user, navigation, onLogout }) => {
         setDatePickerDate(new Date(user.fecha_nacimiento));
       }
     }
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    user?.id,
+    user?.name,
+    user?.surname,
+    user?.phone,
+    user?.dni,
+    user?.about_me,
+    user?.ciudad,
+  ]);
 
   const fetchCoches = useCallback(async () => {
     setLoadingCoches(true);
@@ -211,32 +226,45 @@ const ProfileView = ({ user, navigation, onLogout }) => {
 
   useEffect(() => {
     if (!user?.id) return;
-    usuarioService
-      .getUserPublicProfile(user.id)
+    reservaService
+      .obtenerStatsUsuario(user.id)
       .then((res) => {
-        const stats = res?.stats || res?.user?.stats || {};
+        const stats = res?.data || res || {};
+        const trayectos = stats.trayectos || {};
+        const reservas = stats.reservas || {};
+        const cae = stats.cae || {};
         setPublicStats({
-          completed_trips: stats.completed_trips ?? 0,
-          kwh_generated: stats.kwh_generated ?? 0,
-          eur_generated: stats.eur_generated ?? 0,
+          completed_trips:
+            (trayectos.finalizados ?? 0) + (reservas.completadas ?? 0),
+          kwh_generated: cae.kwh_generados ?? 0,
+          eur_generated: cae.eur_generados ?? 0,
         });
       })
-      .catch(() => {});
-  }, [user?.id]);
+      .catch((err) => {
+        console.warn("[ProfileView] stats error:", err?.message);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchViajes = useCallback(async () => {
     setLoadingViajes(true);
     setErrorViajes(null);
     try {
       const [conductorRes, pasajeroRes] = await Promise.allSettled([
-        trayectoService.obtenerMisTrayectos(),
-        reservaService.obtenerMisReservas(user.id),
+        trayectoService.obtenerMisTrayectos({ limit: 100 }),
+        reservaService.obtenerMisReservas(user.id, { limit: 100 }),
       ]);
 
       let misTrayectos = [];
       if (conductorRes.status === "fulfilled") {
         const raw = conductorRes.value;
-        misTrayectos = Array.isArray(raw) ? raw : [];
+        misTrayectos = Array.isArray(raw)
+          ? raw
+          : Array.isArray(raw?.data)
+            ? raw.data
+            : Array.isArray(raw?.trayectos)
+              ? raw.trayectos
+              : [];
       } else {
         console.warn(
           "Error al cargar trayectos como conductor:",
@@ -246,7 +274,8 @@ const ProfileView = ({ user, navigation, onLogout }) => {
 
       let misReservas = [];
       if (pasajeroRes.status === "fulfilled") {
-        misReservas = pasajeroRes.value?.pasajerosList || [];
+        const raw = pasajeroRes.value;
+        misReservas = raw?.pasajerosList || raw?.data?.pasajerosList || [];
       } else {
         console.warn(
           "Error al cargar reservas como pasajero:",
@@ -304,17 +333,19 @@ const ProfileView = ({ user, navigation, onLogout }) => {
     } finally {
       setLoadingViajes(false);
     }
-  }, [user.id, user.name, user.surname]);
+  }, [user.id]);
 
   useEffect(() => {
     fetchViajes();
-  }, [fetchViajes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (currentSubView === "historial") {
       fetchViajes();
     }
-  }, [currentSubView, fetchViajes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSubView]);
 
   const handleTogglePasajeros = async (viajeId) => {
     if (expandedViajeId === viajeId) {
@@ -339,16 +370,14 @@ const ProfileView = ({ user, navigation, onLogout }) => {
   const handleRetomarPago = async (idReserva) => {
     setResumingPagoId(idReserva);
     try {
-      const response = await reservaService.resumePago(
-        idReserva,
-        "youconnext://perfil",
-      );
-      if (response?.stripe_url) {
-        await Linking.openURL(response.stripe_url);
+      await reservaService.resumePago(idReserva, "youconnext://perfil");
+      const checkoutRes = await paymentService.getCheckoutLink(idReserva);
+      if (checkoutRes?.checkout_url) {
+        await Linking.openURL(checkoutRes.checkout_url);
       } else {
         Alert.alert(
           "Error",
-          response?.message || "No se pudo retomar el pago.",
+          checkoutRes?.message || "No se pudo retomar el pago.",
         );
       }
     } catch (error) {
