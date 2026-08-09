@@ -42,6 +42,11 @@ firebase-debug.log
 *firebase-service-account*.json
 GoogleService-Info.plist
 
+# Google Cloud credentials
+carpooling-herewego-*.json
+credentials.json
+google-services.json
+
 # typescript
 *.tsbuildinfo
 
