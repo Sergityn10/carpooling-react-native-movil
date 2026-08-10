@@ -46,9 +46,15 @@ function withGoogleServicesFile(config) {
       if (fs.existsSync(sourcePath)) {
         fs.copyFileSync(sourcePath, destPath);
       } else {
-        throw new Error(
-          `google-services.json not found at project root: ${sourcePath}`,
-        );
+        const envContent = process.env.GOOGLE_SERVICES_JSON;
+        if (envContent) {
+          const decoded = Buffer.from(envContent, "base64").toString("utf-8");
+          fs.writeFileSync(destPath, decoded);
+        } else {
+          throw new Error(
+            "google-services.json not found. Either commit the file or set the GOOGLE_SERVICES_JSON EAS file environment variable.",
+          );
+        }
       }
       return config;
     },

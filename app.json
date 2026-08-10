@@ -2,7 +2,7 @@
   "expo": {
     "name": "YouConnextApp",
     "slug": "YouConnextApp",
-    "version": "1.0.14",
+    "version": "1.0.15",
     "platforms": ["ios", "android"],
     "orientation": "portrait",
     "icon": "./assets/logo-con-bg-ajustado.png",
@@ -12,8 +12,7 @@
     },
     "android": {
       "usesCleartextTraffic": true,
-      "package": "app.youconnext",
-      "googleServicesFile": "./google-services.json"
+      "package": "app.youconnext"
     },
     "web": {
       "favicon": "./assets/logo-sin-bg-198px-ajustado.png"
@@ -24,6 +23,7 @@
       }
     },
     "plugins": [
+      "./plugins/withGoogleServicesFile",
       "@react-native-google-signin/google-signin",
       "@react-native-community/datetimepicker",
       [
