@@ -50,11 +50,42 @@ function withGoogleServicesFile(config) {
         path.resolve(projectRoot, "..", "GOOGLE_SERVICES_JSON"),
         path.resolve(projectRoot, "..", "..", "GOOGLE_SERVICES_JSON"),
       ];
+      function writeToDest(content, source) {
+        let str =
+          typeof content === "string" ? content : content.toString("utf-8");
+        const trimmed = str.trim();
+        console.log(
+          `[withGoogleServicesFile] Content from ${source} starts with: ${trimmed.substring(0, 40)}`,
+        );
+        if (!trimmed.startsWith("{")) {
+          console.log(
+            "[withGoogleServicesFile] Content is not JSON, trying base64 decode...",
+          );
+          try {
+            const decoded = Buffer.from(trimmed, "base64").toString("utf-8");
+            if (decoded.trim().startsWith("{")) {
+              str = decoded;
+              console.log("[withGoogleServicesFile] Base64 decode successful");
+            } else {
+              console.log(
+                "[withGoogleServicesFile] Base64 decode didn't produce JSON either",
+              );
+            }
+          } catch (e) {
+            console.log(
+              `[withGoogleServicesFile] Base64 decode failed: ${e.message}`,
+            );
+          }
+        }
+        fs.writeFileSync(destPath, str);
+      }
+
       let found = false;
       for (const p of possiblePaths) {
         if (fs.existsSync(p)) {
           console.log(`[withGoogleServicesFile] Found file at: ${p}`);
-          fs.copyFileSync(p, destPath);
+          const content = fs.readFileSync(p, "utf-8");
+          writeToDest(content, p);
           found = true;
           break;
         }
@@ -63,7 +94,7 @@ function withGoogleServicesFile(config) {
         console.log(
           "[withGoogleServicesFile] Using process.env.GOOGLE_SERVICES_JSON",
         );
-        fs.writeFileSync(destPath, process.env.GOOGLE_SERVICES_JSON);
+        writeToDest(process.env.GOOGLE_SERVICES_JSON, "process.env");
         found = true;
       }
       if (!found) {
