@@ -43,18 +43,37 @@ function withGoogleServicesFile(config) {
         "app",
         "google-services.json",
       );
-      if (fs.existsSync(sourcePath)) {
-        fs.copyFileSync(sourcePath, destPath);
-      } else {
-        const envContent = process.env.GOOGLE_SERVICES_JSON;
-        if (envContent) {
-          const decoded = Buffer.from(envContent, "base64").toString("utf-8");
-          fs.writeFileSync(destPath, decoded);
-        } else {
-          throw new Error(
-            "google-services.json not found. Either commit the file or set the GOOGLE_SERVICES_JSON EAS file environment variable.",
-          );
+      const projectRoot = config.modRequest.projectRoot;
+      const possiblePaths = [
+        sourcePath,
+        path.resolve(projectRoot, "GOOGLE_SERVICES_JSON"),
+        path.resolve(projectRoot, "..", "GOOGLE_SERVICES_JSON"),
+        path.resolve(projectRoot, "..", "..", "GOOGLE_SERVICES_JSON"),
+      ];
+      let found = false;
+      for (const p of possiblePaths) {
+        if (fs.existsSync(p)) {
+          console.log(`[withGoogleServicesFile] Found file at: ${p}`);
+          fs.copyFileSync(p, destPath);
+          found = true;
+          break;
         }
+      }
+      if (!found && process.env.GOOGLE_SERVICES_JSON) {
+        console.log(
+          "[withGoogleServicesFile] Using process.env.GOOGLE_SERVICES_JSON",
+        );
+        fs.writeFileSync(destPath, process.env.GOOGLE_SERVICES_JSON);
+        found = true;
+      }
+      if (!found) {
+        console.error("[withGoogleServicesFile] Searched paths:");
+        possiblePaths.forEach((p) =>
+          console.error(`  - ${p} (exists: ${fs.existsSync(p)})`),
+        );
+        throw new Error(
+          "google-services.json not found. Either commit the file or set the GOOGLE_SERVICES_JSON EAS file environment variable.",
+        );
       }
       return config;
     },
