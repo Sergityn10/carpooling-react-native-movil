@@ -45,7 +45,7 @@ GoogleService-Info.plist
 # Google Cloud credentials
 carpooling-herewego-*.json
 credentials.json
-google-services.json
+# google-services.json (needed for EAS Build)
 
 # typescript
 *.tsbuildinfo

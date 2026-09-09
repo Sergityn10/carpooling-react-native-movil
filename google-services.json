@@ -1,0 +1,79 @@
+{
+  "project_info": {
+    "project_number": "362306982695",
+    "project_id": "carpooling-herewego",
+    "storage_bucket": "carpooling-herewego.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:362306982695:android:b934a2168518eba83b0f02",
+        "android_client_info": {
+          "package_name": "app.youconnext"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "362306982695-2jn0c0udj5ifefhgiem9cbi6kad53uoe.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "app.youconnext",
+            "certificate_hash": "34baad23c545402a1b8963b7d9b88585e03b2cec"
+          }
+        },
+        {
+          "client_id": "362306982695-g72j5foo8lanppeh73rpnmlh4hkm0dqv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "app.youconnext",
+            "certificate_hash": "ace3f58991b94d1f48247f55d43204447ebdcb7b"
+          }
+        },
+        {
+          "client_id": "362306982695-ner13rml9245ph2cg0v5kihm33oauo5k.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "app.youconnext",
+            "certificate_hash": "37b4b8828f794ac231a6658cd8e167293fee0196"
+          }
+        },
+        {
+          "client_id": "362306982695-o4vtdcrtgu3iacp5ocdsrac2k5u7hdei.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "app.youconnext",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "362306982695-qgb4pl2glfm80r2gipdl9vqtu5761b42.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "app.youconnext",
+            "certificate_hash": "0af0cf184d34af71a3990dd65143214d0a3f08bd"
+          }
+        },
+        {
+          "client_id": "362306982695-r8gg3ijmhjd05nq011gle3utt6jknbjs.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA-gBebs-tVR09fSgHcn5YeMQ-MnlPw1NM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "362306982695-3r9ut8th59c38qdfnodmmt21pvjrs1us.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
