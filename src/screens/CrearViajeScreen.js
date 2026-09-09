@@ -43,6 +43,7 @@ import { carService } from "../services/carService";
 import { ubicacionTravelService } from "../services/travels/ubicacionService";
 import { homeCache } from "../services/homeCache";
 import { localToUtcApi, parseTripDate } from "../services/dateUtils";
+import { paymentService } from "../services/paymentService";
 
 const PRICE_PER_KM = parseFloat(
   process.env.EXPO_PUBLIC_RECOMMENDED_PRICE_PER_KM || "0.06",
@@ -250,7 +251,40 @@ const CrearViajeScreen = ({ navigation, route }) => {
   const [plazas, setPlazas] = useState("4");
   const [creando, setCreando] = useState(false);
 
-  const monederoNoConfigurado = user?.monedero?.disponible === false;
+  // Max de plazas ofertables: plazas del coche menos la del conductor
+  const maxPlazasOfertables = vehiculoSeleccionado?.num_plazas
+    ? Math.max(1, vehiculoSeleccionado.num_plazas - 1)
+    : 7;
+
+  const [monederoNoConfigurado, setMonederoNoConfigurado] = useState(
+    user?.monedero?.disponible !== true ||
+      user?.monedero?.config?.wallet_enabled === false,
+  );
+
+  // Verificar estado real de Stripe Connect al llegar al step de precio,
+  // igual que hace la sección del Monedero en el perfil
+  useEffect(() => {
+    if (step !== STEPS.PRECIO) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await paymentService.getStripeConnect();
+        if (cancelled) return;
+        const acct = res?.account;
+        const stripeListo =
+          acct?.charges_enabled === true && acct?.details_submitted === true;
+        const walletEnabled = user?.monedero?.config?.wallet_enabled !== false;
+        setMonederoNoConfigurado(!stripeListo || !walletEnabled);
+      } catch (err) {
+        if (!cancelled) {
+          console.warn("No se pudo verificar Stripe Connect:", err.message);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [step]);
 
   const recommendedPrice = rutaInfo
     ? calculateRecommendedPrice(rutaInfo.distanceMeters)
@@ -268,6 +302,8 @@ const CrearViajeScreen = ({ navigation, route }) => {
         setVehiculos(coches);
         if (coches.length === 1) {
           setVehiculoSeleccionado(coches[0]);
+          const maxPlazas = Math.max(1, (coches[0].num_plazas || 5) - 1);
+          if (parseInt(plazas) > maxPlazas) setPlazas(String(maxPlazas));
         }
       } catch (err) {
         console.warn("Error al cargar vehículos:", err.message);
@@ -395,10 +431,11 @@ const CrearViajeScreen = ({ navigation, route }) => {
     calcularRuta();
   }, [origenPlace, destinoPlace]);
 
-  // Forzar viaje gratis si no hay monedero configurado
+  // Forzar viaje gratis si no hay monedero configurado,
+  // o resetear si el refresh confirma que sí está configurado
   useEffect(() => {
-    if (step === STEPS.PRECIO && monederoNoConfigurado) {
-      setViajeGratis(true);
+    if (step === STEPS.PRECIO) {
+      setViajeGratis(monederoNoConfigurado);
     }
   }, [step, monederoNoConfigurado]);
 
@@ -444,6 +481,7 @@ const CrearViajeScreen = ({ navigation, route }) => {
     }
     if (step === STEPS.VEHICULO) return !!vehiculoSeleccionado;
     if (step === STEPS.PRECIO) {
+      if (parseInt(plazas) > maxPlazasOfertables) return false;
       if (viajeGratis) return true;
       const p = parseFloat(precio);
       return precio !== "" && !isNaN(p) && p >= minPrice && p <= maxPrice;
@@ -1011,7 +1049,12 @@ const CrearViajeScreen = ({ navigation, route }) => {
                   styles.vehiculoCard,
                   isSelected && styles.vehiculoCardActive,
                 ]}
-                onPress={() => setVehiculoSeleccionado(coche)}
+                onPress={() => {
+                  setVehiculoSeleccionado(coche);
+                  const maxPlazas = Math.max(1, (coche.num_plazas || 5) - 1);
+                  if (parseInt(plazas) > maxPlazas)
+                    setPlazas(String(maxPlazas));
+                }}
                 activeOpacity={0.7}
               >
                 <View
@@ -1185,27 +1228,31 @@ const CrearViajeScreen = ({ navigation, route }) => {
       )}
 
       <View style={styles.inputCard}>
-        <Text style={styles.inputLabel}>Plazas disponibles</Text>
+        <Text style={styles.inputLabel}>
+          Plazas disponibles (máx. {maxPlazasOfertables})
+        </Text>
         <View style={styles.plazasRow}>
-          {[1, 2, 3, 4, 5, 6, 7].map((n) => (
-            <TouchableOpacity
-              key={n}
-              style={[
-                styles.plazaButton,
-                parseInt(plazas) === n && styles.plazaButtonActive,
-              ]}
-              onPress={() => setPlazas(String(n))}
-            >
-              <Text
+          {Array.from({ length: maxPlazasOfertables }, (_, i) => i + 1).map(
+            (n) => (
+              <TouchableOpacity
+                key={n}
                 style={[
-                  styles.plazaButtonText,
-                  parseInt(plazas) === n && styles.plazaButtonTextActive,
+                  styles.plazaButton,
+                  parseInt(plazas) === n && styles.plazaButtonActive,
                 ]}
+                onPress={() => setPlazas(String(n))}
               >
-                {n}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                <Text
+                  style={[
+                    styles.plazaButtonText,
+                    parseInt(plazas) === n && styles.plazaButtonTextActive,
+                  ]}
+                >
+                  {n}
+                </Text>
+              </TouchableOpacity>
+            ),
+          )}
         </View>
       </View>
 

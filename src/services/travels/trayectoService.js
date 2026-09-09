@@ -160,12 +160,37 @@ async function obtenerTrayectosPorEvento(eventoId, direccion) {
   return httpClient.request(`/api/trayecto/evento/${eventoId}${query}`);
 }
 
+// Buscar trayectos por evento cerca de tu ubicación — GET /api/trayecto/evento/:eventoId/cerca
+async function buscarTrayectosPorEventoCerca(
+  eventoId,
+  { lat, lng, ciudad, radius, direccion, fecha } = {},
+) {
+  const params = new URLSearchParams();
+  if (lat != null) params.set("lat", String(lat));
+  if (lng != null) params.set("lng", String(lng));
+  if (ciudad) params.set("ciudad", ciudad);
+  if (radius != null) params.set("radius", String(radius));
+  if (direccion) params.set("direccion", direccion);
+  if (fecha) params.set("fecha", fecha);
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return httpClient.request(`/api/trayecto/evento/${eventoId}/cerca${query}`);
+}
+
 // Crear trayecto hacia un evento — POST /api/trayecto/evento
 async function crearTrayectoEvento(datos) {
   return httpClient.request("/api/trayecto/evento", {
     method: "POST",
     body: JSON.stringify(datos),
   });
+}
+
+// Obtener historial de búsquedas — GET /api/trayecto/search-history
+async function obtenerHistorialBusquedas({ page, limit } = {}) {
+  const params = new URLSearchParams();
+  if (page) params.set("page", String(page));
+  if (limit) params.set("limit", String(limit));
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return httpClient.request(`/api/trayecto/search-history${query}`);
 }
 
 // Eliminar trayecto — DELETE /api/trayecto/:id
@@ -197,8 +222,10 @@ export const trayectoService = {
   registrarLlegadaDestino,
   obtenerTrayectosPorConductor,
   obtenerTrayectosPorEvento,
+  buscarTrayectosPorEventoCerca,
   crearTrayectoEvento,
   eliminarTrayecto,
+  obtenerHistorialBusquedas,
 };
 
 export default trayectoService;

@@ -201,7 +201,10 @@ const MisPlanesScreen = ({ navigation }) => {
   const handleRetomarPago = async (idReserva) => {
     setResumingPagoId(idReserva);
     try {
-      await reservaService.resumePago(idReserva, "youconnext://mis-planes");
+      await reservaService.resumePago(
+        idReserva,
+        "https://app.youconnext.es/redirect?to=mis-planes",
+      );
       const checkoutRes = await paymentService.getCheckoutLink(idReserva);
       if (checkoutRes?.checkout_url) {
         await Linking.openURL(checkoutRes.checkout_url);

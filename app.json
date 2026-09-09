@@ -2,17 +2,33 @@
   "expo": {
     "name": "YouConnextApp",
     "slug": "YouConnextApp",
-    "version": "1.0.15",
+    "version": "1.0.18",
     "platforms": ["ios", "android"],
     "orientation": "portrait",
     "icon": "./assets/logo-con-bg-ajustado.png",
     "userInterfaceStyle": "light",
+    "scheme": "youconnext",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "associatedDomains": ["applinks:app.youconnext.es"]
     },
     "android": {
       "usesCleartextTraffic": true,
-      "package": "app.youconnext"
+      "package": "app.youconnext",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "app.youconnext.es",
+              "pathPrefix": "/redirect"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/logo-sin-bg-198px-ajustado.png"

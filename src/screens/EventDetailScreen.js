@@ -16,6 +16,8 @@ import {
   Dimensions,
   Alert,
   Image,
+  TextInput,
+  Modal,
 } from "react-native";
 import {
   SafeAreaView,
@@ -30,6 +32,11 @@ import {
   MapPin,
   Calendar,
   ChevronDown,
+  MessageCircle,
+  Navigation as NavIcon,
+  Search,
+  SlidersHorizontal,
+  X,
 } from "lucide-react-native";
 import * as Location from "expo-location";
 import MapView, { Marker } from "react-native-maps";
@@ -48,6 +55,7 @@ import {
   EventLinks,
   EventTripsSection,
 } from "../components";
+import { messageService } from "../services/messages/messageService";
 
 const SCREEN_HEIGHT = Dimensions.get("window").height;
 const COLLAPSED_HEIGHT = Math.round(SCREEN_HEIGHT * 0.32);
@@ -70,6 +78,11 @@ const EventDetailScreen = ({ route, navigation }) => {
   const [activeTripTab, setActiveTripTab] = useState("ida");
   const [selectedDate, setSelectedDate] = useState(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [filterMode, setFilterMode] = useState("todos"); // "todos" | "cerca" | "ciudad"
+  const [ciudadInput, setCiudadInput] = useState("");
+  const [nearbyTrips, setNearbyTrips] = useState(null); // null = no filtrado, [] = filtrado vacío
+  const [loadingNearby, setLoadingNearby] = useState(false);
+  const [showFilterModal, setShowFilterModal] = useState(false);
 
   const { user } = useUser();
 
@@ -214,6 +227,34 @@ const EventDetailScreen = ({ route, navigation }) => {
     }
   };
 
+  const handleOpenChat = async () => {
+    if (!eventId) return;
+    try {
+      let chat = null;
+      try {
+        const res = await messageService.obtenerChatPorTripId(eventId, "EVENT");
+        chat = res.data || res;
+      } catch (err) {
+        // Si no existe chat, lo creamos
+        const created = await messageService.crearChatGrupal({
+          trip_id: eventId,
+          chat_type: "EVENT",
+          name: event?.name || event?.nombre || "Chat del evento",
+        });
+        chat = created.data || created;
+      }
+      if (chat && (chat.chat_id || chat.id)) {
+        navigation.navigate("ChatDetalle", {
+          chat,
+          chatId: chat.chat_id || chat.id,
+        });
+      }
+    } catch (e) {
+      console.log("Error al abrir chat del evento:", e);
+      Alert.alert("Error", "No se pudo abrir el chat del evento.");
+    }
+  };
+
   const handleLeave = () => {
     if (!eventId || joining) return;
     Alert.alert("Salir del evento", "¿Seguro que quieres salir del evento?", [
@@ -263,6 +304,63 @@ const EventDetailScreen = ({ route, navigation }) => {
 
   const handleCrearViaje = () => {
     navigation.navigate("CrearViaje", { evento: event });
+  };
+
+  const handleBuscarCerca = async () => {
+    if (!eventId) return;
+    setLoadingNearby(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permiso denegado",
+          "Necesitamos tu ubicación para buscar viajes cerca.",
+        );
+        setLoadingNearby(false);
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const res = await trayectoService.buscarTrayectosPorEventoCerca(eventId, {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        direccion: activeTripTab,
+        radius: 5,
+      });
+      const trips = res.trayectos || res.data || [];
+      setNearbyTrips(Array.isArray(trips) ? trips : []);
+      setFilterMode("cerca");
+    } catch (e) {
+      Alert.alert("Error", "No se pudieron buscar viajes cercanos.");
+    } finally {
+      setLoadingNearby(false);
+    }
+  };
+
+  const handleBuscarCiudad = async () => {
+    if (!eventId || !ciudadInput.trim()) return;
+    setLoadingNearby(true);
+    try {
+      const res = await trayectoService.buscarTrayectosPorEventoCerca(eventId, {
+        ciudad: ciudadInput.trim(),
+        direccion: activeTripTab,
+        radius: 5,
+      });
+      const trips = res.trayectos || res.data || [];
+      setNearbyTrips(Array.isArray(trips) ? trips : []);
+      setFilterMode("ciudad");
+    } catch (e) {
+      Alert.alert("Error", "No se pudieron buscar viajes en esa ciudad.");
+    } finally {
+      setLoadingNearby(false);
+    }
+  };
+
+  const handleResetFilter = () => {
+    setFilterMode("todos");
+    setNearbyTrips(null);
+    setCiudadInput("");
   };
 
   const handleBuscarViaje = async (direction = "ida") => {
@@ -459,12 +557,15 @@ const EventDetailScreen = ({ route, navigation }) => {
     ),
   ].sort((a, b) => new Date(a) - new Date(b));
 
-  const filteredTrips = selectedDate
-    ? activeTrips.filter((t) => {
-        const d = parseTripDate(t);
-        return d && d.toDateString() === selectedDate;
-      })
-    : activeTrips;
+  const filteredTrips =
+    filterMode !== "todos" && nearbyTrips
+      ? nearbyTrips
+      : selectedDate
+        ? activeTrips.filter((t) => {
+            const d = parseTripDate(t);
+            return d && d.toDateString() === selectedDate;
+          })
+        : activeTrips;
 
   return (
     <View style={styles.container}>
@@ -852,6 +953,24 @@ const EventDetailScreen = ({ route, navigation }) => {
             )}
           </View>
 
+          {/* Chat del evento — solo si se ha unido */}
+          {isJoined && (
+            <View style={styles.chatSection}>
+              <TouchableOpacity
+                style={styles.chatButton}
+                onPress={handleOpenChat}
+                activeOpacity={0.8}
+              >
+                <MessageCircle
+                  size={18}
+                  color={COLORS.primary}
+                  strokeWidth={2.5}
+                />
+                <Text style={styles.chatButtonText}>Chat del evento</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           <EventDescription description={event.description} />
 
           <EventLinks
@@ -860,6 +979,39 @@ const EventDetailScreen = ({ route, navigation }) => {
             onOpenUrl={handleOpenUrl}
           />
 
+          {/* Botón de filtros */}
+          <View style={styles.filterBar}>
+            <TouchableOpacity
+              style={styles.filterBtn}
+              onPress={() => setShowFilterModal(true)}
+              activeOpacity={0.8}
+            >
+              <SlidersHorizontal
+                size={16}
+                color={COLORS.primary}
+                strokeWidth={2.5}
+              />
+              <Text style={styles.filterBtnText}>Filtrar viajes</Text>
+              {filterMode !== "todos" && (
+                <View style={styles.filterBadge}>
+                  <Text style={styles.filterBadgeText}>
+                    {filterMode === "cerca" ? "Cerca" : "Ciudad"}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            {filterMode !== "todos" && (
+              <TouchableOpacity
+                style={styles.resetFilterChip}
+                onPress={handleResetFilter}
+                activeOpacity={0.7}
+              >
+                <X size={12} color={COLORS.gray500} strokeWidth={2.5} />
+                <Text style={styles.resetFilterChipText}>Quitar filtro</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
           <EventTripsSection
             trayectosIda={
               activeTripTab === "ida" ? filteredTrips : trayectosIda
@@ -867,7 +1019,7 @@ const EventDetailScreen = ({ route, navigation }) => {
             trayectosVuelta={
               activeTripTab === "vuelta" ? filteredTrips : trayectosVuelta
             }
-            loading={loadingTrayectos}
+            loading={loadingTrayectos || loadingNearby}
             onCrearViaje={handleCrearViaje}
             onBuscarViaje={handleBuscarViaje}
             onViajePress={handleViajePress}
@@ -875,10 +1027,144 @@ const EventDetailScreen = ({ route, navigation }) => {
             onTabChange={(tab) => {
               setActiveTripTab(tab);
               setSelectedDate(null);
+              handleResetFilter();
             }}
           />
         </ScrollView>
       </Animated.View>
+
+      {/* Modal de filtros */}
+      <Modal
+        visible={showFilterModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowFilterModal(false)}
+      >
+        <View style={styles.filterModalOverlay}>
+          <View style={styles.filterModalContent}>
+            <View style={styles.filterModalHeader}>
+              <Text style={styles.filterModalTitle}>Filtrar viajes</Text>
+              <TouchableOpacity
+                onPress={() => setShowFilterModal(false)}
+                activeOpacity={0.7}
+              >
+                <X size={22} color={COLORS.gray600} strokeWidth={2.5} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Opción: Cerca de ti */}
+            <TouchableOpacity
+              style={[
+                styles.filterOption,
+                filterMode === "cerca" && styles.filterOptionActive,
+              ]}
+              onPress={() => {
+                handleBuscarCerca();
+              }}
+              disabled={loadingNearby}
+              activeOpacity={0.8}
+            >
+              <View style={styles.filterOptionLeft}>
+                <MapPin size={20} color={COLORS.primary} strokeWidth={2.5} />
+                <View>
+                  <Text style={styles.filterOptionTitle}>Cerca de ti</Text>
+                  <Text style={styles.filterOptionDesc}>
+                    Usa tu ubicación actual (radio 5 km)
+                  </Text>
+                </View>
+              </View>
+              {loadingNearby && filterMode !== "ciudad" ? (
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              ) : filterMode === "cerca" ? (
+                <View style={styles.filterOptionCheck} />
+              ) : null}
+            </TouchableOpacity>
+
+            {/* Separador */}
+            <View style={styles.filterDivider} />
+
+            {/* Opción: Por ciudad */}
+            <View
+              style={[
+                styles.filterOption,
+                filterMode === "ciudad" && styles.filterOptionActive,
+                { flexDirection: "column", alignItems: "stretch" },
+              ]}
+            >
+              <View style={styles.filterOptionLeft}>
+                <Search size={20} color={COLORS.primary} strokeWidth={2.5} />
+                <Text style={styles.filterOptionTitle}>Por ciudad</Text>
+              </View>
+              <View style={styles.cityInputRow}>
+                <TextInput
+                  style={styles.cityInputModal}
+                  placeholder="Escribe una ciudad..."
+                  placeholderTextColor={COLORS.gray400}
+                  value={ciudadInput}
+                  onChangeText={setCiudadInput}
+                  onSubmitEditing={() => {
+                    handleBuscarCiudad();
+                  }}
+                  returnKeyType="search"
+                />
+                <TouchableOpacity
+                  style={[
+                    styles.citySearchBtn,
+                    !ciudadInput.trim() && styles.citySearchBtnDisabled,
+                  ]}
+                  onPress={() => {
+                    handleBuscarCiudad();
+                  }}
+                  disabled={!ciudadInput.trim() || loadingNearby}
+                  activeOpacity={0.8}
+                >
+                  {loadingNearby && filterMode !== "cerca" ? (
+                    <ActivityIndicator size={16} color={COLORS.white} />
+                  ) : (
+                    <Search size={16} color={COLORS.white} strokeWidth={2.5} />
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Separador */}
+            <View style={styles.filterDivider} />
+
+            {/* Opción: Ver todos */}
+            <TouchableOpacity
+              style={[
+                styles.filterOption,
+                filterMode === "todos" && styles.filterOptionActive,
+              ]}
+              onPress={() => {
+                handleResetFilter();
+                setShowFilterModal(false);
+              }}
+              activeOpacity={0.8}
+            >
+              <View style={styles.filterOptionLeft}>
+                <SlidersHorizontal
+                  size={20}
+                  color={COLORS.gray500}
+                  strokeWidth={2.5}
+                />
+                <Text style={styles.filterOptionTitle}>Ver todos</Text>
+              </View>
+              {filterMode === "todos" && (
+                <View style={styles.filterOptionCheck} />
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.filterApplyBtn}
+              onPress={() => setShowFilterModal(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.filterApplyBtnText}>Aplicar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1194,6 +1480,177 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.sm,
     gap: SPACING.sm,
+  },
+  chatSection: {
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.xs,
+    paddingBottom: SPACING.sm,
+  },
+  chatButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: SPACING.sm,
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md,
+  },
+  chatButtonText: {
+    color: COLORS.primary,
+    fontWeight: "700",
+    fontSize: FONTS.md,
+  },
+  filterBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xs,
+  },
+  filterBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+  },
+  filterBtnText: {
+    fontSize: FONTS.sm,
+    fontWeight: "600",
+    color: COLORS.primary,
+  },
+  filterBadge: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    minWidth: 20,
+    alignItems: "center",
+  },
+  filterBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: COLORS.white,
+  },
+  resetFilterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: COLORS.gray100,
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+  },
+  resetFilterChipText: {
+    fontSize: FONTS.xs,
+    fontWeight: "600",
+    color: COLORS.gray500,
+  },
+  filterModalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  filterModalContent: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 40,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
+  },
+  filterModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: SPACING.md,
+  },
+  filterModalTitle: {
+    fontSize: FONTS.lg,
+    fontWeight: "bold",
+    color: COLORS.gray800,
+  },
+  filterOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.gray50,
+    marginBottom: SPACING.xs,
+  },
+  filterOptionActive: {
+    backgroundColor: COLORS.primarySoft,
+  },
+  filterOptionLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+  },
+  filterOptionTitle: {
+    fontSize: FONTS.md,
+    fontWeight: "600",
+    color: COLORS.gray800,
+  },
+  filterOptionDesc: {
+    fontSize: FONTS.xs,
+    color: COLORS.gray500,
+    marginTop: 2,
+  },
+  filterOptionCheck: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: COLORS.primary,
+    borderWidth: 3,
+    borderColor: COLORS.white,
+  },
+  filterDivider: {
+    height: 1,
+    backgroundColor: COLORS.gray100,
+    marginVertical: SPACING.xs,
+  },
+  cityInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    marginTop: SPACING.sm,
+  },
+  cityInputModal: {
+    flex: 1,
+    fontSize: FONTS.sm,
+    color: COLORS.gray800,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+  },
+  citySearchBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+  },
+  citySearchBtnDisabled: {
+    opacity: 0.5,
+  },
+  filterApplyBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md,
+    alignItems: "center",
+    marginTop: SPACING.md,
+  },
+  filterApplyBtnText: {
+    color: COLORS.white,
+    fontWeight: "bold",
+    fontSize: FONTS.md,
   },
   participantsInfo: {
     flexDirection: "row",

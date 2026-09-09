@@ -96,47 +96,32 @@ export const UserProvider = ({ children }) => {
           httpClient.setRefreshToken(refreshTokenValue);
         }
         try {
-          // Validar token y obtener datos del usuario
-          const validateRes = await authService.validateToken();
+          // validateToken y getUserInfo en paralelo para evitar latencia secuencial
+          const [validateRes, infoRes] = await Promise.all([
+            authService.validateToken(),
+            usuarioService.getUserInfo(),
+          ]);
           const userData = validateRes.data || validateRes;
-
-          // Obtener info completa del usuario
-          try {
-            const infoRes = await usuarioService.getUserInfo();
-            const fullUser = {
-              id: userData.userId,
-              email: userData.email,
-              img_perfil: userData.img_perfil,
-              ciudad: userData.ciudad,
-              onboarding_ended: userData.onboarding_ended,
-              role: userData.role,
-              ...(infoRes.data || infoRes),
-              completitud: infoRes.completitud ?? null,
-              completitud_cae: infoRes.completitud_cae ?? null,
-              monedero: infoRes.monedero ?? null,
-            };
-            setUser(fullUser);
-            setIsAuthenticated(true);
-          } catch (infoErr) {
-            console.warn(
-              "[UserContext] getUserInfo fallo en loadUser:",
-              infoErr?.message,
-            );
-            // Si getUserInfo falla, usar datos de validateToken
-            setUser({
-              id: userData.userId,
-              email: userData.email,
-              img_perfil: userData.img_perfil,
-              ciudad: userData.ciudad,
-              onboarding_ended: userData.onboarding_ended,
-              role: userData.role,
-            });
-            setIsAuthenticated(true);
-          }
+          const fullUser = {
+            id: userData.userId,
+            email: userData.email,
+            img_perfil: userData.img_perfil,
+            ciudad: userData.ciudad,
+            onboarding_ended: userData.onboarding_ended,
+            role: userData.role,
+            ...(infoRes.data || infoRes),
+            completitud: infoRes.completitud ?? null,
+            completitud_cae: infoRes.completitud_cae ?? null,
+            monedero: infoRes.monedero ?? null,
+          };
+          await AsyncStorage.setItem(
+            "@youconnext_user",
+            JSON.stringify(fullUser),
+          );
+          setUser(fullUser);
+          setIsAuthenticated(true);
         } catch (error) {
-          console.error("Error al validar token:", error);
-          // Solo cerrar sesión si es un error de autenticación (401),
-          // no por errores de red o del servidor
+          console.error("Error al obtener info del usuario:", error);
           const isAuthError =
             error?.status === 401 ||
             error?.message?.includes("401") ||

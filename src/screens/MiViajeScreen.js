@@ -274,7 +274,7 @@ const MiViajeScreen = ({ route, navigation }) => {
     try {
       await reservaService.resumePago(
         reservaExistente.id_reserva,
-        "youconnext://perfil",
+        "https://app.youconnext.es/redirect?to=perfil",
       );
       const checkoutRes = await paymentService.getCheckoutLink(
         reservaExistente.id_reserva,

@@ -28,6 +28,7 @@ import {
   QrCode,
   AlertCircle,
   Flag,
+  MessageCircle,
 } from "lucide-react-native";
 import { useUser } from "../context/UserContext";
 import { useViaje } from "../context/ViajeContext";
@@ -411,7 +412,7 @@ const ViajeDetalleScreen = ({ route, navigation }) => {
     try {
       await reservaService.resumePago(
         reservaExistente.id_reserva,
-        "youconnext://perfil",
+        "https://app.youconnext.es/redirect?to=perfil",
       );
       const checkoutRes = await paymentService.getCheckoutLink(
         reservaExistente.id_reserva,
@@ -824,6 +825,23 @@ const ViajeDetalleScreen = ({ route, navigation }) => {
               />
             )}
           </TouchableOpacity>
+
+          {!esConductor && conductorId && conductorId !== user?.id && (
+            <TouchableOpacity
+              style={styles.messageBtn}
+              onPress={() =>
+                navigation.navigate("DirectChat", { peerId: conductorId })
+              }
+              activeOpacity={0.7}
+            >
+              <MessageCircle
+                size={16}
+                color={COLORS.primary}
+                strokeWidth={2.2}
+              />
+              <Text style={styles.messageBtnText}>Mensaje al conductor</Text>
+            </TouchableOpacity>
+          )}
 
           <View style={styles.cardDivider} />
 
@@ -1355,6 +1373,22 @@ const styles = StyleSheet.create({
   personRowBorder: {
     borderBottomWidth: 1,
     borderBottomColor: COLORS.gray100,
+  },
+  messageBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: SPACING.sm,
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.xs,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.primarySoft,
+  },
+  messageBtnText: {
+    fontSize: FONTS.sm,
+    fontWeight: "600",
+    color: COLORS.primary,
   },
   personInfo: {
     flex: 1,

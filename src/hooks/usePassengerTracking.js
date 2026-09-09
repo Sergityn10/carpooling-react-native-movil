@@ -6,6 +6,7 @@ import trackingSocketService from "../services/tracking/trackingSocketService";
 
 export const usePassengerTracking = (trayectoId, enabled = true) => {
   const [driverLocation, setDriverLocation] = useState(null);
+  const [participantLocations, setParticipantLocations] = useState({});
   const [isRecovered, setIsRecovered] = useState(false);
   const [waitingLocation, setWaitingLocation] = useState(true);
   const [trackingEnded, setTrackingEnded] = useState(false);
@@ -31,13 +32,23 @@ export const usePassengerTracking = (trayectoId, enabled = true) => {
           },
           onLocationUpdated: (data) => {
             if (cancelled || !data) return;
-            setDriverLocation({
+            const loc = {
               latitude: data.lat,
               longitude: data.lng,
               updatedAt: data.updatedAt,
-            });
-            setIsRecovered(!!data.recovered);
-            setWaitingLocation(false);
+            };
+            if (data.user_id) {
+              // Actualización de un pasajero específico
+              setParticipantLocations((prev) => ({
+                ...prev,
+                [data.user_id]: loc,
+              }));
+            } else {
+              // Actualización del conductor (sin user_id)
+              setDriverLocation(loc);
+              setIsRecovered(!!data.recovered);
+              setWaitingLocation(false);
+            }
           },
           onNoLocation: () => {
             if (!cancelled) setWaitingLocation(true);
@@ -73,6 +84,7 @@ export const usePassengerTracking = (trayectoId, enabled = true) => {
 
   return {
     driverLocation,
+    participantLocations,
     isRecovered,
     waitingLocation,
     trackingEnded,

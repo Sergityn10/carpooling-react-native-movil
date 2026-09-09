@@ -1,6 +1,9 @@
 // YouConnext - App Navigator
 import React from "react";
-import { NavigationContainer } from "@react-navigation/native";
+import {
+  NavigationContainer,
+  getStateFromPath,
+} from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import {
@@ -138,13 +141,18 @@ const LoadingScreen = () => (
 );
 
 // Configuración de Deep Linking para la app YouConnext
+const REDIRECT_SCREEN_MAP = {
+  perfil: "Perfil",
+  "mis-planes": "MisPlanes",
+  home: "Home",
+  buscar: "SearchTab",
+};
+
 const linking = {
   prefixes: [
     "youconnext://",
-    "https://youconnext.com",
-    "http://youconnext.com",
-    "https://www.youconnext.com",
-    "http://www.youconnext.com",
+    "https://app.youconnext.es",
+    "http://app.youconnext.es",
     "exp+youconnextapp://",
   ],
   config: {
@@ -165,6 +173,25 @@ const linking = {
       },
       ViajeEnCurso: "api/trayecto/:id/en-curso",
     },
+  },
+  getStateFromPath(path, config) {
+    const [pathPart, queryPart] = path.split("?");
+    if (pathPart === "/redirect") {
+      const params = new URLSearchParams(queryPart);
+      const to = params.get("to");
+      const screenName = REDIRECT_SCREEN_MAP[to] || "Home";
+      return {
+        routes: [
+          {
+            name: "Main",
+            state: {
+              routes: [{ name: screenName }],
+            },
+          },
+        ],
+      };
+    }
+    return getStateFromPath(path, config);
   },
 };
 

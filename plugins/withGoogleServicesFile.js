@@ -94,7 +94,16 @@ function withGoogleServicesFile(config) {
         console.log(
           "[withGoogleServicesFile] Using process.env.GOOGLE_SERVICES_JSON",
         );
-        writeToDest(process.env.GOOGLE_SERVICES_JSON, "process.env");
+        const envValue = process.env.GOOGLE_SERVICES_JSON;
+        // En EAS, las variables de tipo "file" contienen la ruta al archivo, no su contenido
+        if (fs.existsSync(envValue)) {
+          console.log(
+            `[withGoogleServicesFile] Env var is a file path: ${envValue}`,
+          );
+          writeToDest(fs.readFileSync(envValue, "utf-8"), envValue);
+        } else {
+          writeToDest(envValue, "process.env");
+        }
         found = true;
       }
       if (!found) {

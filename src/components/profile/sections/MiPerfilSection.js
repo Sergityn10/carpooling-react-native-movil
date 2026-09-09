@@ -147,6 +147,34 @@ const MiPerfilSection = ({
           </Text>
         </View>
 
+        {/* Barra de completitud del perfil */}
+        {user.completitud && user.completitud.porcentaje_total < 100 && (
+          <View style={styles.completionBanner}>
+            <View style={styles.completionBannerLeft}>
+              <Text style={styles.completionBannerTitle}>
+                Completa tu perfil
+              </Text>
+              <Text style={styles.completionBannerSubtitle}>
+                {user.completitud.campos_faltantes?.length || 0} campos
+                restantes
+              </Text>
+            </View>
+            <View style={styles.completionBannerRight}>
+              <Text style={styles.completionBannerPercent}>
+                {user.completitud.porcentaje_total || 0}%
+              </Text>
+              <View style={styles.completionBarBackground}>
+                <View
+                  style={[
+                    styles.completionBarFill,
+                    { width: `${user.completitud.porcentaje_total || 0}%` },
+                  ]}
+                />
+              </View>
+            </View>
+          </View>
+        )}
+
         {/* SECCIÓN 1: DATOS PERSONALES */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
@@ -261,8 +289,13 @@ const MiPerfilSection = ({
           ) : (
             <>
               <View style={styles.viewField}>
-                <View style={styles.viewFieldIcon}>
-                  <UserIcon size={16} color={COLORS.gray400} strokeWidth={2} />
+                <View
+                  style={[
+                    styles.viewFieldIcon,
+                    { backgroundColor: COLORS.primarySoft },
+                  ]}
+                >
+                  <UserIcon size={16} color={COLORS.primary} strokeWidth={2} />
                 </View>
                 <View style={styles.viewFieldContent}>
                   <Text style={styles.viewFieldLabel}>Nombre</Text>
@@ -272,8 +305,13 @@ const MiPerfilSection = ({
                 </View>
               </View>
               <View style={styles.viewField}>
-                <View style={styles.viewFieldIcon}>
-                  <UserIcon size={16} color={COLORS.gray400} strokeWidth={2} />
+                <View
+                  style={[
+                    styles.viewFieldIcon,
+                    { backgroundColor: COLORS.primarySoft },
+                  ]}
+                >
+                  <UserIcon size={16} color={COLORS.primary} strokeWidth={2} />
                 </View>
                 <View style={styles.viewFieldContent}>
                   <Text style={styles.viewFieldLabel}>Apellidos</Text>
@@ -283,8 +321,17 @@ const MiPerfilSection = ({
                 </View>
               </View>
               <View style={styles.viewField}>
-                <View style={styles.viewFieldIcon}>
-                  <Calendar size={16} color={COLORS.gray400} strokeWidth={2} />
+                <View
+                  style={[
+                    styles.viewFieldIcon,
+                    { backgroundColor: COLORS.secondarySoft },
+                  ]}
+                >
+                  <Calendar
+                    size={16}
+                    color={COLORS.secondary}
+                    strokeWidth={2}
+                  />
                 </View>
                 <View style={styles.viewFieldContent}>
                   <Text style={styles.viewFieldLabel}>Fecha de nacimiento</Text>
@@ -303,8 +350,13 @@ const MiPerfilSection = ({
                 </View>
               </View>
               <View style={styles.viewField}>
-                <View style={styles.viewFieldIcon}>
-                  <UserIcon size={16} color={COLORS.gray400} strokeWidth={2} />
+                <View
+                  style={[
+                    styles.viewFieldIcon,
+                    { backgroundColor: COLORS.primarySoft },
+                  ]}
+                >
+                  <UserIcon size={16} color={COLORS.primary} strokeWidth={2} />
                 </View>
                 <View style={styles.viewFieldContent}>
                   <Text style={styles.viewFieldLabel}>Género</Text>
@@ -379,8 +431,13 @@ const MiPerfilSection = ({
           ) : (
             <>
               <View style={styles.viewField}>
-                <View style={styles.viewFieldIcon}>
-                  <Mail size={16} color={COLORS.gray400} strokeWidth={2} />
+                <View
+                  style={[
+                    styles.viewFieldIcon,
+                    { backgroundColor: COLORS.secondarySoft },
+                  ]}
+                >
+                  <Mail size={16} color={COLORS.secondary} strokeWidth={2} />
                 </View>
                 <View style={styles.viewFieldContent}>
                   <Text style={styles.viewFieldLabel}>Correo electrónico</Text>
@@ -390,8 +447,13 @@ const MiPerfilSection = ({
                 </View>
               </View>
               <View style={styles.viewField}>
-                <View style={styles.viewFieldIcon}>
-                  <Phone size={16} color={COLORS.gray400} strokeWidth={2} />
+                <View
+                  style={[
+                    styles.viewFieldIcon,
+                    { backgroundColor: COLORS.secondarySoft },
+                  ]}
+                >
+                  <Phone size={16} color={COLORS.secondary} strokeWidth={2} />
                 </View>
                 <View style={styles.viewFieldContent}>
                   <Text style={styles.viewFieldLabel}>Teléfono</Text>
@@ -401,8 +463,13 @@ const MiPerfilSection = ({
                 </View>
               </View>
               <View style={styles.viewField}>
-                <View style={styles.viewFieldIcon}>
-                  <Shield size={16} color={COLORS.gray400} strokeWidth={2} />
+                <View
+                  style={[
+                    styles.viewFieldIcon,
+                    { backgroundColor: COLORS.gray100 },
+                  ]}
+                >
+                  <Shield size={16} color={COLORS.gray600} strokeWidth={2} />
                 </View>
                 <View style={styles.viewFieldContent}>
                   <Text style={styles.viewFieldLabel}>DNI/NIE</Text>
@@ -457,10 +524,23 @@ const MiPerfilSection = ({
                 <Text style={styles.viewAboutMe}>{user.about_me}</Text>
               ) : (
                 <View style={styles.viewAboutMeEmpty}>
-                  <Pencil size={20} color={COLORS.gray300} strokeWidth={2} />
+                  <Pencil size={24} color={COLORS.gray300} strokeWidth={2} />
                   <Text style={styles.viewAboutMeEmptyText}>
                     Aún no has añadido una descripción sobre ti.
                   </Text>
+                  <TouchableOpacity
+                    style={styles.sectionEditBtn}
+                    onPress={() => onEditSection("sobre-mi")}
+                  >
+                    <Pencil
+                      size={14}
+                      color={COLORS.secondary}
+                      strokeWidth={2.5}
+                    />
+                    <Text style={styles.sectionEditBtnText}>
+                      Escribir ahora
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               )}
             </View>
@@ -558,8 +638,13 @@ const MiPerfilSection = ({
           ) : (
             <>
               <View style={styles.viewField}>
-                <View style={styles.viewFieldIcon}>
-                  <MapPin size={16} color={COLORS.gray400} strokeWidth={2} />
+                <View
+                  style={[
+                    styles.viewFieldIcon,
+                    { backgroundColor: COLORS.primarySoft },
+                  ]}
+                >
+                  <MapPin size={16} color={COLORS.primary} strokeWidth={2} />
                 </View>
                 <View style={styles.viewFieldContent}>
                   <Text style={styles.viewFieldLabel}>Dirección</Text>
@@ -569,8 +654,13 @@ const MiPerfilSection = ({
                 </View>
               </View>
               <View style={styles.viewField}>
-                <View style={styles.viewFieldIcon}>
-                  <MapPin size={16} color={COLORS.gray400} strokeWidth={2} />
+                <View
+                  style={[
+                    styles.viewFieldIcon,
+                    { backgroundColor: COLORS.primarySoft },
+                  ]}
+                >
+                  <MapPin size={16} color={COLORS.primary} strokeWidth={2} />
                 </View>
                 <View style={styles.viewFieldContent}>
                   <Text style={styles.viewFieldLabel}>Ciudad</Text>
@@ -580,8 +670,13 @@ const MiPerfilSection = ({
                 </View>
               </View>
               <View style={styles.viewField}>
-                <View style={styles.viewFieldIcon}>
-                  <MapPin size={16} color={COLORS.gray400} strokeWidth={2} />
+                <View
+                  style={[
+                    styles.viewFieldIcon,
+                    { backgroundColor: COLORS.primarySoft },
+                  ]}
+                >
+                  <MapPin size={16} color={COLORS.primary} strokeWidth={2} />
                 </View>
                 <View style={styles.viewFieldContent}>
                   <Text style={styles.viewFieldLabel}>Provincia</Text>
@@ -591,8 +686,13 @@ const MiPerfilSection = ({
                 </View>
               </View>
               <View style={styles.viewField}>
-                <View style={styles.viewFieldIcon}>
-                  <MapPin size={16} color={COLORS.gray400} strokeWidth={2} />
+                <View
+                  style={[
+                    styles.viewFieldIcon,
+                    { backgroundColor: COLORS.primarySoft },
+                  ]}
+                >
+                  <MapPin size={16} color={COLORS.primary} strokeWidth={2} />
                 </View>
                 <View style={styles.viewFieldContent}>
                   <Text style={styles.viewFieldLabel}>País</Text>

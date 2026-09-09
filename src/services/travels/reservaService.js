@@ -66,8 +66,8 @@ async function reclamarIncidencia(id, reason) {
 // Retomar pago de reserva — POST /api/reserva/resume
 async function resumePago(
   idReserva,
-  returnUrl = "youconnext://perfil",
-  refreshUrl = "youconnext://perfil",
+  returnUrl = "https://app.youconnext.es/redirect?to=perfil",
+  refreshUrl = "https://app.youconnext.es/redirect?to=perfil",
 ) {
   return httpClient.request("/api/reserva/resume", {
     method: "POST",

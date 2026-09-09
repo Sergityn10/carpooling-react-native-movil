@@ -370,7 +370,10 @@ const ProfileView = ({
   const handleRetomarPago = async (idReserva) => {
     setResumingPagoId(idReserva);
     try {
-      await reservaService.resumePago(idReserva, "youconnext://perfil");
+      await reservaService.resumePago(
+        idReserva,
+        "https://app.youconnext.es/redirect?to=perfil",
+      );
       const checkoutRes = await paymentService.getCheckoutLink(idReserva);
       if (checkoutRes?.checkout_url) {
         await Linking.openURL(checkoutRes.checkout_url);
@@ -592,7 +595,7 @@ const ProfileView = ({
   const handleViewStripeAccount = async () => {
     try {
       const res = await paymentService.createStripeLoginLink({
-        return_url: "youconnext://perfil",
+        return_url: "https://app.youconnext.es/redirect?to=perfil",
       });
       if (res?.loginLink?.url) {
         await Linking.openURL(res.loginLink.url);
@@ -614,8 +617,8 @@ const ProfileView = ({
     setStripeOnboardingLoading(true);
     try {
       const linkRes = await paymentService.getStripeConnectLink({
-        return_url: "youconnext://perfil",
-        refresh_url: "youconnext://perfil",
+        return_url: "https://app.youconnext.es/redirect?to=perfil",
+        refresh_url: "https://app.youconnext.es/redirect?to=perfil",
       });
       if (linkRes?.accountLink?.url) {
         await Linking.openURL(linkRes.accountLink.url);
@@ -636,8 +639,8 @@ const ProfileView = ({
   const handleSetupPaymentMethod = async () => {
     try {
       const linkRes = await paymentService.getStripeConnectLink({
-        return_url: "youconnext://perfil",
-        refresh_url: "youconnext://perfil",
+        return_url: "https://app.youconnext.es/redirect?to=perfil",
+        refresh_url: "https://app.youconnext.es/redirect?to=perfil",
       });
       if (linkRes?.accountLink?.url) {
         await Linking.openURL(linkRes.accountLink.url);

@@ -40,8 +40,7 @@ import {
   formatTripTime,
 } from "../services/dateUtils";
 import { getEstadoConfig } from "../utils/viajeEstado";
-import useDriverTracking from "../hooks/useDriverTracking";
-import usePassengerTracking from "../hooks/usePassengerTracking";
+import useLiveTracking from "../hooks/useLiveTracking";
 
 const ViajeEnCursoScreen = ({ route, navigation }) => {
   const { user } = useUser();
@@ -94,16 +93,65 @@ const ViajeEnCursoScreen = ({ route, navigation }) => {
     );
   const enCurso = estadoViaje === "en curso" || estadoViaje === "activo";
 
-  useDriverTracking(viaje?.id, enCurso && esConductor);
-
   const {
     driverLocation,
+    participantLocations,
     isRecovered,
     waitingLocation,
     trackingEnded,
     reconnecting,
-    error: passengerError,
-  } = usePassengerTracking(viaje?.id, enCurso && !esConductor);
+    gpsActivo,
+    error: trackingError,
+    finalizarTrayecto,
+  } = useLiveTracking(
+    viaje?.id,
+    enCurso,
+    true,
+    viaje?.conductor_id || viaje?.conductorId || viaje?.conductor,
+    user?.id,
+  );
+
+  // Foto y nombre del conductor para el marcador del mapa
+  const driverPhoto = viaje?.conductor_img || viaje?.img_perfil || null;
+  const driverName =
+    typeof viaje?.conductor === "string"
+      ? viaje.conductor
+      : viaje?.conductor_nombre || "Conductor";
+
+  // Construir lista de participantes con sus fotos y ubicaciones
+  const participants = useMemo(() => {
+    const list = [];
+    // Incluir al conductor si tiene ubicación compartida
+    const conductorId =
+      viaje?.conductor_id || viaje?.conductorId || viaje?.conductor;
+    if (conductorId && participantLocations?.[conductorId]) {
+      list.push({
+        id: `conductor-${conductorId}`,
+        name: driverName,
+        photo: driverPhoto,
+        location: participantLocations[conductorId],
+      });
+    }
+    // Incluir pasajeros
+    if (viaje?.pasajeros) {
+      viaje.pasajeros.forEach((p) => {
+        const pasajeroId = p.user_id || p.usuario_id || p.usuario?.id;
+        const nombre =
+          `${p.usuario?.nombre || p.nombre || "Desconocido"} ${p.usuario?.apellidos || p.apellidos || ""}`.trim();
+        const photo = p.usuario?.img_perfil || p.img_perfil || null;
+        const location = pasajeroId ? participantLocations?.[pasajeroId] : null;
+        if (location) {
+          list.push({
+            id: pasajeroId || p.id_reserva,
+            name: nombre,
+            photo,
+            location,
+          });
+        }
+      });
+    }
+    return list;
+  }, [viaje?.pasajeros, participantLocations, driverName, driverPhoto]);
 
   const estadoCfg = getEstadoConfig(estadoViaje);
   const tripDate = useMemo(() => parseTripDate(viaje), [viaje]);
@@ -194,6 +242,7 @@ const ViajeEnCursoScreen = ({ route, navigation }) => {
           style: "destructive",
           onPress: async () => {
             try {
+              finalizarTrayecto();
               await completarViaje(viaje);
               const tuvoPasajeros =
                 Array.isArray(viaje.pasajeros) && viaje.pasajeros.length > 0;
@@ -253,6 +302,24 @@ const ViajeEnCursoScreen = ({ route, navigation }) => {
     );
   }
 
+  if (typeof __DEV__ !== "undefined" && __DEV__) {
+    console.log("[ViajeEnCurso] tracking state:", {
+      enCurso,
+      esConductor,
+      driverLocation: driverLocation
+        ? `${driverLocation.latitude},${driverLocation.longitude}`
+        : "null",
+      participantCount: Object.keys(participantLocations || {}).length,
+      participantLocations: Object.keys(participantLocations || {}),
+      participants: participants.map((p) => ({
+        id: p.id,
+        hasLocation: !!p.location,
+      })),
+      conductorId:
+        viaje?.conductor_id || viaje?.conductorId || viaje?.conductor,
+    });
+  }
+
   return (
     <View style={styles.container}>
       {/* Mapa a pantalla completa */}
@@ -262,6 +329,9 @@ const ViajeEnCursoScreen = ({ route, navigation }) => {
             origin={origen}
             destination={destino}
             driverLocation={driverLocation}
+            driverPhoto={driverPhoto}
+            driverName={driverName}
+            participants={participants}
             isRecovered={isRecovered}
             waitingLocation={esConductor ? false : waitingLocation}
             trackingEnded={trackingEnded}

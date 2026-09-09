@@ -43,6 +43,7 @@ import {
   formatTripTime as _formatTripTime,
   formatTripCountdown as _formatTripCountdown,
 } from "../services/dateUtils";
+import { messageService } from "../services/messages/messageService";
 
 const CARD_WIDTH = Dimensions.get("window").width * 0.72;
 
@@ -186,7 +187,7 @@ const HomeScreen = ({ navigation }) => {
     }
     setLoadingPopulares(true);
     try {
-      const res = await trayectoService.obtenerTrayectos({ limit: 100 });
+      const res = await trayectoService.obtenerTrayectos({ limit: 8 });
       const data = res.data || res.trayectos || (Array.isArray(res) ? res : []);
       const now = Date.now();
       const safeData = (Array.isArray(data) ? data : [])
@@ -394,9 +395,32 @@ const HomeScreen = ({ navigation }) => {
             </View>
             <TouchableOpacity
               style={styles.heroChatBtn}
-              onPress={() =>
-                navigation.navigate("ViajeDetalle", { viaje: heroViaje })
-              }
+              onPress={async () => {
+                try {
+                  const tripId = heroViaje.id || heroViaje.viaje_id;
+                  let chat = null;
+                  try {
+                    const res =
+                      await messageService.obtenerChatPorTripId(tripId);
+                    chat = res.data || res;
+                  } catch (err) {
+                    // Si no existe chat, lo creamos
+                    const created = await messageService.crearChatGrupal({
+                      trip_id: tripId,
+                      name: `${heroViaje.origen} → ${heroViaje.destino}`,
+                    });
+                    chat = created.data || created;
+                  }
+                  if (chat && (chat.chat_id || chat.id)) {
+                    navigation.navigate("ChatDetalle", {
+                      chat,
+                      chatId: chat.chat_id || chat.id,
+                    });
+                  }
+                } catch (e) {
+                  console.log("Error al abrir chat del trayecto:", e);
+                }
+              }}
               activeOpacity={0.8}
             >
               <MessageCircle

@@ -307,157 +307,168 @@ const VehiculosSection = ({
 
   // Listado de vehículos registrados
   return (
-    <ScrollView
-      style={styles.sectionContent}
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={styles.sectionScroll}
-    >
-      <SubViewHeader title="Mis vehículos" onBack={onBack} />
-
-      {/* Botón para añadir coche */}
-      <TouchableOpacity
-        style={styles.addCocheMainBtn}
-        onPress={onShowCocheForm}
+    <View style={{ flex: 1 }}>
+      <ScrollView
+        style={styles.sectionContent}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.sectionScroll}
       >
-        <Sparkles size={20} color={COLORS.white} strokeWidth={2} />
-        <Text style={styles.addCocheMainBtnText}>Registrar nuevo vehículo</Text>
-      </TouchableOpacity>
+        <SubViewHeader title="Mis vehículos" onBack={onBack} />
 
-      {loadingCoches ? (
-        <View style={[styles.centerContainer, { minHeight: 200 }]}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Cargando tus vehículos...</Text>
-        </View>
-      ) : errorCoches ? (
-        <View style={[styles.centerContainer, { minHeight: 200 }]}>
-          <Text style={styles.errorText}>{errorCoches}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={onFetchCoches}>
-            <Text style={styles.retryButtonText}>Reintentar</Text>
-          </TouchableOpacity>
-        </View>
-      ) : coches.length === 0 ? (
-        <View style={[styles.centerContainer, { minHeight: 240 }]}>
-          <View style={styles.placeholderIconBg}>
-            <Car size={40} color={COLORS.gray300} strokeWidth={1.5} />
+        {loadingCoches ? (
+          <View style={[styles.centerContainer, { minHeight: 200 }]}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={styles.loadingText}>Cargando tus vehículos...</Text>
           </View>
-          <Text style={styles.placeholderTitle}>Sin vehículos registrados</Text>
-          <Text style={styles.placeholderSubtitle}>
-            Registra tu vehículo para poder publicar trayectos como conductor y
-            compartir gastos de viaje.
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.cochesListContainer}>
-          {coches.map((coche) => {
-            const matOriginal = coche.matricula || "";
-            const matriculaFormateada =
-              matOriginal.length === 7
-                ? `${matOriginal.substring(0, 4)} ${matOriginal.substring(4)}`
-                : matOriginal;
+        ) : errorCoches ? (
+          <View style={[styles.centerContainer, { minHeight: 200 }]}>
+            <Text style={styles.errorText}>{errorCoches}</Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={onFetchCoches}
+            >
+              <Text style={styles.retryButtonText}>Reintentar</Text>
+            </TouchableOpacity>
+          </View>
+        ) : coches.length === 0 ? (
+          <View style={[styles.centerContainer, { minHeight: 240 }]}>
+            <View style={styles.placeholderIconBg}>
+              <Car size={40} color={COLORS.gray300} strokeWidth={1.5} />
+            </View>
+            <Text style={styles.placeholderTitle}>
+              Sin vehículos registrados
+            </Text>
+            <Text style={styles.placeholderSubtitle}>
+              Registra tu vehículo para poder publicar trayectos como conductor
+              y compartir gastos de viaje.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.cochesListContainer}>
+            {coches.map((coche) => {
+              const matOriginal = coche.matricula || "";
+              const matriculaFormateada =
+                matOriginal.length === 7
+                  ? `${matOriginal.substring(0, 4)} ${matOriginal.substring(4)}`
+                  : matOriginal;
 
-            return (
-              <View
-                key={coche.id_coche || coche.matricula}
-                style={styles.cocheItemCard}
-              >
-                {/* Fila superior con marca, modelo y acciones */}
-                <View style={styles.cocheCardHeader}>
-                  <View style={styles.cocheCardInfoMain}>
-                    <View style={styles.cocheCardIconContainer}>
-                      <Car size={22} color={COLORS.primary} strokeWidth={2} />
+              return (
+                <View
+                  key={coche.id_coche || coche.matricula}
+                  style={styles.cocheItemCard}
+                >
+                  {/* Fila superior con marca, modelo y acciones */}
+                  <View style={styles.cocheCardHeader}>
+                    <View style={styles.cocheCardInfoMain}>
+                      <View style={styles.cocheCardIconContainer}>
+                        <Car size={22} color={COLORS.primary} strokeWidth={2} />
+                      </View>
+                      <View>
+                        <Text style={styles.cocheCardBrandModel}>
+                          {coche.marca} {coche.modelo}
+                        </Text>
+                        <Text style={styles.cocheCardColorYear}>
+                          {coche.color || "Blanco"} • Año {coche.year || "2020"}
+                        </Text>
+                      </View>
                     </View>
-                    <View>
-                      <Text style={styles.cocheCardBrandModel}>
-                        {coche.marca} {coche.modelo}
-                      </Text>
-                      <Text style={styles.cocheCardColorYear}>
-                        {coche.color || "Blanco"} • Año {coche.year || "2020"}
-                      </Text>
+
+                    {/* Acciones */}
+                    <View style={styles.cocheCardActions}>
+                      <TouchableOpacity
+                        style={styles.cocheActionBtn}
+                        onPress={() => onEditCoche(coche)}
+                      >
+                        <Pencil
+                          size={15}
+                          color={COLORS.gray600}
+                          strokeWidth={2.2}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.cocheActionBtn,
+                          styles.cocheActionBtnDelete,
+                        ]}
+                        onPress={() => onDeleteCoche(coche.id_coche)}
+                      >
+                        <X size={15} color={COLORS.error} strokeWidth={2.5} />
+                      </TouchableOpacity>
                     </View>
                   </View>
 
-                  {/* Acciones */}
-                  <View style={styles.cocheCardActions}>
-                    <TouchableOpacity
-                      style={styles.cocheActionBtn}
-                      onPress={() => onEditCoche(coche)}
-                    >
-                      <Pencil
-                        size={15}
-                        color={COLORS.gray600}
-                        strokeWidth={2.2}
+                  {/* Placa de Matrícula Realista */}
+                  <View style={styles.matriculaPlacaOuter}>
+                    <View style={styles.matriculaPlacaInner}>
+                      {/* Banda europea */}
+                      <View style={styles.placaBandaUE}>
+                        <Text style={styles.placaStars}>★</Text>
+                        <Text style={styles.placaPais}>E</Text>
+                      </View>
+                      {/* Dígitos */}
+                      <View style={styles.placaDigitosContainer}>
+                        <Text style={styles.placaDigitosText}>
+                          {matriculaFormateada}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Características secundarias */}
+                  <View style={styles.cocheSpecsRow}>
+                    <View style={styles.cocheSpecBadge}>
+                      <Users size={13} color={COLORS.gray500} strokeWidth={2} />
+                      <Text style={styles.cocheSpecText}>
+                        {coche.num_plazas || 5} plazas
+                      </Text>
+                    </View>
+                    <View style={styles.cocheSpecBadge}>
+                      <View
+                        style={[
+                          styles.combustibleIndicatorDot,
+                          {
+                            backgroundColor:
+                              coche.tipo_combustible?.toLowerCase() ===
+                              "electrico"
+                                ? "#10B981"
+                                : coche.tipo_combustible?.toLowerCase() ===
+                                    "hibrido"
+                                  ? "#3B82F6"
+                                  : "#F59E0B",
+                          },
+                        ]}
                       />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.cocheActionBtn,
-                        styles.cocheActionBtnDelete,
-                      ]}
-                      onPress={() => onDeleteCoche(coche.id_coche)}
-                    >
-                      <X size={15} color={COLORS.error} strokeWidth={2.5} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {/* Placa de Matrícula Realista */}
-                <View style={styles.matriculaPlacaOuter}>
-                  <View style={styles.matriculaPlacaInner}>
-                    {/* Banda europea */}
-                    <View style={styles.placaBandaUE}>
-                      <Text style={styles.placaStars}>★</Text>
-                      <Text style={styles.placaPais}>E</Text>
-                    </View>
-                    {/* Dígitos */}
-                    <View style={styles.placaDigitosContainer}>
-                      <Text style={styles.placaDigitosText}>
-                        {matriculaFormateada}
+                      <Text
+                        style={[
+                          styles.cocheSpecText,
+                          { textTransform: "capitalize" },
+                        ]}
+                      >
+                        {coche.tipo_combustible || "Gasolina"}
                       </Text>
                     </View>
                   </View>
                 </View>
+              );
+            })}
+          </View>
+        )}
+        <View style={{ height: SPACING.xxl }} />
+      </ScrollView>
 
-                {/* Características secundarias */}
-                <View style={styles.cocheSpecsRow}>
-                  <View style={styles.cocheSpecBadge}>
-                    <Users size={13} color={COLORS.gray500} strokeWidth={2} />
-                    <Text style={styles.cocheSpecText}>
-                      {coche.num_plazas || 5} plazas
-                    </Text>
-                  </View>
-                  <View style={styles.cocheSpecBadge}>
-                    <View
-                      style={[
-                        styles.combustibleIndicatorDot,
-                        {
-                          backgroundColor:
-                            coche.tipo_combustible?.toLowerCase() ===
-                            "electrico"
-                              ? "#10B981"
-                              : coche.tipo_combustible?.toLowerCase() ===
-                                  "hibrido"
-                                ? "#3B82F6"
-                                : "#F59E0B",
-                        },
-                      ]}
-                    />
-                    <Text
-                      style={[
-                        styles.cocheSpecText,
-                        { textTransform: "capitalize" },
-                      ]}
-                    >
-                      {coche.tipo_combustible || "Gasolina"}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            );
-          })}
-        </View>
-      )}
-      <View style={{ height: SPACING.xxl }} />
-    </ScrollView>
+      {/* Botón fijo en la parte inferior */}
+      <View style={styles.bottomFixedBtnContainer}>
+        <TouchableOpacity
+          style={styles.addCocheMainBtn}
+          onPress={onShowCocheForm}
+        >
+          <Sparkles size={20} color={COLORS.white} strokeWidth={2} />
+          <Text style={styles.addCocheMainBtnText}>
+            Registrar nuevo vehículo
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 };
 

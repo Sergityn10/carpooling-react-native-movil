@@ -21,17 +21,24 @@ async function obtenerChatPorId(chatId) {
   return messagesHttpClient.request(`/api/chats/${chatId}`);
 }
 
-// Obtener chat grupal por trip_id — GET /api/chats/trip/:tripId
-async function obtenerChatPorTripId(tripId) {
+// Obtener chat grupal por trip_id — GET /api/chats/trip/:tripId?type=TRAYECTO|VIAJE|EVENT
+async function obtenerChatPorTripId(tripId, type = "TRAYECTO") {
   await asegurarToken();
-  return messagesHttpClient.request(`/api/chats/trip/${tripId}`);
+  return messagesHttpClient.request(`/api/chats/trip/${tripId}?type=${type}`);
 }
 
 // Crear chat grupal — POST /api/chats
-async function crearChatGrupal({ name, trip_id, admin_id, participant_ids }) {
+async function crearChatGrupal({
+  name,
+  chat_type,
+  trip_id,
+  admin_id,
+  participant_ids,
+}) {
   await asegurarToken();
   const body = {};
   if (name) body.name = name;
+  if (chat_type) body.chat_type = chat_type;
   if (trip_id) body.trip_id = trip_id;
   if (admin_id) body.admin_id = admin_id;
   if (participant_ids) body.participant_ids = participant_ids;

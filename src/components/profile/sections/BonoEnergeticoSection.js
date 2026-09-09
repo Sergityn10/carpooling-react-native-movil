@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { View, Text, ScrollView, TouchableOpacity } from "react-native";
 import {
   Zap,
@@ -8,7 +8,10 @@ import {
   Camera,
   User as UserIcon,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   CheckCircle2,
+  CircleHelp,
 } from "lucide-react-native";
 import { COLORS, SPACING } from "../../../constants";
 import styles from "../profileStyles";
@@ -50,6 +53,93 @@ const FIELD_CONFIG = {
 const BonoEnergeticoSection = ({ user, onNavigate, onBack }) => {
   const completitud = user.completitud;
   const completitudCae = user.completitud_cae;
+  const [showCaeHelp, setShowCaeHelp] = useState(false);
+
+  const renderCaeHelp = () => (
+    <View style={styles.caeHelpCard}>
+      <TouchableOpacity
+        style={styles.caeHelpHeader}
+        onPress={() => setShowCaeHelp(!showCaeHelp)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.caeHelpHeaderLeft}>
+          <CircleHelp size={22} color={COLORS.warning} strokeWidth={2} />
+          <Text style={styles.caeHelpTitle}>¿Qué son los CAEs?</Text>
+        </View>
+        {showCaeHelp ? (
+          <ChevronUp size={20} color={COLORS.gray400} strokeWidth={2} />
+        ) : (
+          <ChevronDown size={20} color={COLORS.gray400} strokeWidth={2} />
+        )}
+      </TouchableOpacity>
+
+      {showCaeHelp && (
+        <View style={styles.caeHelpContent}>
+          <View>
+            <Text style={styles.caeHelpSectionTitle}>¿Qué son?</Text>
+            <Text style={styles.caeHelpText}>
+              Los CAEs (Certificados de Ahorro Energético) son certificados
+              oficiales del Gobierno de España que premian el ahorro de energía
+              y la reducción de emisiones de CO2. Compartir coche reduce el
+              número de vehículos en circulación, por lo que cada viaje
+              compartido genera ahorro energético certificable que se convierte
+              en dinero real en tu monedero.
+            </Text>
+          </View>
+          <View>
+            <Text style={styles.caeHelpSectionTitle}>¿Cómo se consiguen?</Text>
+            <View style={styles.caeHelpStepRow}>
+              <View style={styles.caeHelpStepBadge}>
+                <Text style={styles.caeHelpStepBadgeText}>1</Text>
+              </View>
+              <Text style={[styles.caeHelpText, { flex: 1 }]}>
+                Completa tu perfil y registra tu vehículo (DNI/NIE, teléfono y
+                coche registrado).
+              </Text>
+            </View>
+            <View style={styles.caeHelpStepRow}>
+              <View style={styles.caeHelpStepBadge}>
+                <Text style={styles.caeHelpStepBadgeText}>2</Text>
+              </View>
+              <Text style={[styles.caeHelpText, { flex: 1 }]}>
+                Publica trayectos como conductor y completa los viajes con
+                pasajeros.
+              </Text>
+            </View>
+            <View style={styles.caeHelpStepRow}>
+              <View style={styles.caeHelpStepBadge}>
+                <Text style={styles.caeHelpStepBadgeText}>3</Text>
+              </View>
+              <Text style={[styles.caeHelpText, { flex: 1 }]}>
+                Por cada km compartido con pasajeros se calcula el ahorro de
+                energía (kWh) generado.
+              </Text>
+            </View>
+            <View style={styles.caeHelpStepRow}>
+              <View style={styles.caeHelpStepBadge}>
+                <Text style={styles.caeHelpStepBadgeText}>4</Text>
+              </View>
+              <Text style={[styles.caeHelpText, { flex: 1 }]}>
+                Los kWh se convierten en euros según la tasación oficial vigente
+                y se añaden a tu monedero (primero "en revisión" y luego
+                "disponible" para retirar).
+              </Text>
+            </View>
+          </View>
+          <View>
+            <Text style={styles.caeHelpSectionTitle}>¿Cuánto puedo ganar?</Text>
+            <Text style={styles.caeHelpText}>
+              El valor depende de la tasación por kWh establecida por el
+              Ministerio para la Transición Ecológica. Cuantos más viajes
+              completes con pasajeros, más energía ahorras y más CAEs generas.
+              Puedes consultar tus CAEs generados en tu Monedero y en tu
+              historial de viajes.
+            </Text>
+          </View>
+        </View>
+      )}
+    </View>
+  );
 
   // Determinar prioridad: 1) CAES, 2) Perfil completo
   const caesFaltan =
@@ -148,6 +238,8 @@ const BonoEnergeticoSection = ({ user, onNavigate, onBack }) => {
       contentContainerStyle={styles.sectionScroll}
     >
       <SubViewHeader title="Mi Bono Energético" onBack={onBack} />
+
+      {renderCaeHelp()}
 
       {activeSection === "caes" && (
         <>

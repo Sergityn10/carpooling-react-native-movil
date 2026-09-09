@@ -2,7 +2,7 @@
 // Pinta origen/destino y el coche del conductor con animación interpolada
 // (Marker.Animated + AnimatedRegion) para que no "salte" entre updates.
 import React, { useEffect, useMemo, useRef } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, Image } from "react-native";
 import MapView, { Marker, AnimatedRegion } from "react-native-maps";
 import { Car, MapPin, Flag } from "lucide-react-native";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../../constants";
@@ -13,6 +13,9 @@ const LiveTripMap = ({
   origin,
   destination,
   driverLocation,
+  driverPhoto = null,
+  driverName = "Conductor",
+  participants = [],
   isRecovered = false,
   waitingLocation = false,
   trackingEnded = false,
@@ -108,9 +111,37 @@ const LiveTripMap = ({
                 isRecovered && styles.carMarkerRecovered,
               ]}
             >
-              <Car size={18} color={COLORS.white} strokeWidth={2.5} />
+              {driverPhoto ? (
+                <Image
+                  source={{ uri: driverPhoto }}
+                  style={styles.markerPhoto}
+                />
+              ) : (
+                <Car size={18} color={COLORS.white} strokeWidth={2.5} />
+              )}
             </View>
           </Marker.Animated>
+        )}
+
+        {participants.map((p) =>
+          p.location ? (
+            <Marker
+              key={p.id}
+              coordinate={p.location}
+              title={p.name || "Pasajero"}
+              anchor={{ x: 0.5, y: 0.5 }}
+            >
+              <View style={styles.participantMarker}>
+                {p.photo ? (
+                  <Image source={{ uri: p.photo }} style={styles.markerPhoto} />
+                ) : (
+                  <Text style={styles.markerInitial}>
+                    {(p.name || "?").charAt(0).toUpperCase()}
+                  </Text>
+                )}
+              </View>
+            </Marker>
+          ) : null,
         )}
       </MapView>
 
@@ -197,6 +228,27 @@ const styles = StyleSheet.create({
   },
   carMarkerRecovered: {
     backgroundColor: COLORS.gray500,
+  },
+  markerPhoto: {
+    width: "100%",
+    height: "100%",
+    borderRadius: RADIUS.full,
+  },
+  participantMarker: {
+    width: 32,
+    height: 32,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.secondary,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: COLORS.white,
+    ...SHADOWS.small,
+  },
+  markerInitial: {
+    color: COLORS.white,
+    fontSize: FONTS.sm,
+    fontWeight: "700",
   },
   statusPill: {
     position: "absolute",

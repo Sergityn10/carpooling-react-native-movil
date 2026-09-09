@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Alert,
   Image,
+  Linking,
 } from "react-native";
 import {
   Car,
@@ -21,6 +22,8 @@ import {
   TrendingUp,
   Zap,
   ChevronRight,
+  ScrollText,
+  ShieldCheck,
 } from "lucide-react-native";
 import { COLORS, SPACING } from "../../../constants";
 import styles from "../profileStyles";
@@ -52,6 +55,22 @@ const getBonoInfo = (user) => {
   return { show: false };
 };
 
+const MenuRow = ({ icon, iconColor, iconBg, label, onPress }) => (
+  <TouchableOpacity
+    style={styles.menuRowItem}
+    onPress={onPress}
+    activeOpacity={0.6}
+  >
+    <View style={styles.menuRowLeft}>
+      <View style={[styles.menuRowIcon, { backgroundColor: iconBg }]}>
+        {icon}
+      </View>
+      <Text style={styles.menuRowText}>{label}</Text>
+    </View>
+    <ChevronRight size={18} color={COLORS.gray300} strokeWidth={2} />
+  </TouchableOpacity>
+);
+
 const MainMenuSection = ({
   user,
   navigation,
@@ -65,7 +84,7 @@ const MainMenuSection = ({
     showsVerticalScrollIndicator={false}
     contentContainerStyle={styles.menuScroll}
   >
-    {/* Cabecera integrada */}
+    {/* Cabecera profesional */}
     <View style={styles.profileHeaderCard}>
       <View style={styles.headerAvatarContainer}>
         <View style={styles.headerAvatarRing}>
@@ -87,6 +106,14 @@ const MainMenuSection = ({
         <Text style={styles.profileMainName}>
           {user.name} {user.surname}
         </Text>
+        {(user.ciudad || user.provincia) && (
+          <View style={styles.headerLocationRow}>
+            <MapPin size={12} color={COLORS.gray400} strokeWidth={2} />
+            <Text style={styles.headerLocationText}>
+              {[user.ciudad, user.provincia].filter(Boolean).join(", ")}
+            </Text>
+          </View>
+        )}
         <Text style={styles.profileCompletionHint}>
           Perfil completo al {user.completitud?.porcentaje_total ?? 0}%
         </Text>
@@ -125,31 +152,33 @@ const MainMenuSection = ({
     })()}
 
     {/* Tarjeta de aviso del monedero */}
-    {user.monedero && user.monedero.disponible === false && (
-      <TouchableOpacity
-        style={styles.bonoCard}
-        onPress={() => onNavigate("monedero")}
-        activeOpacity={0.8}
-      >
-        <View style={styles.bonoIconWrapper}>
-          <Wallet size={22} color={COLORS.white} strokeWidth={2.5} />
-        </View>
-        <View style={styles.bonoCardContent}>
-          <Text style={styles.bonoCardTitle}>Monedero</Text>
-          <Text style={styles.bonoCardSubtitle}>
-            {user.monedero.mensaje ||
-              "Configura tu monedero para recibir ganancias"}
-          </Text>
-        </View>
-        <ChevronRight size={20} color={COLORS.gray400} strokeWidth={2} />
-      </TouchableOpacity>
-    )}
+    {user.monedero &&
+      (user.monedero.disponible !== true ||
+        user.monedero?.config?.wallet_enabled === false) && (
+        <TouchableOpacity
+          style={styles.bonoCard}
+          onPress={() => onNavigate("monedero")}
+          activeOpacity={0.8}
+        >
+          <View style={styles.bonoIconWrapper}>
+            <Wallet size={22} color={COLORS.white} strokeWidth={2.5} />
+          </View>
+          <View style={styles.bonoCardContent}>
+            <Text style={styles.bonoCardTitle}>Monedero</Text>
+            <Text style={styles.bonoCardSubtitle}>
+              {user.monedero.mensaje ||
+                "Configura tu monedero para recibir ganancias"}
+            </Text>
+          </View>
+          <ChevronRight size={20} color={COLORS.gray400} strokeWidth={2} />
+        </TouchableOpacity>
+      )}
 
     {/* Tarjeta de Ahorro generado */}
     <View style={styles.savingsCard}>
       <View style={styles.savingsLeft}>
         <View style={styles.savingsIconLabelRow}>
-          <TrendingUp size={16} color="#10B981" strokeWidth={2.5} />
+          <TrendingUp size={16} color={COLORS.white} strokeWidth={2.5} />
           <Text style={styles.savingsLabel}>Saldo del monedero</Text>
           <View style={styles.infoCircle}>
             <Text style={styles.infoCircleText}>i</Text>
@@ -187,136 +216,117 @@ const MainMenuSection = ({
       </View>
     </View>
 
-    {/* Menú de Opciones */}
+    {/* Sección: Cuenta */}
+    <Text style={styles.menuSectionLabel}>Cuenta</Text>
     <View style={styles.menuItemsBlock}>
-      <TouchableOpacity
-        style={styles.menuRowItem}
+      <MenuRow
+        icon={<UserIcon size={20} color={COLORS.primary} strokeWidth={2} />}
+        iconBg={COLORS.primarySoft}
+        label="Mi perfil"
         onPress={() => onNavigate("mi-perfil")}
-      >
-        <View style={styles.menuRowLeft}>
-          <UserIcon size={22} color={COLORS.gray800} strokeWidth={1.8} />
-          <Text style={styles.menuRowText}>Mi perfil</Text>
-        </View>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.menuRowItem}
+      />
+      <MenuRow
+        icon={<MapPin size={20} color={COLORS.secondary} strokeWidth={2} />}
+        iconBg={COLORS.secondarySoft}
+        label="Mis direcciones"
         onPress={() => navigation.navigate("MisUbicaciones")}
-      >
-        <View style={styles.menuRowLeft}>
-          <MapPin size={22} color={COLORS.gray800} strokeWidth={1.8} />
-          <Text style={styles.menuRowText}>Mis direcciones</Text>
-        </View>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.menuRowItem}
+      />
+      <MenuRow
+        icon={<Calendar size={20} color={COLORS.secondary} strokeWidth={2} />}
+        iconBg={COLORS.secondarySoft}
+        label="Mi rutina"
         onPress={() => onNavigate("rutinas")}
-      >
-        <View style={styles.menuRowLeft}>
-          <Calendar size={22} color={COLORS.gray800} strokeWidth={1.8} />
-          <Text style={styles.menuRowText}>Mi rutina</Text>
-        </View>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.menuRowItem}
+      />
+      <MenuRow
+        icon={<Car size={20} color={COLORS.primary} strokeWidth={2} />}
+        iconBg={COLORS.primarySoft}
+        label="Mis vehículos"
         onPress={() => onNavigate("mis-vehiculos")}
-      >
-        <View style={styles.menuRowLeft}>
-          <Car size={22} color={COLORS.gray800} strokeWidth={1.8} />
-          <Text style={styles.menuRowText}>Mis vehículos</Text>
-        </View>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.menuRowItem}
+      />
+      <MenuRow
+        icon={<History size={20} color={COLORS.gray600} strokeWidth={2} />}
+        iconBg={COLORS.gray100}
+        label="Historial de trayectos"
         onPress={() => onNavigate("historial")}
-      >
-        <View style={styles.menuRowLeft}>
-          <History size={22} color={COLORS.gray800} strokeWidth={1.8} />
-          <Text style={styles.menuRowText}>Historial de trayectos</Text>
-        </View>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.menuRowItem}
+      />
+      <MenuRow
+        icon={<Calendar size={20} color={COLORS.accent} strokeWidth={2} />}
+        iconBg={COLORS.accentSoft}
+        label="Mis eventos"
         onPress={() => navigation.navigate("MisEventos")}
-      >
-        <View style={styles.menuRowLeft}>
-          <Calendar size={22} color={COLORS.gray800} strokeWidth={1.8} />
-          <Text style={styles.menuRowText}>Mis eventos</Text>
-        </View>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.menuRowItem}
+      />
+      <MenuRow
+        icon={<Building size={20} color={COLORS.gray600} strokeWidth={2} />}
+        iconBg={COLORS.gray100}
+        label="Mi empresa/universidad"
         onPress={() =>
           Alert.alert(
             "Mi empresa/universidad",
             "Esta funcionalidad te permite vincular tu perfil a tu centro oficial para viajes restringidos.",
           )
         }
-      >
-        <View style={styles.menuRowLeft}>
-          <Building size={22} color={COLORS.gray800} strokeWidth={1.8} />
-          <Text style={styles.menuRowText}>Mi empresa/universidad</Text>
-        </View>
-      </TouchableOpacity>
+      />
+    </View>
 
-      {/* Separador de Sección del Menú */}
-      <View style={styles.menuSectionDivider} />
-
-      <TouchableOpacity
-        style={styles.menuRowItem}
+    {/* Sección: Actividad */}
+    <Text style={styles.menuSectionLabel}>Actividad</Text>
+    <View style={styles.menuItemsBlock}>
+      <MenuRow
+        icon={<Heart size={20} color={COLORS.error} strokeWidth={2} />}
+        iconBg={COLORS.errorSoft}
+        label="Favoritos"
         onPress={() =>
           Alert.alert(
             "Favoritos",
-            "Tus viajes y conductores favoritos apareceran aqui.",
+            "Tus viajes y conductores favoritos aparecerán aquí.",
           )
         }
-      >
-        <View style={styles.menuRowLeft}>
-          <Heart size={22} color={COLORS.gray800} strokeWidth={1.8} />
-          <Text style={styles.menuRowText}>Favoritos</Text>
-        </View>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.menuRowItem}
+      />
+      <MenuRow
+        icon={<Star size={20} color={COLORS.warning} strokeWidth={2} />}
+        iconBg={COLORS.warningSoft}
+        label="Valoraciones"
         onPress={() => navigation.navigate("Opiniones")}
-      >
-        <View style={styles.menuRowLeft}>
-          <Star size={22} color={COLORS.gray800} strokeWidth={1.8} />
-          <Text style={styles.menuRowText}>Valoraciones</Text>
-        </View>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.menuRowItem}
+      />
+      <MenuRow
+        icon={<Zap size={20} color={COLORS.warning} strokeWidth={2} />}
+        iconBg={COLORS.warningSoft}
+        label="Mi Bono Energético"
         onPress={() => onNavigate("bono-energetico")}
-      >
-        <View style={styles.menuRowLeft}>
-          <Zap size={22} color={COLORS.gray800} strokeWidth={1.8} />
-          <Text style={styles.menuRowText}>Mi Bono Energético</Text>
-        </View>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.menuRowItem}
+      />
+      <MenuRow
+        icon={<Wallet size={20} color={COLORS.primary} strokeWidth={2} />}
+        iconBg={COLORS.primarySoft}
+        label="Monedero"
         onPress={() => onNavigate("monedero")}
-      >
-        <View style={styles.menuRowLeft}>
-          <Wallet size={22} color={COLORS.gray800} strokeWidth={1.8} />
-          <Text style={styles.menuRowText}>Monedero</Text>
-        </View>
-      </TouchableOpacity>
+      />
+    </View>
+
+    {/* Sección: Legal */}
+    <Text style={styles.menuSectionLabel}>Legal</Text>
+    <View style={styles.menuItemsBlock}>
+      <MenuRow
+        icon={<ScrollText size={20} color={COLORS.gray600} strokeWidth={2} />}
+        iconBg={COLORS.gray100}
+        label="Términos y Condiciones"
+        onPress={() => Linking.openURL("https://app.youconnext.es/condiciones")}
+      />
+      <MenuRow
+        icon={<ShieldCheck size={20} color={COLORS.gray600} strokeWidth={2} />}
+        iconBg={COLORS.gray100}
+        label="Política de Privacidad"
+        onPress={() => Linking.openURL("https://app.youconnext.es/privacidad")}
+      />
     </View>
 
     {/* Botón de Cerrar Sesión */}
-    <TouchableOpacity style={styles.menuLogoutButton} onPress={onLogout}>
+    <TouchableOpacity
+      style={styles.menuLogoutButton}
+      onPress={onLogout}
+      activeOpacity={0.7}
+    >
       <LogOut size={18} color={COLORS.error} strokeWidth={2.5} />
-      <Text style={styles.menuLogoutText}>Cerrar sesion</Text>
+      <Text style={styles.menuLogoutText}>Cerrar sesión</Text>
     </TouchableOpacity>
 
     <View style={{ height: SPACING.xl }} />
