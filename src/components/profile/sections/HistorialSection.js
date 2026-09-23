@@ -287,7 +287,9 @@ const HistorialSection = ({
                       </View>
                       <TouchableOpacity
                         style={styles.retornarPagoBtn}
-                        onPress={() => onRetomarPago(viaje.id_reserva)}
+                        onPress={() =>
+                          onRetomarPago(viaje.id_reserva, viaje.id)
+                        }
                         disabled={resumingPagoId === viaje.id_reserva}
                         activeOpacity={0.8}
                       >

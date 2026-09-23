@@ -37,6 +37,7 @@ import {
   Search,
   SlidersHorizontal,
   X,
+  LocateFixed,
 } from "lucide-react-native";
 import * as Location from "expo-location";
 import MapView, { Marker } from "react-native-maps";
@@ -83,6 +84,8 @@ const EventDetailScreen = ({ route, navigation }) => {
   const [nearbyTrips, setNearbyTrips] = useState(null); // null = no filtrado, [] = filtrado vacío
   const [loadingNearby, setLoadingNearby] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const mapRef = useRef(null);
+  const [eventAddress, setEventAddress] = useState(null);
 
   const { user } = useUser();
 
@@ -90,6 +93,44 @@ const EventDetailScreen = ({ route, navigation }) => {
   const sheetHeight = useRef(new Animated.Value(COLLAPSED_HEIGHT)).current;
   const currentHeightRef = useRef(COLLAPSED_HEIGHT);
   const isExpandedRef = useRef(false);
+
+  const lat =
+    typeof event?.latitude === "number"
+      ? event.latitude
+      : parseFloat(event?.latitude);
+  const lng =
+    typeof event?.longitude === "number"
+      ? event.longitude
+      : parseFloat(event?.longitude);
+  const hasValidCoords = !isNaN(lat) && !isNaN(lng);
+
+  useEffect(() => {
+    if (hasValidCoords) {
+      reverseGeocode({ latitude: lat, longitude: lng })
+        .then((place) => {
+          console.log("[EventDetail] reverseGeocode result:", place);
+          setEventAddress(place?.address || null);
+        })
+        .catch((err) => {
+          console.warn("[EventDetail] reverseGeocode error:", err?.message);
+          setEventAddress(null);
+        });
+    }
+  }, [lat, lng, hasValidCoords]);
+
+  const recenterMap = () => {
+    if (mapRef.current && hasValidCoords) {
+      mapRef.current.animateToRegion(
+        {
+          latitude: lat,
+          longitude: lng,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        },
+        300,
+      );
+    }
+  };
 
   const fetchEvent = useCallback(async () => {
     if (!eventId) return;
@@ -520,16 +561,6 @@ const EventDetailScreen = ({ route, navigation }) => {
     );
   }
 
-  const lat =
-    typeof event.latitude === "number"
-      ? event.latitude
-      : parseFloat(event.latitude);
-  const lng =
-    typeof event.longitude === "number"
-      ? event.longitude
-      : parseFloat(event.longitude);
-  const hasValidCoords = !isNaN(lat) && !isNaN(lng);
-
   const mapRegion = hasValidCoords
     ? {
         latitude: lat,
@@ -571,11 +602,17 @@ const EventDetailScreen = ({ route, navigation }) => {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      <MapView style={styles.map} initialRegion={mapRegion} showsUserLocation>
+      <MapView
+        ref={mapRef}
+        style={styles.map}
+        initialRegion={mapRegion}
+        showsUserLocation
+      >
         {hasValidCoords && (
           <Marker
             coordinate={{ latitude: lat, longitude: lng }}
             title={event.name}
+            description={eventAddress || undefined}
             zIndex={100}
           >
             <View style={styles.eventMarker}>
@@ -633,6 +670,16 @@ const EventDetailScreen = ({ route, navigation }) => {
           );
         })}
       </MapView>
+
+      {hasValidCoords && (
+        <TouchableOpacity
+          style={[styles.recenterBtn, { top: insets.top + 120 }]}
+          onPress={recenterMap}
+          activeOpacity={0.85}
+        >
+          <LocateFixed size={22} color={COLORS.primary} strokeWidth={2.5} />
+        </TouchableOpacity>
+      )}
 
       <View
         style={[styles.floatingHeader, { paddingTop: insets.top + SPACING.xs }]}
@@ -1338,6 +1385,22 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+  },
+  recenterBtn: {
+    position: "absolute",
+    right: SPACING.md,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 25,
+    elevation: 25,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   floatingHeader: {
     position: "absolute",

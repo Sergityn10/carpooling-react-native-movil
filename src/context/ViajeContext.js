@@ -114,6 +114,11 @@ export const ViajeProvider = ({ children }) => {
         vehiculo_id: datos.vehiculoId,
         disponible: datos.plazas,
         precio: datos.precio ?? 0,
+        origen_lat: datos.origenLat,
+        origen_lng: datos.origenLng,
+        destino_lat: datos.destinoLat,
+        destino_lng: datos.destinoLng,
+        distancia: datos.distanciaMetros,
       };
       const response = await trayectoService.crearTrayecto(payload);
       const trayecto = response.trayecto || response.viaje || response;

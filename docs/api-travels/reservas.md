@@ -12,7 +12,9 @@ POST /api/reserva
 
 **Autenticación:** Requerida (`authenticate`)
 
-**Descripción:** Crea una reserva para un trayecto. Verifica disponibilidad, crea una sesión de pago en Stripe (Checkout Session) mediante el microservicio de usuarios, y une al pasajero al chat del trayecto. Si ya existe una reserva pendiente, la reutiliza.
+**Descripción:** Crea una reserva para un trayecto. Verifica disponibilidad, llama síncronamente a la API de pagos para crear una sesión de Stripe Checkout (en trayectos de pago), y une al pasajero al chat del trayecto. Si ya existe una reserva pendiente, la reutiliza.
+
+> **Nota:** Para trayectos de pago, la URL de Stripe se devuelve directamente en la respuesta (`stripe_url`). No es necesario hacer polling.
 
 **Body (JSON):**
 
@@ -28,20 +30,35 @@ POST /api/reserva
 | `user_id`     | string (UUID) | Sí        | UUID del usuario  |
 | `trayecto_id` | string (UUID) | Sí        | UUID del trayecto |
 
-**Respuesta 201:**
+**Respuesta 201 (trayecto gratuito):**
 
 ```json
 {
   "status": "Success",
-  "message": "Reserva creada correctamente",
+  "message": "Reserva creada y confirmada correctamente (trayecto gratuito)",
   "reserva": {
     "id": "r1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "user_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "conductorName": "Juan Pérez",
-    "trayecto_id": "550e8400-e29b-41d4-a716-446655440000",
-    "stripe_checkout_session_id": "cs_test_123"
+    "trayecto_id": "550e8400-e29b-41d4-a716-446655440000"
+  }
+}
+```
+
+**Respuesta 201 (trayecto de pago):**
+
+```json
+{
+  "status": "Success",
+  "message": "Reserva creada correctamente. Pendiente de pago.",
+  "reserva": {
+    "id": "r1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "user_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "conductorName": "Juan Pérez",
+    "trayecto_id": "550e8400-e29b-41d4-a716-446655440000"
   },
-  "stripe_url": "https://checkout.stripe.com/..."
+  "stripe_url": "https://checkout.stripe.com/c/pay/cs_...",
+  "stripe_checkout_session_id": "cs_test_123"
 }
 ```
 
@@ -276,6 +293,52 @@ POST /api/reserva/:id/issue
 - `401` — No tienes permiso (solo el conductor puede reclamar).
 - `404` — Reserva no encontrada.
 - `409` — El viaje ya fue confirmado como exitoso.
+
+---
+
+### 7. Retomar pago de reserva
+
+```
+POST /api/reserva/resume
+```
+
+**Autenticación:** Requerida (`authenticate`)
+
+**Descripción:** Llama síncronamente a la API de pagos (`/api/payment/payment-intent/resume`) para crear una nueva sesión de checkout de Stripe. Devuelve el `stripe_url` directamente en la respuesta.
+
+**Body (JSON):**
+
+```json
+{
+  "id_reserva": "r1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "return_url": "https://frontend.com/pago"
+}
+```
+
+| Campo        | Tipo          | Requerido | Descripción             |
+| ------------ | ------------- | --------- | ----------------------- |
+| `id_reserva` | string (UUID) | Sí        | ID de la reserva        |
+| `return_url` | string        | No        | URL de retorno opcional |
+
+**Respuesta 200:**
+
+```json
+{
+  "status": "Success",
+  "message": "Pago reanudado correctamente",
+  "id_reserva": "r1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "stripe_url": "https://checkout.stripe.com/c/pay/cs_...",
+  "stripe_checkout_session_id": "cs_test_123"
+}
+```
+
+**Errores:**
+
+- `400` — Falta `id_reserva`, la reserva no está pendiente, o el trayecto es gratuito.
+- `401` — No autenticado.
+- `403` — No tienes permiso sobre esta reserva.
+- `404` — Reserva no encontrada.
+- `502` — Error en la API de pagos al crear la sesión de checkout.
 
 ---
 

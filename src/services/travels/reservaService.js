@@ -2,10 +2,12 @@
 import httpClient from "./httpClient";
 
 // Crear reserva — POST /api/reserva
-async function crearReserva(userId, trayectoId) {
+async function crearReserva(userId, trayectoId, returnUrl) {
+  const body = { user_id: userId, trayecto_id: trayectoId };
+  if (returnUrl) body.return_url = returnUrl;
   return httpClient.request("/api/reserva", {
     method: "POST",
-    body: JSON.stringify({ user_id: userId, trayecto_id: trayectoId }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -64,18 +66,12 @@ async function reclamarIncidencia(id, reason) {
 }
 
 // Retomar pago de reserva — POST /api/reserva/resume
-async function resumePago(
-  idReserva,
-  returnUrl = "https://app.youconnext.es/redirect?to=perfil",
-  refreshUrl = "https://app.youconnext.es/redirect?to=perfil",
-) {
+async function resumePago(idReserva, returnUrl) {
+  const body = { id_reserva: idReserva };
+  if (returnUrl) body.return_url = returnUrl;
   return httpClient.request("/api/reserva/resume", {
     method: "POST",
-    body: JSON.stringify({
-      id_reserva: idReserva,
-      return_url: returnUrl,
-      refresh_url: refreshUrl,
-    }),
+    body: JSON.stringify(body),
   });
 }
 

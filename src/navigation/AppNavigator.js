@@ -43,6 +43,7 @@ import {
   PerfilPublicoScreen,
   OpinionesScreen,
   ValorarPasajerosScreen,
+  ValorarViajeScreen,
   ChatListScreen,
   ChatDetailScreen,
   DirectChatScreen,
@@ -275,6 +276,7 @@ const AppNavigator = () => {
           name="ValorarPasajeros"
           component={ValorarPasajerosScreen}
         />
+        <Stack.Screen name="ValorarViaje" component={ValorarViajeScreen} />
         <Stack.Screen name="Chats" component={ChatListScreen} />
         <Stack.Screen name="ChatDetalle" component={ChatDetailScreen} />
         <Stack.Screen name="DirectChat" component={DirectChatScreen} />

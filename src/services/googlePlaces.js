@@ -35,7 +35,7 @@ export const autocompletePlaces = async ({
   location,
   radius,
   language = "es",
-  types = "geocode",
+  types = "geocode|establishment",
   components, // Asegúrate de pasarlo como string: ej. "country:es" o "country:es|country:mx"
 }) => {
   assertApiKey();

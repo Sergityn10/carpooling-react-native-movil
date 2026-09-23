@@ -198,21 +198,18 @@ const MisPlanesScreen = ({ navigation }) => {
     setRefreshingEventos(false);
   };
 
-  const handleRetomarPago = async (idReserva) => {
+  const handleRetomarPago = async (idReserva, tripId) => {
     setResumingPagoId(idReserva);
     try {
-      await reservaService.resumePago(
-        idReserva,
-        "https://app.youconnext.es/redirect?to=mis-planes",
-      );
-      const checkoutRes = await paymentService.getCheckoutLink(idReserva);
-      if (checkoutRes?.checkout_url) {
-        await Linking.openURL(checkoutRes.checkout_url);
+      const returnUrl = tripId
+        ? `https://app.youconnext.es/redirect?to=viaje-detalle&id=${tripId}`
+        : "https://app.youconnext.es/redirect?to=perfil";
+      const response = await reservaService.resumePago(idReserva, returnUrl);
+      console.log("[handleRetomarPago] Response:", JSON.stringify(response));
+      if (response?.stripe_url) {
+        await Linking.openURL(response.stripe_url);
       } else {
-        Alert.alert(
-          "Error",
-          checkoutRes?.message || "No se pudo retomar el pago.",
-        );
+        Alert.alert("Error", "No se pudo retomar el pago.");
       }
     } catch (error) {
       Alert.alert("Error", error?.message || "No se pudo retomar el pago.");
@@ -452,7 +449,7 @@ const MisPlanesScreen = ({ navigation }) => {
             </View>
             <TouchableOpacity
               style={styles.retornarPagoBtn}
-              onPress={() => handleRetomarPago(item.id_reserva)}
+              onPress={() => handleRetomarPago(item.id_reserva, item.id)}
               disabled={resumingPagoId === item.id_reserva}
               activeOpacity={0.8}
             >

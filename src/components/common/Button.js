@@ -96,15 +96,18 @@ const styles = StyleSheet.create({
     ...SHADOWS.small,
   },
   button_small: {
-    paddingVertical: SPACING.sm,
+    minHeight: 38,
+    paddingVertical: SPACING.xs,
     paddingHorizontal: SPACING.md,
   },
   button_medium: {
-    paddingVertical: SPACING.md,
+    minHeight: 46,
+    paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.lg,
   },
   button_large: {
-    paddingVertical: SPACING.lg,
+    minHeight: 54,
+    paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.xl,
   },
   buttonPrimary: {
@@ -132,15 +135,19 @@ const styles = StyleSheet.create({
   },
   text: {
     fontWeight: "600",
+    letterSpacing: 0.2,
   },
   text_small: {
     fontSize: FONTS.sm,
+    lineHeight: 20,
   },
   text_medium: {
     fontSize: FONTS.md,
+    lineHeight: 22,
   },
   text_large: {
     fontSize: FONTS.lg,
+    lineHeight: 24,
   },
   textFilled: {
     color: COLORS.white,

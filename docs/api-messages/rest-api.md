@@ -172,6 +172,51 @@ GET /api/chats/trip/:tripId?type=TRAYECTO
 
 ---
 
+### Desactivar chats por trip_id
+
+```
+PATCH /api/chats/trip/:tripId/disable?type=TRAYECTO
+```
+
+Desactiva todos los chats asociados a un `trip_id` estableciendo `status = "INACTIVE"`. Pensado para ser llamado cuando un trayecto/viaje/evento finaliza o se cancela.
+
+| Parámetro | Tipo          | Descripción                  |
+| --------- | ------------- | ---------------------------- |
+| `tripId`  | UUID (string) | ID del trayecto/viaje/evento |
+
+**Query params opcionales:**
+
+| Param  | Tipo   | Default | Descripción                                              |
+| ------ | ------ | ------- | -------------------------------------------------------- |
+| `type` | string | `ALL`   | Filtrar por tipo: `TRAYECTO`, `VIAJE`, `EVENT`. Si se omite, desactiva todos los tipos. |
+
+**Respuesta `200`:**
+
+```json
+{
+  "success": true,
+  "disabledCount": 1,
+  "trip_id": "uuid-del-trayecto",
+  "chat_type": "TRAYECTO"
+}
+```
+
+| Campo           | Tipo    | Descripción                                    |
+| --------------- | ------- | ---------------------------------------------- |
+| `success`       | boolean | `true` si la operación fue exitosa             |
+| `disabledCount` | number  | Número de chats desactivados                   |
+| `trip_id`       | string  | UUID del trayecto/viaje/evento                 |
+| `chat_type`     | string  | Tipo filtrado o `ALL` si no se especificó      |
+
+**Errores:**
+
+| Status | Causa                                         |
+| ------ | --------------------------------------------- |
+| `400`  | `tripId` inválido o `type` no válido          |
+| `404`  | No se encontraron chats para ese `trip_id`    |
+
+---
+
 ### Crear chat grupal
 
 ```
@@ -262,6 +307,57 @@ PATCH /api/chats/:chatId
 | `400`  | `chatId` inválido o no hay campos para actualizar |
 | `403`  | Solo el admin puede realizar esta acción          |
 | `404`  | Chat no encontrado                                |
+
+---
+
+### Activar / desactivar un chat
+
+```
+PATCH /api/chats/:chatId/status
+```
+
+| Parámetro | Tipo    | Descripción |
+| --------- | ------- | ----------- |
+| `chatId`  | integer | ID del chat |
+
+Cambia el estado del chat (`ACTIVE` / `INACTIVE`). Funciona tanto para chats grupales como individuales. En chats grupales solo el **admin** puede cambiar el estado; en chats directos, **cualquier participante**.
+
+**Body (JSON):**
+
+```json
+{
+  "status": "INACTIVE"
+}
+```
+
+| Campo    | Tipo   | Requerido | Descripción           |
+| -------- | ------ | --------- | --------------------- |
+| `status` | string | Sí        | `ACTIVE` o `INACTIVE` |
+
+**Respuesta `200`:**
+
+```json
+{
+  "chat": {
+    "id": 3,
+    "is_group": true,
+    "chat_type": "TRAYECTO",
+    "status": "INACTIVE",
+    "name": "Viaje a Madrid",
+    "trip_id": "uuid-del-trayecto",
+    "admin_id": "uuid-del-admin",
+    "created_at": "2026-06-29T10:00:00.000Z"
+  }
+}
+```
+
+**Errores:**
+
+| Status | Causa                                                  |
+| ------ | ------------------------------------------------------ |
+| `400`  | `chatId` inválido o `status` no es `ACTIVE`/`INACTIVE` |
+| `403`  | No eres participante, o no eres el admin (chat grupal) |
+| `404`  | Chat no encontrado                                     |
 
 ---
 
@@ -574,6 +670,135 @@ DELETE /api/chats/:chatId/messages/:messageId
 | `400`  | Parámetros inválidos                                           |
 | `403`  | No puedes eliminar este mensaje (solo el remitente o el admin) |
 | `404`  | Mensaje no encontrado                                          |
+
+---
+
+## Chats de eventos
+
+Los chats de eventos usan `chat_type = "EVENT"` y se asocian a un evento mediante `trip_id` (UUID genérico del evento). El flujo de vida es:
+
+### 1. Crear chat de evento
+
+```
+POST /api/chats
+```
+
+**Body:**
+
+```json
+{
+  "name": "Evento Madrid 2026",
+  "chat_type": "EVENT",
+  "trip_id": "uuid-del-evento",
+  "participant_ids": ["uuid-1", "uuid-2", "uuid-3"]
+}
+```
+
+Por defecto, el `admin_id` es el usuario autenticado. El chat se crea con `status = "ACTIVE"`.
+
+**Respuesta `201`:**
+
+```json
+{
+  "chat": {
+    "id": 5,
+    "is_group": true,
+    "chat_type": "EVENT",
+    "status": "ACTIVE",
+    "name": "Evento Madrid 2026",
+    "trip_id": "uuid-del-evento",
+    "admin_id": "uuid-del-admin",
+    "created_at": "2026-09-08T10:00:00.000Z"
+  }
+}
+```
+
+### 2. Obtener chat de evento
+
+```
+GET /api/chats/trip/:tripId?type=EVENT
+```
+
+Devuelve el chat grupal asociado al evento. Requiere ser participante del chat.
+
+**Ejemplo:**
+
+```bash
+curl http://localhost:4002/api/chats/trip/5504c3ee-3e09-4aa6-a46a-546cad1ccdd3?type=EVENT \
+  -H "Authorization: Bearer <JWT>"
+```
+
+### 3. Añadir participantes al evento
+
+```
+POST /api/chats/:chatId/participants
+```
+
+**Body:**
+
+```json
+{
+  "user_id": "uuid-del-nuevo-participante"
+}
+```
+
+Solo el admin del chat puede añadir participantes.
+
+### 4. Desactivar chat cuando el evento finaliza
+
+```
+PATCH /api/chats/trip/:tripId/disable?type=EVENT
+```
+
+Desactiva el chat del evento poniendo `status = "INACTIVE"`. Pensado para llamarse desde el microservicio de eventos cuando un evento termina.
+
+**Ejemplo:**
+
+```bash
+curl -X PATCH http://localhost:4002/api/chats/trip/5504c3ee-3e09-4aa6-a46a-546cad1ccdd3/disable?type=EVENT \
+  -H "Authorization: Bearer <JWT>"
+```
+
+**Respuesta `200`:**
+
+```json
+{
+  "success": true,
+  "disabledCount": 1,
+  "trip_id": "5504c3ee-3e09-4aa6-a46a-546cad1ccdd3",
+  "chat_type": "EVENT"
+}
+```
+
+### 5. Reactivar chat (si el evento se reactiva)
+
+```
+PATCH /api/chats/:chatId/status
+```
+
+**Body:**
+
+```json
+{
+  "status": "ACTIVE"
+}
+```
+
+### Resumen del flujo
+
+```
+Crear evento → POST /api/chats (chat_type=EVENT)
+   ↓
+Obtener chat   → GET /api/chats/trip/:tripId?type=EVENT
+   ↓
+Añadir users   → POST /api/chats/:chatId/participants
+   ↓
+Evento termina → PATCH /api/chats/trip/:tripId/disable?type=EVENT
+   ↓
+Reactivar      → PATCH /api/chats/:chatId/status { status: ACTIVE }
+```
+
+> **Nota:** Los chats de eventos funcionan igual que los de trayectos o viajes. La única diferencia es el valor de `chat_type`. Todos los endpoints de participantes, mensajes y WebSocket aplican igual.
 
 ---
 

@@ -10,6 +10,7 @@ import {
   ScrollView,
   Image,
   Linking,
+  StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
@@ -19,7 +20,6 @@ import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../constants";
 import { Button, GoogleIcon } from "../components";
 
 const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-console.log("[AuthScreen] webClientId:", GOOGLE_WEB_CLIENT_ID);
 
 GoogleSignin.configure({
   webClientId: GOOGLE_WEB_CLIENT_ID,
@@ -29,15 +29,12 @@ GoogleSignin.configure({
 const AuthScreen = ({ navigation }) => {
   const { loginGoogleNative } = useUser();
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleAvailable, setGoogleAvailable] = useState(true);
 
   useEffect(() => {
     GoogleSignin.hasPlayServices()
-      .then((hasServices) => {
-        if (!hasServices) {
-          console.warn("Google Play Services no disponibles");
-        }
-      })
-      .catch((err) => console.warn("Error checking Play Services:", err));
+      .then((hasServices) => setGoogleAvailable(!!hasServices))
+      .catch(() => setGoogleAvailable(false));
   }, []);
 
   const handleGoogleAuth = async () => {
@@ -59,18 +56,11 @@ const AuthScreen = ({ navigation }) => {
 
       await loginGoogleNative(idToken, "login");
     } catch (error) {
-      console.log(
-        "[AuthScreen] Google Sign-In error:",
-        JSON.stringify({
-          code: error.code,
-          message: error.message,
-          description: error.description,
-        }),
-      );
+      // 12501 = el usuario canceló el diálogo de Google, no es un error real
       if (error.code !== "12501") {
         Alert.alert(
-          "Error",
-          error.message || "No se pudo completar la autenticacion con Google.",
+          "No se pudo continuar",
+          error.message || "No se pudo completar la autenticación con Google.",
         );
       }
     } finally {
@@ -80,6 +70,7 @@ const AuthScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -95,7 +86,8 @@ const AuthScreen = ({ navigation }) => {
           </View>
           <Text style={styles.appName}>YouConnext</Text>
           <Text style={styles.tagline}>
-            Comparte viajes, ahorra energia, conecta personas
+            Comparte coche con tu comunidad. Ahorra en cada viaje y reduce tu
+            huella de carbono.
           </Text>
         </View>
 
@@ -124,7 +116,7 @@ const AuthScreen = ({ navigation }) => {
         {/* Botones principales */}
         <View style={styles.actionsContainer}>
           <Button
-            title="Iniciar sesion"
+            title="Iniciar sesión"
             onPress={() => navigation.navigate("Login")}
             variant="primary"
             size="large"
@@ -142,26 +134,36 @@ const AuthScreen = ({ navigation }) => {
           {/* Separador */}
           <View style={styles.dividerContainer}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>o continua con</Text>
+            <Text style={styles.dividerText}>o continúa con</Text>
             <View style={styles.dividerLine} />
           </View>
 
           {/* Boton Google */}
-          <TouchableOpacity
-            style={styles.googleButton}
-            onPress={handleGoogleAuth}
-            disabled={googleLoading}
-            activeOpacity={0.8}
-          >
-            {googleLoading ? (
-              <ActivityIndicator size="small" color={COLORS.gray700} />
-            ) : (
-              <>
-                <GoogleIcon size={24} />
-                <Text style={styles.googleButtonText}>Google</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          {googleAvailable && (
+            <TouchableOpacity
+              style={[
+                styles.googleButton,
+                googleLoading && styles.googleButtonLoading,
+              ]}
+              onPress={handleGoogleAuth}
+              disabled={googleLoading}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Continuar con Google"
+              accessibilityState={{ disabled: googleLoading }}
+            >
+              {googleLoading ? (
+                <ActivityIndicator size="small" color={COLORS.gray700} />
+              ) : (
+                <>
+                  <GoogleIcon size={22} />
+                  <Text style={styles.googleButtonText}>
+                    Continuar con Google
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Footer */}
@@ -200,9 +202,10 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    justifyContent: "center",
     paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.xxl,
-    paddingBottom: SPACING.xxl,
+    paddingTop: SPACING.xl,
+    paddingBottom: SPACING.lg,
   },
   heroSection: {
     alignItems: "center",
@@ -216,16 +219,19 @@ const styles = StyleSheet.create({
     height: 120,
   },
   appName: {
-    fontSize: FONTS.title,
-    fontWeight: "bold",
-    color: COLORS.gray800,
+    fontSize: FONTS.xxxl,
+    lineHeight: 38,
+    fontWeight: "700",
+    letterSpacing: -0.5,
+    color: COLORS.gray900,
     marginBottom: SPACING.sm,
   },
   tagline: {
     fontSize: FONTS.md,
+    lineHeight: 23,
     color: COLORS.gray500,
     textAlign: "center",
-    paddingHorizontal: SPACING.xl,
+    paddingHorizontal: SPACING.md,
   },
   featuresRow: {
     flexDirection: "row",
@@ -250,6 +256,7 @@ const styles = StyleSheet.create({
   },
   featureText: {
     fontSize: FONTS.xs,
+    lineHeight: 16,
     fontWeight: "600",
     color: COLORS.gray700,
   },
@@ -279,15 +286,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    minHeight: 54,
     backgroundColor: COLORS.white,
     borderRadius: RADIUS.md,
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.sm,
     borderWidth: 1.5,
     borderColor: COLORS.gray200,
-    ...SHADOWS.small,
+  },
+  googleButtonLoading: {
+    opacity: 0.7,
   },
   googleButtonText: {
     fontSize: FONTS.md,
+    lineHeight: 22,
     fontWeight: "600",
     color: COLORS.gray700,
     marginLeft: SPACING.sm,
@@ -298,7 +309,7 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: FONTS.xs,
-    color: COLORS.gray400,
+    color: COLORS.gray500,
     textAlign: "center",
     lineHeight: 18,
   },

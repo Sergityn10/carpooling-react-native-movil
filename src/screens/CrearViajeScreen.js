@@ -257,34 +257,33 @@ const CrearViajeScreen = ({ navigation, route }) => {
     : 7;
 
   const [monederoNoConfigurado, setMonederoNoConfigurado] = useState(
-    user?.monedero?.disponible !== true ||
-      user?.monedero?.config?.wallet_enabled === false,
+    user?.monedero?.disponible !== true,
   );
 
   // Verificar estado real de Stripe Connect al llegar al step de precio,
   // igual que hace la sección del Monedero en el perfil
-  useEffect(() => {
-    if (step !== STEPS.PRECIO) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await paymentService.getStripeConnect();
-        if (cancelled) return;
-        const acct = res?.account;
-        const stripeListo =
-          acct?.charges_enabled === true && acct?.details_submitted === true;
-        const walletEnabled = user?.monedero?.config?.wallet_enabled !== false;
-        setMonederoNoConfigurado(!stripeListo || !walletEnabled);
-      } catch (err) {
-        if (!cancelled) {
-          console.warn("No se pudo verificar Stripe Connect:", err.message);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [step]);
+  // useEffect(() => {
+  //   if (step !== STEPS.PRECIO) return;
+  //   let cancelled = false;
+  //   (async () => {
+  //     try {
+  //       const res = await paymentService.getStripeConnect();
+  //       if (cancelled) return;
+  //       const acct = res?.account;
+  //       const stripeListo =
+  //         acct?.charges_enabled === true && acct?.details_submitted === true;
+  //       const walletEnabled = user?.monedero?.config?.wallet_enabled !== false;
+  //       setMonederoNoConfigurado(!stripeListo || !walletEnabled);
+  //     } catch (err) {
+  //       if (!cancelled) {
+  //         console.warn("No se pudo verificar Stripe Connect:", err.message);
+  //       }
+  //     }
+  //   })();
+  //   return () => {
+  //     cancelled = true;
+  //   };
+  // }, [step]);
 
   const recommendedPrice = rutaInfo
     ? calculateRecommendedPrice(rutaInfo.distanceMeters)
@@ -596,6 +595,7 @@ const CrearViajeScreen = ({ navigation, route }) => {
             origen_lng: Number(origenPlace?.longitude),
             destino_lat: eventoLat,
             destino_lng: eventoLng,
+            distancia: rutaInfo?.distanceMeters,
             fecha: fechaApi,
             hora: horaApi,
             plazas: plazasNum,
@@ -614,6 +614,7 @@ const CrearViajeScreen = ({ navigation, route }) => {
               destinoPlace?.address || destinoPlace?.name || destinoTexto,
             destino_lat: Number(destinoPlace?.latitude),
             destino_lng: Number(destinoPlace?.longitude),
+            distancia: rutaInfo?.distanceMeters,
             fecha: fechaApi,
             hora: horaApi,
             plazas: plazasNum,
@@ -640,7 +641,12 @@ const CrearViajeScreen = ({ navigation, route }) => {
         const response = await crearViajeRapido({
           conductorId: user.id,
           origen: origenPlace?.address || origenPlace?.name || origenTexto,
+          origenLat: Number(origenPlace?.latitude),
+          origenLng: Number(origenPlace?.longitude),
           destino: destinoPlace?.address || destinoPlace?.name || destinoTexto,
+          destinoLat: Number(destinoPlace?.latitude),
+          destinoLng: Number(destinoPlace?.longitude),
+          distanciaMetros: rutaInfo?.distanceMeters,
           fecha: fechaApi,
           hora: horaApi,
           plazas: plazasNum,

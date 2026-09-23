@@ -2,7 +2,7 @@
   "expo": {
     "name": "YouConnextApp",
     "slug": "YouConnextApp",
-    "version": "1.0.18",
+    "version": "1.0.19",
     "platforms": ["ios", "android"],
     "orientation": "portrait",
     "icon": "./assets/logo-con-bg-ajustado.png",

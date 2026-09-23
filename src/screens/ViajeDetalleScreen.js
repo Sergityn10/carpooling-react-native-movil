@@ -228,37 +228,22 @@ const ViajeDetalleScreen = ({ route, navigation }) => {
     }
     setReserving(true);
     try {
-      const response = await reservaService.crearReserva(user.id, viaje.id);
+      const returnUrl = `https://app.youconnext.es/redirect?to=viaje-detalle&id=${viaje.id}`;
+      const response = await reservaService.crearReserva(
+        user.id,
+        viaje.id,
+        returnUrl,
+      );
       const idReserva =
         response?.reserva?.id || response?.id_reserva || response?.id;
       if (idReserva) {
-        try {
-          const checkoutRes = await paymentService.getCheckoutLink(idReserva);
-          const checkoutUrl = checkoutRes?.checkout_url;
-          if (checkoutUrl) {
-            Alert.alert(
-              "Reserva creada",
-              "Serás redirigido a la pasarela de pago para completar tu reserva.",
-              [
-                {
-                  text: "Ir a pagar",
-                  onPress: () => {
-                    Linking.openURL(checkoutUrl);
-                  },
-                },
-                { text: "Más tarde" },
-              ],
-            );
-          } else {
-            Alert.alert(
-              "Reserva creada",
-              response?.message || "Tu reserva se ha creado correctamente.",
-            );
-          }
-        } catch (checkoutErr) {
+        // Si el trayecto es de pago, la API devuelve stripe_url directamente
+        if (response?.stripe_url) {
+          await Linking.openURL(response.stripe_url);
+        } else {
           Alert.alert(
             "Reserva creada",
-            "Tu reserva se ha creado correctamente, pero no se pudo obtener el link de pago.",
+            response?.message || "Tu reserva se ha creado correctamente.",
           );
         }
       } else {
@@ -410,20 +395,18 @@ const ViajeDetalleScreen = ({ route, navigation }) => {
     if (!reservaExistente?.id_reserva) return;
     setReserving(true);
     try {
-      await reservaService.resumePago(
+      const returnUrl = viaje?.id
+        ? `https://app.youconnext.es/redirect?to=viaje-detalle&id=${viaje.id}`
+        : "https://app.youconnext.es/redirect?to=perfil";
+      const response = await reservaService.resumePago(
         reservaExistente.id_reserva,
-        "https://app.youconnext.es/redirect?to=perfil",
+        returnUrl,
       );
-      const checkoutRes = await paymentService.getCheckoutLink(
-        reservaExistente.id_reserva,
-      );
-      if (checkoutRes?.checkout_url) {
-        Linking.openURL(checkoutRes.checkout_url);
+      console.log("[handleRetornarPago] Response:", JSON.stringify(response));
+      if (response?.stripe_url) {
+        await Linking.openURL(response.stripe_url);
       } else {
-        Alert.alert(
-          "Error",
-          checkoutRes?.message || "No se pudo retomar el pago.",
-        );
+        Alert.alert("Error", "No se pudo retomar el pago.");
       }
     } catch (error) {
       Alert.alert("Error", error?.message || "No se pudo retomar el pago.");

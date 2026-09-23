@@ -18,6 +18,7 @@ export { default as MisPlanesScreen } from "./MisPlanesScreen";
 export { default as PerfilPublicoScreen } from "./PerfilPublicoScreen";
 export { default as OpinionesScreen } from "./OpinionesScreen";
 export { default as ValorarPasajerosScreen } from "./ValorarPasajerosScreen";
+export { default as ValorarViajeScreen } from "./ValorarViajeScreen";
 export { default as ChatListScreen } from "./ChatListScreen";
 export { default as ChatDetailScreen } from "./ChatDetailScreen";
 export { default as DirectChatScreen } from "./DirectChatScreen";

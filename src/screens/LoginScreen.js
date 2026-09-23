@@ -1,5 +1,5 @@
 // YouConnext - LoginScreen
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -12,16 +12,23 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
-import { Mail, Lock, ChevronLeft, Eye, EyeOff } from "lucide-react-native";
+import {
+  Mail,
+  Lock,
+  ChevronLeft,
+  Eye,
+  EyeOff,
+  AlertCircle,
+} from "lucide-react-native";
 import { useUser } from "../context/UserContext";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../constants";
 import { Button, GoogleIcon } from "../components";
 
 const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-console.log("[LoginScreen] webClientId:", GOOGLE_WEB_CLIENT_ID);
 
 GoogleSignin.configure({
   webClientId: GOOGLE_WEB_CLIENT_ID,
@@ -36,39 +43,60 @@ const LoginScreen = ({ navigation }) => {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
+  const [focusedField, setFocusedField] = useState(null);
+  const [formError, setFormError] = useState(null);
+  const [googleAvailable, setGoogleAvailable] = useState(true);
+
+  const passwordRef = useRef(null);
 
   useEffect(() => {
     GoogleSignin.hasPlayServices()
-      .then((hasServices) => {
-        if (!hasServices) {
-          console.warn("Google Play Services no disponibles");
-        }
-      })
-      .catch((err) => console.warn("Error checking Play Services:", err));
+      .then((hasServices) => setGoogleAvailable(!!hasServices))
+      .catch(() => setGoogleAvailable(false));
   }, []);
 
+  const getFieldError = (field, value) => {
+    if (field === "email") {
+      if (!value.trim()) return "El email es requerido";
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()))
+        return "Email no válido";
+    }
+    if (field === "password") {
+      if (!value.trim()) return "La contraseña es requerida";
+    }
+    return undefined;
+  };
+
+  const handleBlur = (field, value) => {
+    setFocusedField(null);
+    const error = getFieldError(field, value);
+    if (error) setErrors((prev) => ({ ...prev, [field]: error }));
+  };
+
   const validate = () => {
-    const newErrors = {};
-    if (!email.trim()) {
-      newErrors.email = "El email es requerido";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      newErrors.email = "Email no válido";
-    }
-    if (!password.trim()) {
-      newErrors.password = "La contraseña es requerida";
-    }
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const newErrors = {
+      email: getFieldError("email", email),
+      password: getFieldError("password", password),
+    };
+    const cleaned = Object.fromEntries(
+      Object.entries(newErrors).filter(([, v]) => v),
+    );
+    setErrors(cleaned);
+    return Object.keys(cleaned).length === 0;
   };
 
   const handleSubmit = async () => {
+    setFormError(null);
     if (!validate()) return;
 
     setLoading(true);
     try {
       await iniciarSesion(email.trim(), password);
     } catch (error) {
-      Alert.alert("Error", error.message || "No se pudo iniciar sesión.");
+      setFormError(
+        error.message ||
+          "No se pudo iniciar sesión. Revisa tu email y contraseña.",
+      );
     } finally {
       setLoading(false);
     }
@@ -114,8 +142,9 @@ const LoginScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.flex}
       >
         {/* Header con botón back */}
@@ -124,6 +153,9 @@ const LoginScreen = ({ navigation }) => {
             style={styles.backButton}
             onPress={() => navigation.goBack()}
             activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel="Volver"
           >
             <ChevronLeft size={24} color={COLORS.gray700} strokeWidth={2} />
           </TouchableOpacity>
@@ -145,6 +177,14 @@ const LoginScreen = ({ navigation }) => {
             <Text style={styles.subtitle}>Inicia sesión para continuar</Text>
           </View>
 
+          {/* Error global del formulario */}
+          {formError && (
+            <View style={styles.formErrorBanner} accessibilityRole="alert">
+              <AlertCircle size={18} color={COLORS.error} strokeWidth={2.2} />
+              <Text style={styles.formErrorText}>{formError}</Text>
+            </View>
+          )}
+
           {/* Formulario */}
           <View style={styles.form}>
             <View style={styles.inputGroup}>
@@ -152,12 +192,19 @@ const LoginScreen = ({ navigation }) => {
               <View
                 style={[
                   styles.inputWrapper,
+                  focusedField === "email" && styles.inputWrapperFocused,
                   errors.email && styles.inputWrapperError,
                 ]}
               >
                 <Mail
                   size={20}
-                  color={errors.email ? COLORS.error : COLORS.gray400}
+                  color={
+                    errors.email
+                      ? COLORS.error
+                      : focusedField === "email"
+                        ? COLORS.primary
+                        : COLORS.gray400
+                  }
                   strokeWidth={2}
                 />
                 <TextInput
@@ -169,10 +216,19 @@ const LoginScreen = ({ navigation }) => {
                     setEmail(text);
                     if (errors.email)
                       setErrors({ ...errors, email: undefined });
+                    if (formError) setFormError(null);
                   }}
+                  onFocus={() => setFocusedField("email")}
+                  onBlur={() => handleBlur("email", email)}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
+                  autoComplete="email"
+                  textContentType="emailAddress"
+                  returnKeyType="next"
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  submitBehavior="submit"
+                  accessibilityLabel="Email"
                 />
               </View>
               {errors.email && (
@@ -185,15 +241,23 @@ const LoginScreen = ({ navigation }) => {
               <View
                 style={[
                   styles.inputWrapper,
+                  focusedField === "password" && styles.inputWrapperFocused,
                   errors.password && styles.inputWrapperError,
                 ]}
               >
                 <Lock
                   size={20}
-                  color={errors.password ? COLORS.error : COLORS.gray400}
+                  color={
+                    errors.password
+                      ? COLORS.error
+                      : focusedField === "password"
+                        ? COLORS.primary
+                        : COLORS.gray400
+                  }
                   strokeWidth={2}
                 />
                 <TextInput
+                  ref={passwordRef}
                   style={styles.input}
                   placeholder="Tu contraseña"
                   placeholderTextColor={COLORS.gray400}
@@ -202,19 +266,32 @@ const LoginScreen = ({ navigation }) => {
                     setPassword(text);
                     if (errors.password)
                       setErrors({ ...errors, password: undefined });
+                    if (formError) setFormError(null);
                   }}
+                  onFocus={() => setFocusedField("password")}
+                  onBlur={() => handleBlur("password", password)}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  autoComplete="current-password"
+                  textContentType="password"
+                  returnKeyType="go"
+                  onSubmitEditing={handleSubmit}
+                  accessibilityLabel="Contraseña"
                 />
                 <TouchableOpacity
                   onPress={() => setShowPassword(!showPassword)}
                   activeOpacity={0.7}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
+                  }
                 >
                   {showPassword ? (
-                    <EyeOff size={20} color={COLORS.gray400} strokeWidth={2} />
+                    <EyeOff size={20} color={COLORS.gray500} strokeWidth={2} />
                   ) : (
-                    <Eye size={20} color={COLORS.gray400} strokeWidth={2} />
+                    <Eye size={20} color={COLORS.gray500} strokeWidth={2} />
                   )}
                 </TouchableOpacity>
               </View>
@@ -241,23 +318,31 @@ const LoginScreen = ({ navigation }) => {
           </View>
 
           {/* Botón Google */}
-          <TouchableOpacity
-            style={styles.googleButton}
-            onPress={handleGoogleAuth}
-            disabled={googleLoading || loading}
-            activeOpacity={0.8}
-          >
-            {googleLoading ? (
-              <ActivityIndicator size="small" color={COLORS.gray700} />
-            ) : (
-              <>
-                <GoogleIcon size={24} />
-                <Text style={styles.googleButtonText}>
-                  Continuar con Google
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
+          {googleAvailable && (
+            <TouchableOpacity
+              style={[
+                styles.googleButton,
+                (googleLoading || loading) && styles.googleButtonLoading,
+              ]}
+              onPress={handleGoogleAuth}
+              disabled={googleLoading || loading}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Continuar con Google"
+              accessibilityState={{ disabled: googleLoading || loading }}
+            >
+              {googleLoading ? (
+                <ActivityIndicator size="small" color={COLORS.gray700} />
+              ) : (
+                <>
+                  <GoogleIcon size={22} />
+                  <Text style={styles.googleButtonText}>
+                    Continuar con Google
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
 
           {/* Link a registro */}
           <View style={styles.toggleContainer}>
@@ -314,14 +399,34 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: FONTS.xxl,
-    fontWeight: "bold",
-    color: COLORS.gray800,
+    lineHeight: 30,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+    color: COLORS.gray900,
     marginBottom: SPACING.xs,
   },
   subtitle: {
     fontSize: FONTS.md,
+    lineHeight: 23,
     color: COLORS.gray500,
     textAlign: "center",
+  },
+  formErrorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    backgroundColor: COLORS.errorSoft,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm + 2,
+    marginBottom: SPACING.md,
+  },
+  formErrorText: {
+    flex: 1,
+    fontSize: FONTS.sm,
+    lineHeight: 20,
+    color: COLORS.error,
+    fontWeight: "500",
   },
   form: {
     width: "100%",
@@ -331,33 +436,41 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: FONTS.sm,
-    color: COLORS.gray600,
+    lineHeight: 20,
+    color: COLORS.gray700,
     marginBottom: SPACING.xs,
     fontWeight: "600",
   },
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
+    minHeight: 54,
     backgroundColor: COLORS.white,
     borderRadius: RADIUS.md,
     paddingHorizontal: SPACING.md,
     borderWidth: 1.5,
     borderColor: COLORS.gray200,
-    ...SHADOWS.small,
+  },
+  inputWrapperFocused: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.white,
   },
   inputWrapperError: {
     borderColor: COLORS.error,
+    backgroundColor: COLORS.errorSoft,
   },
   input: {
     flex: 1,
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.sm,
     fontSize: FONTS.md,
-    color: COLORS.gray800,
+    color: COLORS.gray900,
   },
   errorText: {
     fontSize: FONTS.xs,
+    lineHeight: 16,
     color: COLORS.error,
+    fontWeight: "500",
     marginTop: SPACING.xs,
     marginLeft: SPACING.xs,
   },
@@ -384,15 +497,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    minHeight: 54,
     backgroundColor: COLORS.white,
     borderRadius: RADIUS.md,
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.sm,
     borderWidth: 1.5,
     borderColor: COLORS.gray200,
-    ...SHADOWS.small,
+  },
+  googleButtonLoading: {
+    opacity: 0.7,
   },
   googleButtonText: {
     fontSize: FONTS.md,
+    lineHeight: 22,
     fontWeight: "600",
     color: COLORS.gray700,
     marginLeft: SPACING.sm,
@@ -405,12 +522,14 @@ const styles = StyleSheet.create({
   },
   toggleText: {
     fontSize: FONTS.md,
+    lineHeight: 22,
     color: COLORS.gray500,
   },
   toggleLink: {
     fontSize: FONTS.md,
+    lineHeight: 22,
     color: COLORS.primary,
-    fontWeight: "bold",
+    fontWeight: "700",
     marginLeft: SPACING.xs,
   },
 });

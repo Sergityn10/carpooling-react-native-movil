@@ -243,10 +243,6 @@ const MiViajeScreen = ({ route, navigation }) => {
       }
 
       await trayectoService.registrarLlegadaDestino(viaje.id, { lat, lng });
-      Alert.alert(
-        "Llegada registrada",
-        "Has confirmado que has llegado a tu destino.",
-      );
       setLlegadaRegistrada(true);
       setEstadoPasajero((prev) => ({
         ...prev,
@@ -258,6 +254,8 @@ const MiViajeScreen = ({ route, navigation }) => {
       } catch (e) {
         console.warn("No se pudo detener tracking de pasajero:", e?.message);
       }
+      // Redirigir a la pantalla de valoración
+      navigation.replace("ValorarViaje", { viaje });
     } catch (error) {
       Alert.alert(
         "Error",
@@ -272,20 +270,18 @@ const MiViajeScreen = ({ route, navigation }) => {
     if (!reservaExistente?.id_reserva) return;
     setReserving(true);
     try {
-      await reservaService.resumePago(
+      const returnUrl = viaje?.id
+        ? `https://app.youconnext.es/redirect?to=viaje-detalle&id=${viaje.id}`
+        : "https://app.youconnext.es/redirect?to=perfil";
+      const response = await reservaService.resumePago(
         reservaExistente.id_reserva,
-        "https://app.youconnext.es/redirect?to=perfil",
+        returnUrl,
       );
-      const checkoutRes = await paymentService.getCheckoutLink(
-        reservaExistente.id_reserva,
-      );
-      if (checkoutRes?.checkout_url) {
-        Linking.openURL(checkoutRes.checkout_url);
+      console.log("[handleRetornarPago] Response:", JSON.stringify(response));
+      if (response?.stripe_url) {
+        await Linking.openURL(response.stripe_url);
       } else {
-        Alert.alert(
-          "Error",
-          checkoutRes?.message || "No se pudo retomar el pago.",
-        );
+        Alert.alert("Error", "No se pudo retomar el pago.");
       }
     } catch (error) {
       Alert.alert("Error", error?.message || "No se pudo retomar el pago.");
