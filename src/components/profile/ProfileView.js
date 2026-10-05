@@ -5,6 +5,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Calendar } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useUser } from "../../context/UserContext";
+import { usePermission } from "../../context/PermissionContext";
+import { PERMISSION_TYPES } from "../../constants/permissionsConfig";
 import { trayectoService } from "../../services/travels/trayectoService";
 import { reservaService } from "../../services/travels/reservaService";
 import { carService } from "../../services/carService";
@@ -18,6 +20,7 @@ import HistorialSection from "./sections/HistorialSection";
 import VehiculosSection from "./sections/VehiculosSection";
 import MonederoSection from "./sections/MonederoSection";
 import BonoEnergeticoSection from "./sections/BonoEnergeticoSection";
+import PermisosPrivacidadSection from "./sections/PermisosPrivacidadSection";
 
 const ProfileView = ({
   user,
@@ -26,6 +29,7 @@ const ProfileView = ({
   initialSubView = "menu",
 }) => {
   const { actualizarUsuario } = useUser();
+  const { requestPermissionWithDisclosure } = usePermission();
   const [currentSubView, setCurrentSubView] = useState(initialSubView);
   const [editingSection, setEditingSection] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -654,13 +658,17 @@ const ProfileView = ({
 
   const handlePickImage = async () => {
     try {
-      const permissionResult =
-        await ImagePicker.requestMediaLibraryPermissionsAsync(false);
-      if (permissionResult.status !== "granted") {
-        Alert.alert(
-          "Permisos necesarios",
-          "Necesitas conceder acceso a la galería para cambiar tu foto de perfil.",
-        );
+      const permissionResult = await requestPermissionWithDisclosure(
+        PERMISSION_TYPES.MEDIA_LIBRARY,
+        { forcePrompt: true },
+      );
+      if (!permissionResult.granted) {
+        if (!permissionResult.userCancelled) {
+          Alert.alert(
+            "Permisos necesarios",
+            "Necesitas conceder acceso a la galería para cambiar tu foto de perfil.",
+          );
+        }
         return;
       }
 
@@ -1002,6 +1010,19 @@ const ProfileView = ({
             onRetryWallet={fetchWalletData}
             onBack={handleBackToMenu}
           />
+        );
+      case "permisos":
+        return (
+          <ScrollView
+            style={styles.sectionContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <SubViewHeader
+              title="Permisos y Privacidad"
+              onBack={handleBackToMenu}
+            />
+            <PermisosPrivacidadSection />
+          </ScrollView>
         );
       default:
         return (

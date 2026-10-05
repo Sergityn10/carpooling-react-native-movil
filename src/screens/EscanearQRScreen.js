@@ -20,6 +20,8 @@ import {
 } from "lucide-react-native";
 import { useUser } from "../context/UserContext";
 import { useViaje } from "../context/ViajeContext";
+import { usePermission } from "../context/PermissionContext";
+import { PERMISSION_TYPES } from "../constants/permissionsConfig";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../constants";
 import { Button } from "../components";
 import * as Location from "expo-location";
@@ -27,6 +29,7 @@ import * as Location from "expo-location";
 const EscanearQRScreen = ({ navigation }) => {
   const { user } = useUser();
   const { unirseViajeQR } = useViaje();
+  const { requestPermissionWithDisclosure } = usePermission();
 
   const [hasPermission, setHasPermission] = useState(null);
   const [scanned, setScanned] = useState(false);
@@ -35,10 +38,29 @@ const EscanearQRScreen = ({ navigation }) => {
 
   useEffect(() => {
     (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === "granted");
+      const res = await requestPermissionWithDisclosure(
+        PERMISSION_TYPES.CAMERA,
+        { forcePrompt: false },
+      );
+      if (res.granted) {
+        setHasPermission(true);
+        setModoManual(false);
+      } else {
+        setHasPermission(false);
+        setModoManual(true);
+      }
     })();
   }, []);
+
+  const handleRequestCamera = async () => {
+    const res = await requestPermissionWithDisclosure(PERMISSION_TYPES.CAMERA, {
+      forcePrompt: true,
+    });
+    if (res.granted) {
+      setHasPermission(true);
+      setModoManual(false);
+    }
+  };
 
   const handleBarCodeScanned = async ({ type, data }) => {
     setScanned(true);
@@ -59,7 +81,7 @@ const EscanearQRScreen = ({ navigation }) => {
       let lat = 0;
       let lng = 0;
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
+        const { status } = await Location.getForegroundPermissionsAsync();
         if (status === "granted") {
           const location = await Location.getCurrentPositionAsync({
             accuracy: Location.Accuracy.High,
@@ -109,7 +131,7 @@ const EscanearQRScreen = ({ navigation }) => {
       let lat = 0;
       let lng = 0;
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
+        const { status } = await Location.getForegroundPermissionsAsync();
         if (status === "granted") {
           const location = await Location.getCurrentPositionAsync({
             accuracy: Location.Accuracy.High,
@@ -189,7 +211,13 @@ const EscanearQRScreen = ({ navigation }) => {
         <Text style={styles.title}>Escanear QR</Text>
         <TouchableOpacity
           style={styles.toggleIconButton}
-          onPress={() => setModoManual(!modoManual)}
+          onPress={() => {
+            if (modoManual) {
+              handleRequestCamera();
+            } else {
+              setModoManual(true);
+            }
+          }}
         >
           {modoManual ? (
             <CameraIcon size={22} color={COLORS.primary} strokeWidth={2.5} />

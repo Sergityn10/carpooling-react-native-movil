@@ -1,4 +1,4 @@
-// YouConnext - Event Detail Screen
+// YouConnext - Event Detail Screen (Pro UI/UX Redesign)
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
@@ -25,6 +25,7 @@ import {
 } from "react-native-safe-area-context";
 import {
   ChevronLeft,
+  ChevronRight,
   Share2,
   ChevronUp,
   UserPlus,
@@ -38,10 +39,13 @@ import {
   SlidersHorizontal,
   X,
   LocateFixed,
+  Car,
+  CheckCircle2,
+  Sparkles,
 } from "lucide-react-native";
 import * as Location from "expo-location";
 import MapView, { Marker } from "react-native-maps";
-import { COLORS, SPACING, RADIUS, FONTS } from "../constants";
+import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../constants";
 import { eventService } from "../services/eventService";
 import { trayectoService } from "../services/travels/trayectoService";
 import { usuarioService } from "../services/usuarioService";
@@ -55,17 +59,20 @@ import {
   EventDescription,
   EventLinks,
   EventTripsSection,
+  EventAllTripsModal,
 } from "../components";
 import { messageService } from "../services/messages/messageService";
 
 const SCREEN_HEIGHT = Dimensions.get("window").height;
-const COLLAPSED_HEIGHT = Math.round(SCREEN_HEIGHT * 0.32);
+const COLLAPSED_HEIGHT = Math.round(SCREEN_HEIGHT * 0.34);
 const EXPANDED_HEIGHT = Math.round(SCREEN_HEIGHT * 0.9);
 
 const EventDetailScreen = ({ route, navigation }) => {
-  const { eventId, event: passedEvent } = route.params || {};
+  const { eventId: paramEventId, id: paramId, event: passedEvent } =
+    route.params || {};
+  const eventId = paramEventId || paramId || passedEvent?.id;
   const [event, setEvent] = useState(passedEvent || null);
-  const [loading, setLoading] = useState(!passedEvent);
+  const [loading, setLoading] = useState(!passedEvent && Boolean(eventId));
   const [error, setError] = useState(null);
   const [trayectosIda, setTrayectosIda] = useState([]);
   const [trayectosVuelta, setTrayectosVuelta] = useState([]);
@@ -79,42 +86,71 @@ const EventDetailScreen = ({ route, navigation }) => {
   const [activeTripTab, setActiveTripTab] = useState("ida");
   const [selectedDate, setSelectedDate] = useState(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [filterMode, setFilterMode] = useState("todos"); // "todos" | "cerca" | "ciudad"
-  const [ciudadInput, setCiudadInput] = useState("");
-  const [nearbyTrips, setNearbyTrips] = useState(null); // null = no filtrado, [] = filtrado vacío
+  const [showAllTripsModal, setShowAllTripsModal] = useState(false);
+  const [allTripsModalTab, setAllTripsModalTab] = useState("ida");
+  const [nearbyTrips, setNearbyTrips] = useState(null);
   const [loadingNearby, setLoadingNearby] = useState(false);
-  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [isNearbyActive, setIsNearbyActive] = useState(false);
   const mapRef = useRef(null);
   const [eventAddress, setEventAddress] = useState(null);
 
   const { user } = useUser();
-
   const insets = useSafeAreaInsets();
   const sheetHeight = useRef(new Animated.Value(COLLAPSED_HEIGHT)).current;
   const currentHeightRef = useRef(COLLAPSED_HEIGHT);
   const isExpandedRef = useRef(false);
 
-  const lat =
-    typeof event?.latitude === "number"
-      ? event.latitude
-      : parseFloat(event?.latitude);
-  const lng =
-    typeof event?.longitude === "number"
-      ? event.longitude
-      : parseFloat(event?.longitude);
-  const hasValidCoords = !isNaN(lat) && !isNaN(lng);
+  const { lat, lng, isValid: hasValidCoords } = React.useMemo(() => {
+    if (!event) return { lat: NaN, lng: NaN, isValid: false };
+    const rawLat =
+      event.latitude ??
+      event.lat ??
+      event.latitud ??
+      event.location?.latitude ??
+      event.coords?.latitude;
+    const rawLng =
+      event.longitude ??
+      event.lng ??
+      event.longitud ??
+      event.location?.longitude ??
+      event.coords?.longitude;
+    const parsedLat = typeof rawLat === "number" ? rawLat : parseFloat(rawLat);
+    const parsedLng = typeof rawLng === "number" ? rawLng : parseFloat(rawLng);
+    const isValid =
+      !isNaN(parsedLat) &&
+      !isNaN(parsedLng) &&
+      (parsedLat !== 0 || parsedLng !== 0);
+    return { lat: parsedLat, lng: parsedLng, isValid };
+  }, [event]);
 
+  // Geocodificación inversa para obtener la dirección exacta
   useEffect(() => {
     if (hasValidCoords) {
       reverseGeocode({ latitude: lat, longitude: lng })
         .then((place) => {
-          console.log("[EventDetail] reverseGeocode result:", place);
           setEventAddress(place?.address || null);
         })
-        .catch((err) => {
-          console.warn("[EventDetail] reverseGeocode error:", err?.message);
+        .catch(() => {
           setEventAddress(null);
         });
+    }
+  }, [lat, lng, hasValidCoords]);
+
+  // Auto-centrar el mapa al cargar o actualizar coordenadas
+  useEffect(() => {
+    if (hasValidCoords && mapRef.current) {
+      const timeout = setTimeout(() => {
+        mapRef.current?.animateToRegion(
+          {
+            latitude: lat,
+            longitude: lng,
+            latitudeDelta: 0.012,
+            longitudeDelta: 0.012,
+          },
+          600,
+        );
+      }, 300);
+      return () => clearTimeout(timeout);
     }
   }, [lat, lng, hasValidCoords]);
 
@@ -124,10 +160,10 @@ const EventDetailScreen = ({ route, navigation }) => {
         {
           latitude: lat,
           longitude: lng,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
+          latitudeDelta: 0.012,
+          longitudeDelta: 0.012,
         },
-        300,
+        400,
       );
     }
   };
@@ -171,11 +207,10 @@ const EventDetailScreen = ({ route, navigation }) => {
       let idaList = Array.isArray(dataIda) ? dataIda : [];
       let vueltaList = Array.isArray(dataVuelta) ? dataVuelta : [];
 
-      // Obtener info pública de los conductores en batch
       const conductorIds = [
         ...new Set(
           [...idaList, ...vueltaList]
-            .map((t) => t.conductor_id || t.conductor_id)
+            .map((t) => t.conductor_id || t.conductor)
             .filter(Boolean),
         ),
       ];
@@ -185,18 +220,26 @@ const EventDetailScreen = ({ route, navigation }) => {
           const batchRes =
             await usuarioService.getUsersPublicBatch(conductorIds);
           const usersMap = {};
-          const usersList = batchRes.users || [];
+          const usersList = Array.isArray(batchRes?.users)
+            ? batchRes.users
+            : Array.isArray(batchRes?.data)
+              ? batchRes.data
+              : Array.isArray(batchRes)
+                ? batchRes
+                : [];
           usersList.forEach((u) => {
-            usersMap[u.id] = u;
+            if (u && u.id) {
+              usersMap[u.id] = u;
+            }
           });
           const enrichTrayectos = (list) =>
             list.map((t) => {
-              const conductorId = t.conductor_id || t.conductor_id;
+              const conductorId = t.conductor_id || t.conductor;
               const conductorInfo = usersMap[conductorId];
               if (conductorInfo) {
                 return {
                   ...t,
-                  conductor: `${conductorInfo.name}${conductorInfo.surname ? " " + conductorInfo.surname : ""}`,
+                  conductor: `${conductorInfo.name || "Conductor"}${conductorInfo.surname ? " " + conductorInfo.surname : ""}`,
                   conductor_img: conductorInfo.img_perfil,
                 };
               }
@@ -229,7 +272,7 @@ const EventDetailScreen = ({ route, navigation }) => {
       setParticipants(Array.isArray(list) ? list : []);
       const myId = String(user?.id || user?.userId || user?.user_id || "");
       setIsJoined(list.some((p) => String(p.id) === myId));
-    } catch (err) {
+    } catch {
       setParticipants([]);
     } finally {
       setLoadingParticipants(false);
@@ -275,8 +318,7 @@ const EventDetailScreen = ({ route, navigation }) => {
       try {
         const res = await messageService.obtenerChatPorTripId(eventId, "EVENT");
         chat = res.data || res;
-      } catch (err) {
-        // Si no existe chat, lo creamos
+      } catch {
         const created = await messageService.crearChatGrupal({
           trip_id: eventId,
           chat_type: "EVENT",
@@ -309,7 +351,7 @@ const EventDetailScreen = ({ route, navigation }) => {
             await eventService.leaveEvent(eventId);
             setIsJoined(false);
             fetchParticipants();
-          } catch (err) {
+          } catch {
           } finally {
             setJoining(false);
           }
@@ -328,13 +370,12 @@ const EventDetailScreen = ({ route, navigation }) => {
     if (!event) return;
     try {
       await Share.share({
-        message: `${event.name} - Código: ${event.unique_code}`,
+        message: `¡Mira este evento en YouConnext! ${event.name} ${event.unique_code ? `- Código: ${event.unique_code}` : ""}`,
       });
     } catch {}
   };
 
   const handleCopyCode = () => {
-    // Clipboard would require expo-clipboard
     if (!event?.unique_code) return;
     Share.share({ message: event.unique_code });
   };
@@ -344,77 +385,13 @@ const EventDetailScreen = ({ route, navigation }) => {
   };
 
   const handleCrearViaje = () => {
+    setShowAllTripsModal(false);
     navigation.navigate("CrearViaje", { evento: event });
   };
 
-  const handleBuscarCerca = async () => {
-    if (!eventId) return;
-    setLoadingNearby(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert(
-          "Permiso denegado",
-          "Necesitamos tu ubicación para buscar viajes cerca.",
-        );
-        setLoadingNearby(false);
-        return;
-      }
-      const pos = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      const res = await trayectoService.buscarTrayectosPorEventoCerca(eventId, {
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        direccion: activeTripTab,
-        radius: 5,
-      });
-      const trips = res.trayectos || res.data || [];
-      setNearbyTrips(Array.isArray(trips) ? trips : []);
-      setFilterMode("cerca");
-    } catch (e) {
-      Alert.alert("Error", "No se pudieron buscar viajes cercanos.");
-    } finally {
-      setLoadingNearby(false);
-    }
-  };
-
-  const handleBuscarCiudad = async () => {
-    if (!eventId || !ciudadInput.trim()) return;
-    setLoadingNearby(true);
-    try {
-      const res = await trayectoService.buscarTrayectosPorEventoCerca(eventId, {
-        ciudad: ciudadInput.trim(),
-        direccion: activeTripTab,
-        radius: 5,
-      });
-      const trips = res.trayectos || res.data || [];
-      setNearbyTrips(Array.isArray(trips) ? trips : []);
-      setFilterMode("ciudad");
-    } catch (e) {
-      Alert.alert("Error", "No se pudieron buscar viajes en esa ciudad.");
-    } finally {
-      setLoadingNearby(false);
-    }
-  };
-
-  const handleResetFilter = () => {
-    setFilterMode("todos");
-    setNearbyTrips(null);
-    setCiudadInput("");
-  };
-
   const handleBuscarViaje = async (direction = "ida") => {
-    const lat =
-      typeof event.latitude === "number"
-        ? event.latitude
-        : parseFloat(event.latitude);
-    const lng =
-      typeof event.longitude === "number"
-        ? event.longitude
-        : parseFloat(event.longitude);
-
-    if (isNaN(lat) || isNaN(lng)) {
+    setShowAllTripsModal(false);
+    if (!hasValidCoords) {
       Alert.alert(
         "Ubicación no disponible",
         "Este evento no tiene coordenadas válidas.",
@@ -422,17 +399,12 @@ const EventDetailScreen = ({ route, navigation }) => {
       return;
     }
 
-    let eventPlace;
-    try {
-      eventPlace = await reverseGeocode({ latitude: lat, longitude: lng });
-    } catch {
-      eventPlace = {
-        name: event.name || "Ubicación del evento",
-        address: event.name || `${lat}, ${lng}`,
-        latitude: lat,
-        longitude: lng,
-      };
-    }
+    let eventPlace = {
+      name: event.name || "Ubicación del evento",
+      address: eventAddress || event.name || `${lat}, ${lng}`,
+      latitude: lat,
+      longitude: lng,
+    };
 
     let originPlace = null;
     let originText = "";
@@ -448,11 +420,9 @@ const EventDetailScreen = ({ route, navigation }) => {
             latitude: pos.coords.latitude,
             longitude: pos.coords.longitude,
           });
-          originText = originPlace.address;
+          originText = originPlace?.address || "";
         }
-      } catch {
-        // Si no hay permiso o falla, se deja el origen vacío
-      }
+      } catch {}
     }
 
     const searchParams = { openSheet: true };
@@ -473,7 +443,54 @@ const EventDetailScreen = ({ route, navigation }) => {
   };
 
   const handleViajePress = (viaje) => {
+    setShowAllTripsModal(false);
     navigation.navigate("ViajeDetalle", { viaje });
+  };
+
+  const handleBuscarCerca = async () => {
+    if (!eventId) return;
+    setLoadingNearby(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permiso de ubicación",
+          "Necesitamos acceso a tu ubicación para encontrar trayectos que pasen cerca de ti.",
+        );
+        setLoadingNearby(false);
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      const res = await trayectoService.buscarTrayectosPorEventoCerca(eventId, {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        direccion: activeTripTab,
+        radius: 5,
+      });
+
+      const trips = res.trayectos || res.data || (Array.isArray(res) ? res : []);
+      const tripsList = Array.isArray(trips) ? trips : [];
+      setNearbyTrips(tripsList);
+      setIsNearbyActive(true);
+    } catch (e) {
+      console.warn("Error al buscar viajes cercanos:", e);
+      Alert.alert("Aviso", "No se encontraron trayectos cerca de tu ubicación actual.");
+    } finally {
+      setLoadingNearby(false);
+    }
+  };
+
+  const handleResetFiltros = () => {
+    setIsNearbyActive(false);
+    setNearbyTrips(null);
+  };
+
+  const handleVerTodosViajes = (tab = "ida") => {
+    setAllTripsModalTab(tab);
+    setShowAllTripsModal(true);
   };
 
   const animateSheet = (toHeight) => {
@@ -522,17 +539,20 @@ const EventDetailScreen = ({ route, navigation }) => {
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-        <StatusBar barStyle="dark-content" />
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
         <View style={styles.simpleHeader}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <ChevronLeft size={24} color={COLORS.gray800} strokeWidth={2.5} />
+          <TouchableOpacity
+            style={styles.simpleBackBtn}
+            onPress={() => navigation.goBack()}
+          >
+            <ChevronLeft size={22} color={COLORS.gray800} strokeWidth={2.5} />
           </TouchableOpacity>
           <Text style={styles.simpleHeaderTitle}>Evento</Text>
-          <View style={{ width: 24 }} />
+          <View style={{ width: 38 }} />
         </View>
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Cargando evento...</Text>
+          <Text style={styles.loadingText}>Cargando información del evento...</Text>
         </View>
       </SafeAreaView>
     );
@@ -541,13 +561,16 @@ const EventDetailScreen = ({ route, navigation }) => {
   if (error || !event) {
     return (
       <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-        <StatusBar barStyle="dark-content" />
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
         <View style={styles.simpleHeader}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <ChevronLeft size={24} color={COLORS.gray800} strokeWidth={2.5} />
+          <TouchableOpacity
+            style={styles.simpleBackBtn}
+            onPress={() => navigation.goBack()}
+          >
+            <ChevronLeft size={22} color={COLORS.gray800} strokeWidth={2.5} />
           </TouchableOpacity>
           <Text style={styles.simpleHeaderTitle}>Evento</Text>
-          <View style={{ width: 24 }} />
+          <View style={{ width: 38 }} />
         </View>
         <View style={styles.centerContainer}>
           <Text style={styles.errorText}>
@@ -565,8 +588,8 @@ const EventDetailScreen = ({ route, navigation }) => {
     ? {
         latitude: lat,
         longitude: lng,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
+        latitudeDelta: 0.012,
+        longitudeDelta: 0.012,
       }
     : {
         latitude: 40.4168,
@@ -575,33 +598,23 @@ const EventDetailScreen = ({ route, navigation }) => {
         longitudeDelta: 0.5,
       };
 
-  const activeTrips = activeTripTab === "ida" ? trayectosIda : trayectosVuelta;
-
-  const uniqueDates = [
-    ...new Set(
-      activeTrips
-        .map((t) => {
-          const d = parseTripDate(t);
-          return d ? d.toDateString() : null;
-        })
-        .filter(Boolean),
-    ),
-  ].sort((a, b) => new Date(a) - new Date(b));
-
-  const filteredTrips =
-    filterMode !== "todos" && nearbyTrips
+  const displayTripsIda =
+    isNearbyActive && activeTripTab === "ida" && nearbyTrips
       ? nearbyTrips
-      : selectedDate
-        ? activeTrips.filter((t) => {
-            const d = parseTripDate(t);
-            return d && d.toDateString() === selectedDate;
-          })
-        : activeTrips;
+      : trayectosIda;
+  const displayTripsVuelta =
+    isNearbyActive && activeTripTab === "vuelta" && nearbyTrips
+      ? nearbyTrips
+      : trayectosVuelta;
+
+  const activeTrips =
+    activeTripTab === "ida" ? displayTripsIda : displayTripsVuelta;
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
+      {/* Mapa interactivo de fondo */}
       <MapView
         ref={mapRef}
         style={styles.map}
@@ -615,19 +628,16 @@ const EventDetailScreen = ({ route, navigation }) => {
             description={eventAddress || undefined}
             zIndex={100}
           >
-            <View style={styles.eventMarker}>
-              <MapPin
-                size={36}
-                color={COLORS.primary}
-                strokeWidth={2.5}
-                fill={COLORS.white}
-              />
+            <View style={styles.eventMarkerOuter}>
+              <View style={styles.eventMarkerInner}>
+                <MapPin size={22} color={COLORS.white} strokeWidth={2.5} />
+              </View>
             </View>
           </Marker>
         )}
 
-        {/* Driver markers: origin for ida, destination for vuelta */}
-        {filteredTrips.map((viaje, index) => {
+        {/* Conductores disponibles en el mapa */}
+        {activeTrips.map((viaje, index) => {
           const tripLat =
             activeTripTab === "ida" ? viaje.origen_lat : viaje.destino_lat;
           const tripLng =
@@ -640,15 +650,26 @@ const EventDetailScreen = ({ route, navigation }) => {
           )
             return null;
 
+          const parsedTripLat = parseFloat(tripLat);
+          const parsedTripLng = parseFloat(tripLng);
+          if (
+            parsedTripLat < -90 ||
+            parsedTripLat > 90 ||
+            parsedTripLng < -180 ||
+            parsedTripLng > 180 ||
+            (parsedTripLat === 0 && parsedTripLng === 0)
+          )
+            return null;
+
           const conductorNombre =
-            typeof viaje.conductor === "string" ? viaje.conductor : `Conductor`;
+            typeof viaje.conductor === "string" ? viaje.conductor : "Conductor";
 
           return (
             <Marker
               key={viaje.id || index}
               coordinate={{
-                latitude: parseFloat(tripLat),
-                longitude: parseFloat(tripLng),
+                latitude: parsedTripLat,
+                longitude: parsedTripLng,
               }}
               title={conductorNombre}
               description={viaje.origen || viaje.destino || ""}
@@ -662,7 +683,7 @@ const EventDetailScreen = ({ route, navigation }) => {
               ) : (
                 <View style={styles.driverMarkerFallback}>
                   <Text style={styles.driverMarkerInitial}>
-                    {conductorNombre.charAt(0).toUpperCase()}
+                    {(conductorNombre || "C").charAt(0).toUpperCase()}
                   </Text>
                 </View>
               )}
@@ -671,736 +692,453 @@ const EventDetailScreen = ({ route, navigation }) => {
         })}
       </MapView>
 
+      {/* Botón flotante para recentrar mapa */}
       {hasValidCoords && (
         <TouchableOpacity
-          style={[styles.recenterBtn, { top: insets.top + 120 }]}
+          style={[styles.recenterBtn, { top: insets.top + 70 }]}
           onPress={recenterMap}
           activeOpacity={0.85}
         >
-          <LocateFixed size={22} color={COLORS.primary} strokeWidth={2.5} />
+          <LocateFixed size={20} color={COLORS.primaryDark} strokeWidth={2.5} />
         </TouchableOpacity>
       )}
 
+      {/* Cabecera superior flotante con Glassmorphism */}
       <View
         style={[styles.floatingHeader, { paddingTop: insets.top + SPACING.xs }]}
       >
         <TouchableOpacity
-          style={styles.headerButton}
+          style={styles.headerGlassBtn}
           onPress={() => navigation.goBack()}
+          activeOpacity={0.85}
         >
-          <ChevronLeft size={24} color={COLORS.white} strokeWidth={2.5} />
+          <ChevronLeft size={22} color={COLORS.white} strokeWidth={2.5} />
         </TouchableOpacity>
+
         <Text style={styles.headerTitle} numberOfLines={1}>
           {event.name}
         </Text>
-        <TouchableOpacity style={styles.headerButton} onPress={handleShare}>
-          <Share2 size={22} color={COLORS.white} strokeWidth={2.5} />
+
+        <TouchableOpacity
+          style={styles.headerGlassBtn}
+          onPress={handleShare}
+          activeOpacity={0.85}
+        >
+          <Share2 size={20} color={COLORS.white} strokeWidth={2.4} />
         </TouchableOpacity>
       </View>
 
-      {/* Filtros flotantes sobre el mapa */}
-      <View style={[styles.mapFilterContainer, { top: insets.top + 52 }]}>
-        {/* Segmented control Ida / Vuelta */}
-        <View style={styles.mapFilterSegment}>
-          <TouchableOpacity
-            style={[
-              styles.mapFilterSegmentBtn,
-              activeTripTab === "ida" && styles.mapFilterSegmentBtnActive,
-            ]}
-            onPress={() => {
-              setActiveTripTab("ida");
-              setSelectedDate(null);
-            }}
-            activeOpacity={0.85}
-          >
-            <Text
-              style={[
-                styles.mapFilterSegmentText,
-                activeTripTab === "ida" && styles.mapFilterSegmentTextActive,
-              ]}
-            >
-              Ida
-            </Text>
-            {trayectosIda.length > 0 && (
-              <View
-                style={[
-                  styles.mapFilterSegmentBadge,
-                  activeTripTab === "ida" && styles.mapFilterSegmentBadgeActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.mapFilterSegmentBadgeText,
-                    activeTripTab === "ida" &&
-                      styles.mapFilterSegmentBadgeTextActive,
-                  ]}
-                >
-                  {trayectosIda.length}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.mapFilterSegmentBtn,
-              activeTripTab === "vuelta" && styles.mapFilterSegmentBtnActive,
-            ]}
-            onPress={() => {
-              setActiveTripTab("vuelta");
-              setSelectedDate(null);
-            }}
-            activeOpacity={0.85}
-          >
-            <Text
-              style={[
-                styles.mapFilterSegmentText,
-                activeTripTab === "vuelta" && styles.mapFilterSegmentTextActive,
-              ]}
-            >
-              Vuelta
-            </Text>
-            {trayectosVuelta.length > 0 && (
-              <View
-                style={[
-                  styles.mapFilterSegmentBadge,
-                  activeTripTab === "vuelta" &&
-                    styles.mapFilterSegmentBadgeActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.mapFilterSegmentBadgeText,
-                    activeTripTab === "vuelta" &&
-                      styles.mapFilterSegmentBadgeTextActive,
-                  ]}
-                >
-                  {trayectosVuelta.length}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Filtro de fecha */}
-        {uniqueDates.length > 0 && (
-          <TouchableOpacity
-            style={styles.mapFilterDateBtn}
-            onPress={() => setShowDatePicker((v) => !v)}
-            activeOpacity={0.85}
-          >
-            <Calendar size={15} color={COLORS.gray700} strokeWidth={2.5} />
-            <Text style={styles.mapFilterDateText} numberOfLines={1}>
-              {selectedDate
-                ? new Date(selectedDate).toLocaleDateString("es-ES", {
-                    day: "2-digit",
-                    month: "short",
-                  })
-                : "Fecha"}
-            </Text>
-            {selectedDate && (
-              <TouchableOpacity
-                onPress={() => setSelectedDate(null)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Text style={styles.mapFilterDateClear}>✕</Text>
-              </TouchableOpacity>
-            )}
-            <ChevronDown
-              size={14}
-              color={COLORS.gray500}
-              strokeWidth={2.5}
-              style={{
-                transform: [{ rotate: showDatePicker ? "180deg" : "0deg" }],
-              }}
-            />
-          </TouchableOpacity>
-        )}
-
-        {/* Dropdown de fechas */}
-        {showDatePicker && uniqueDates.length > 0 && (
-          <View style={styles.mapFilterDateDropdown}>
-            <TouchableOpacity
-              style={[
-                styles.mapFilterDateOption,
-                !selectedDate && styles.mapFilterDateOptionActive,
-              ]}
-              onPress={() => {
-                setSelectedDate(null);
-                setShowDatePicker(false);
-              }}
-            >
-              <Text
-                style={[
-                  styles.mapFilterDateOptionText,
-                  !selectedDate && styles.mapFilterDateOptionTextActive,
-                ]}
-              >
-                Todas las fechas
-              </Text>
-            </TouchableOpacity>
-            {uniqueDates.map((dateStr) => {
-              const label = new Date(dateStr).toLocaleDateString("es-ES", {
-                weekday: "short",
-                day: "2-digit",
-                month: "short",
-              });
-              const count = activeTrips.filter((t) => {
-                const d = parseTripDate(t);
-                return d && d.toDateString() === dateStr;
-              }).length;
-              return (
-                <TouchableOpacity
-                  key={dateStr}
-                  style={[
-                    styles.mapFilterDateOption,
-                    selectedDate === dateStr &&
-                      styles.mapFilterDateOptionActive,
-                  ]}
-                  onPress={() => {
-                    setSelectedDate(dateStr);
-                    setShowDatePicker(false);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.mapFilterDateOptionText,
-                      selectedDate === dateStr &&
-                        styles.mapFilterDateOptionTextActive,
-                    ]}
-                  >
-                    {label}
-                  </Text>
-                  <Text style={styles.mapFilterDateOptionCount}>{count}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-      </View>
-
+      {/* Bottom Sheet deslizable */}
       <Animated.View style={[styles.bottomSheet, { height: sheetHeight }]}>
+        {/* Barra de cabecera / Peek Bar interactiva */}
         <View style={styles.sheetHeader} {...panResponder.panHandlers}>
           <View style={styles.dragHandleContainer}>
             <View style={styles.dragHandle} />
           </View>
+
           <View style={styles.peekContent}>
+            <View style={styles.peekTopRow}>
+              <View style={styles.peekBadgeGroup}>
+                {isJoined && (
+                  <View style={styles.joinedPill}>
+                    <CheckCircle2 size={11} color={COLORS.white} strokeWidth={2.5} />
+                    <Text style={styles.joinedPillText}>Te has unido</Text>
+                  </View>
+                )}
+                {event.company?.name ? (
+                  <Text style={styles.peekCompany} numberOfLines={1}>
+                    {event.company.name}
+                  </Text>
+                ) : null}
+              </View>
+
+              <View style={styles.peekSwipeHint}>
+                <ChevronUp
+                  size={14}
+                  color={COLORS.gray400}
+                  strokeWidth={2.5}
+                  style={{
+                    transform: [{ rotate: isExpanded ? "180deg" : "0deg" }],
+                  }}
+                />
+                <Text style={styles.peekSwipeText}>
+                  {isExpanded ? "Deslizar para ver mapa" : "Deslizar para más"}
+                </Text>
+              </View>
+            </View>
+
             <Text style={styles.peekEventName} numberOfLines={1}>
               {event.name}
             </Text>
-            {event.company?.name ? (
-              <Text style={styles.peekCompany} numberOfLines={1}>
-                {event.company.name}
-              </Text>
-            ) : null}
+
             {event.start_date ? (
-              <Text style={styles.peekDate} numberOfLines={1}>
-                {new Date(event.start_date).toLocaleDateString("es-ES", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })}
-                {event.end_date
-                  ? ` - ${new Date(event.end_date).toLocaleDateString("es-ES", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}`
-                  : ""}
-              </Text>
+              <View style={styles.peekDateRow}>
+                <Calendar size={13} color={COLORS.primary} strokeWidth={2.4} />
+                <Text style={styles.peekDate} numberOfLines={1}>
+                  {new Date(event.start_date).toLocaleDateString("es-ES", {
+                    weekday: "short",
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </Text>
+              </View>
             ) : null}
-            <View style={styles.swipeHint}>
-              <ChevronUp size={16} color={COLORS.gray400} strokeWidth={2.5} />
-              <Text style={styles.swipeHintText}>Desliza hacia arriba</Text>
-            </View>
           </View>
         </View>
 
+        {/* Contenido expandido del evento */}
         <ScrollView
           style={styles.sheetScroll}
           showsVerticalScrollIndicator={false}
           scrollEnabled={isExpanded}
           contentContainerStyle={{
-            paddingBottom: SPACING.xxl + insets.bottom,
+            paddingBottom: SPACING.xxl + insets.bottom + 40,
           }}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={[COLORS.primary]}
+              tintColor={COLORS.primary}
+            />
           }
         >
+          {/* Imagen Hero */}
           <EventHeroImage image={event.image} />
 
+          {/* Información principal */}
           <EventInfoSection
             name={event.name}
             company={event.company}
             tags={event.tags}
             startDate={event.start_date}
             endDate={event.end_date}
+            address={eventAddress}
           />
 
+          {/* Código del evento */}
           <EventCodeCard code={event.unique_code} onCopy={handleCopyCode} />
 
-          {/* Participación */}
-          <View style={styles.joinSection}>
+          {/* Tarjeta de Participación y Comunidad */}
+          <View style={styles.participationCard}>
             {isJoined ? (
-              <View style={styles.joinedRow}>
-                <View style={styles.joinedInfo}>
-                  <Users size={16} color={COLORS.primary} strokeWidth={2.5} />
-                  <Text style={styles.joinedText}>
-                    Ya participas · {participants.length}{" "}
-                    {participants.length === 1
-                      ? "participante"
-                      : "participantes"}
-                  </Text>
+              <View style={styles.joinedContainer}>
+                <View style={styles.joinedHeaderRow}>
+                  <View style={styles.joinedStatusBadge}>
+                    <CheckCircle2
+                      size={14}
+                      color={COLORS.primaryDark}
+                      strokeWidth={2.5}
+                    />
+                    <Text style={styles.joinedStatusText}>
+                      Participando en este evento
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={handleLeave}
+                    disabled={joining}
+                    activeOpacity={0.7}
+                  >
+                    {joining ? (
+                      <ActivityIndicator size={14} color={COLORS.error} />
+                    ) : (
+                      <Text style={styles.leaveText}>Salir</Text>
+                    )}
+                  </TouchableOpacity>
                 </View>
+
+                {/* Botón para ver lista de participantes y de dónde son */}
                 <TouchableOpacity
-                  onPress={handleLeave}
-                  disabled={joining}
-                  activeOpacity={0.7}
+                  style={styles.viewParticipantsBtn}
+                  onPress={() =>
+                    navigation.navigate("EventParticipants", {
+                      eventId,
+                      event,
+                      eventName: event?.name || event?.title,
+                    })
+                  }
+                  activeOpacity={0.8}
                 >
-                  {joining ? (
-                    <ActivityIndicator size={14} color={COLORS.error} />
-                  ) : (
-                    <Text style={styles.leaveText}>Salir</Text>
-                  )}
+                  <View style={styles.viewParticipantsLeft}>
+                    {participants.length > 0 ? (
+                      <View style={styles.avatarStack}>
+                        {participants.slice(0, 3).map((p, idx) => (
+                          <View
+                            key={p.id || idx}
+                            style={[
+                              styles.stackAvatarWrap,
+                              { marginLeft: idx === 0 ? 0 : -8, zIndex: 3 - idx },
+                            ]}
+                          >
+                            {p.img_perfil ? (
+                              <Image
+                                source={{ uri: p.img_perfil }}
+                                style={styles.stackAvatarImg}
+                              />
+                            ) : (
+                              <View style={styles.stackAvatarFallback}>
+                                <Text style={styles.stackAvatarText}>
+                                  {(p.name || "U").charAt(0).toUpperCase()}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Users size={18} color={COLORS.primary} strokeWidth={2.2} />
+                    )}
+                    <View style={styles.viewParticipantsTexts}>
+                      <Text style={styles.viewParticipantsTitle}>
+                        {participants.length}{" "}
+                        {participants.length === 1
+                          ? "asistente registrado"
+                          : "asistentes registrados"}
+                      </Text>
+                      <Text style={styles.viewParticipantsSub}>
+                        Ver de dónde son y chatear
+                      </Text>
+                    </View>
+                  </View>
+                  <ChevronRight size={18} color={COLORS.gray400} strokeWidth={2.5} />
+                </TouchableOpacity>
+
+                {/* Botón directo al chat grupal del evento */}
+                <TouchableOpacity
+                  style={styles.chatEventBtn}
+                  onPress={handleOpenChat}
+                  activeOpacity={0.88}
+                >
+                  <MessageCircle
+                    size={18}
+                    color={COLORS.white}
+                    strokeWidth={2.5}
+                  />
+                  <Text style={styles.chatEventBtnText}>
+                    Abrir chat grupal del evento
+                  </Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              <>
-                <View style={styles.participantsInfo}>
-                  <Users size={16} color={COLORS.gray500} strokeWidth={2.5} />
-                  <Text style={styles.participantsText}>
-                    {participants.length}{" "}
-                    {participants.length === 1
-                      ? "participante"
-                      : "participantes"}
-                  </Text>
-                </View>
+              <View style={styles.notJoinedContainer}>
+                <TouchableOpacity
+                  style={styles.notJoinedInfo}
+                  onPress={() =>
+                    navigation.navigate("EventParticipants", {
+                      eventId,
+                      event,
+                      eventName: event?.name || event?.title,
+                    })
+                  }
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.notJoinedIconWrap}>
+                    <Users size={18} color={COLORS.primary} strokeWidth={2.5} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.notJoinedTitle}>¿Asistirás a este evento?</Text>
+                    <Text style={styles.notJoinedSubtitle}>
+                      {participants.length}{" "}
+                      {participants.length === 1
+                        ? "persona se ha unido · Ver asistentes"
+                        : "personas se han unido · Ver asistentes"}
+                    </Text>
+                  </View>
+                  <ChevronRight size={18} color={COLORS.gray400} strokeWidth={2.5} />
+                </TouchableOpacity>
+
                 <TouchableOpacity
                   style={[
-                    styles.joinButton,
-                    joining && styles.joinButtonDisabled,
+                    styles.joinBtn,
+                    joining && styles.joinBtnDisabled,
                   ]}
                   onPress={handleJoin}
                   disabled={joining}
-                  activeOpacity={0.8}
+                  activeOpacity={0.88}
                 >
                   {joining ? (
                     <ActivityIndicator size={18} color={COLORS.white} />
                   ) : (
-                    <UserPlus
-                      size={18}
-                      color={COLORS.white}
-                      strokeWidth={2.5}
-                    />
+                    <>
+                      <UserPlus
+                        size={18}
+                        color={COLORS.white}
+                        strokeWidth={2.5}
+                      />
+                      <Text style={styles.joinBtnText}>Unirme al evento</Text>
+                    </>
                   )}
-                  <Text style={styles.joinButtonText}>
-                    {joining ? "..." : "Unirse al evento"}
-                  </Text>
                 </TouchableOpacity>
-              </>
+              </View>
             )}
           </View>
 
-          {/* Chat del evento — solo si se ha unido */}
-          {isJoined && (
-            <View style={styles.chatSection}>
-              <TouchableOpacity
-                style={styles.chatButton}
-                onPress={handleOpenChat}
-                activeOpacity={0.8}
-              >
-                <MessageCircle
-                  size={18}
-                  color={COLORS.primary}
-                  strokeWidth={2.5}
-                />
-                <Text style={styles.chatButtonText}>Chat del evento</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <EventDescription description={event.description} />
-
+          {/* Enlaces y Entradas */}
           <EventLinks
             url={event.url}
             ticketUrl={event.ticket_url}
             onOpenUrl={handleOpenUrl}
           />
 
-          {/* Botón de filtros */}
-          <View style={styles.filterBar}>
-            <TouchableOpacity
-              style={styles.filterBtn}
-              onPress={() => setShowFilterModal(true)}
-              activeOpacity={0.8}
-            >
-              <SlidersHorizontal
-                size={16}
-                color={COLORS.primary}
-                strokeWidth={2.5}
-              />
-              <Text style={styles.filterBtnText}>Filtrar viajes</Text>
-              {filterMode !== "todos" && (
-                <View style={styles.filterBadge}>
-                  <Text style={styles.filterBadgeText}>
-                    {filterMode === "cerca" ? "Cerca" : "Ciudad"}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            {filterMode !== "todos" && (
-              <TouchableOpacity
-                style={styles.resetFilterChip}
-                onPress={handleResetFilter}
-                activeOpacity={0.7}
-              >
-                <X size={12} color={COLORS.gray500} strokeWidth={2.5} />
-                <Text style={styles.resetFilterChipText}>Quitar filtro</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          {/* Descripción */}
+          <EventDescription description={event.description} />
 
+          {/* Sección de Trayectos Compartidos hacia / desde el Evento */}
           <EventTripsSection
-            trayectosIda={
-              activeTripTab === "ida" ? filteredTrips : trayectosIda
-            }
-            trayectosVuelta={
-              activeTripTab === "vuelta" ? filteredTrips : trayectosVuelta
-            }
-            loading={loadingTrayectos || loadingNearby}
+            trayectosIda={displayTripsIda}
+            trayectosVuelta={displayTripsVuelta}
+            loading={loadingTrayectos}
             onCrearViaje={handleCrearViaje}
             onBuscarViaje={handleBuscarViaje}
             onViajePress={handleViajePress}
+            onVerTodos={handleVerTodosViajes}
+            onBuscarCerca={handleBuscarCerca}
+            onResetFiltros={handleResetFiltros}
+            isNearbyActive={isNearbyActive}
+            loadingNearby={loadingNearby}
             activeTab={activeTripTab}
             onTabChange={(tab) => {
               setActiveTripTab(tab);
-              setSelectedDate(null);
-              handleResetFilter();
+              setIsNearbyActive(false);
+              setNearbyTrips(null);
             }}
           />
         </ScrollView>
       </Animated.View>
 
-      {/* Modal de filtros */}
-      <Modal
-        visible={showFilterModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowFilterModal(false)}
-      >
-        <View style={styles.filterModalOverlay}>
-          <View style={styles.filterModalContent}>
-            <View style={styles.filterModalHeader}>
-              <Text style={styles.filterModalTitle}>Filtrar viajes</Text>
-              <TouchableOpacity
-                onPress={() => setShowFilterModal(false)}
-                activeOpacity={0.7}
-              >
-                <X size={22} color={COLORS.gray600} strokeWidth={2.5} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Opción: Cerca de ti */}
-            <TouchableOpacity
-              style={[
-                styles.filterOption,
-                filterMode === "cerca" && styles.filterOptionActive,
-              ]}
-              onPress={() => {
-                handleBuscarCerca();
-              }}
-              disabled={loadingNearby}
-              activeOpacity={0.8}
-            >
-              <View style={styles.filterOptionLeft}>
-                <MapPin size={20} color={COLORS.primary} strokeWidth={2.5} />
-                <View>
-                  <Text style={styles.filterOptionTitle}>Cerca de ti</Text>
-                  <Text style={styles.filterOptionDesc}>
-                    Usa tu ubicación actual (radio 5 km)
-                  </Text>
-                </View>
-              </View>
-              {loadingNearby && filterMode !== "ciudad" ? (
-                <ActivityIndicator size="small" color={COLORS.primary} />
-              ) : filterMode === "cerca" ? (
-                <View style={styles.filterOptionCheck} />
-              ) : null}
-            </TouchableOpacity>
-
-            {/* Separador */}
-            <View style={styles.filterDivider} />
-
-            {/* Opción: Por ciudad */}
-            <View
-              style={[
-                styles.filterOption,
-                filterMode === "ciudad" && styles.filterOptionActive,
-                { flexDirection: "column", alignItems: "stretch" },
-              ]}
-            >
-              <View style={styles.filterOptionLeft}>
-                <Search size={20} color={COLORS.primary} strokeWidth={2.5} />
-                <Text style={styles.filterOptionTitle}>Por ciudad</Text>
-              </View>
-              <View style={styles.cityInputRow}>
-                <TextInput
-                  style={styles.cityInputModal}
-                  placeholder="Escribe una ciudad..."
-                  placeholderTextColor={COLORS.gray400}
-                  value={ciudadInput}
-                  onChangeText={setCiudadInput}
-                  onSubmitEditing={() => {
-                    handleBuscarCiudad();
-                  }}
-                  returnKeyType="search"
-                />
-                <TouchableOpacity
-                  style={[
-                    styles.citySearchBtn,
-                    !ciudadInput.trim() && styles.citySearchBtnDisabled,
-                  ]}
-                  onPress={() => {
-                    handleBuscarCiudad();
-                  }}
-                  disabled={!ciudadInput.trim() || loadingNearby}
-                  activeOpacity={0.8}
-                >
-                  {loadingNearby && filterMode !== "cerca" ? (
-                    <ActivityIndicator size={16} color={COLORS.white} />
-                  ) : (
-                    <Search size={16} color={COLORS.white} strokeWidth={2.5} />
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Separador */}
-            <View style={styles.filterDivider} />
-
-            {/* Opción: Ver todos */}
-            <TouchableOpacity
-              style={[
-                styles.filterOption,
-                filterMode === "todos" && styles.filterOptionActive,
-              ]}
-              onPress={() => {
-                handleResetFilter();
-                setShowFilterModal(false);
-              }}
-              activeOpacity={0.8}
-            >
-              <View style={styles.filterOptionLeft}>
-                <SlidersHorizontal
-                  size={20}
-                  color={COLORS.gray500}
-                  strokeWidth={2.5}
-                />
-                <Text style={styles.filterOptionTitle}>Ver todos</Text>
-              </View>
-              {filterMode === "todos" && (
-                <View style={styles.filterOptionCheck} />
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.filterApplyBtn}
-              onPress={() => setShowFilterModal(false)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.filterApplyBtnText}>Aplicar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* Modal / Vista Dedicada para Todos los Trayectos */}
+      <EventAllTripsModal
+        visible={showAllTripsModal}
+        onClose={() => setShowAllTripsModal(false)}
+        eventName={event.name}
+        trayectosIda={displayTripsIda}
+        trayectosVuelta={displayTripsVuelta}
+        initialTab={allTripsModalTab}
+        loading={loadingTrayectos}
+        loadingNearby={loadingNearby}
+        isNearbyActive={isNearbyActive}
+        onBuscarCerca={handleBuscarCerca}
+        onResetFiltroCerca={handleResetFiltros}
+        onViajePress={handleViajePress}
+        onCrearViaje={handleCrearViaje}
+      />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  eventMarker: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  driverMarkerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 3,
-    borderColor: COLORS.white,
-    backgroundColor: COLORS.gray200,
-  },
-  driverMarkerFallback: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 3,
-    borderColor: COLORS.white,
-    backgroundColor: COLORS.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  driverMarkerInitial: {
-    color: COLORS.white,
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  mapFilterContainer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    alignItems: "center",
-    zIndex: 15,
-    elevation: 15,
-  },
-  mapFilterSegment: {
-    flexDirection: "row",
-    backgroundColor: "rgba(255,255,255,0.95)",
-    borderRadius: RADIUS.full,
-    padding: 3,
-    borderWidth: 1,
-    borderColor: COLORS.gray200,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 5,
-  },
-  mapFilterSegmentBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: SPACING.md + 2,
-    paddingVertical: SPACING.xs + 1,
-    borderRadius: RADIUS.full,
-  },
-  mapFilterSegmentBtnActive: {
-    backgroundColor: COLORS.primary,
-  },
-  mapFilterSegmentText: {
-    fontSize: FONTS.sm,
-    fontWeight: "700",
-    color: COLORS.gray500,
-  },
-  mapFilterSegmentTextActive: {
-    color: COLORS.white,
-  },
-  mapFilterSegmentBadge: {
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: COLORS.gray100,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 5,
-  },
-  mapFilterSegmentBadgeActive: {
-    backgroundColor: "rgba(255,255,255,0.3)",
-  },
-  mapFilterSegmentBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: COLORS.gray500,
-  },
-  mapFilterSegmentBadgeTextActive: {
-    color: COLORS.white,
-  },
-  mapFilterDateBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 8,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs + 1,
-    backgroundColor: "rgba(255,255,255,0.95)",
-    borderRadius: RADIUS.full,
-    borderWidth: 1,
-    borderColor: COLORS.gray200,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 5,
-    minWidth: 120,
-    justifyContent: "center",
-  },
-  mapFilterDateText: {
-    fontSize: FONTS.sm,
-    fontWeight: "600",
-    color: COLORS.gray700,
-  },
-  mapFilterDateClear: {
-    fontSize: 12,
-    color: COLORS.gray400,
-    fontWeight: "600",
-  },
-  mapFilterDateDropdown: {
-    marginTop: 6,
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.gray200,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 8,
-    overflow: "hidden",
-    minWidth: 200,
-    maxWidth: 280,
-  },
-  mapFilterDateOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
-  },
-  mapFilterDateOptionActive: {
-    backgroundColor: COLORS.primarySoft,
-  },
-  mapFilterDateOptionText: {
-    fontSize: FONTS.sm,
-    fontWeight: "500",
-    color: COLORS.gray600,
-    textTransform: "capitalize",
-  },
-  mapFilterDateOptionTextActive: {
-    color: COLORS.primary,
-    fontWeight: "700",
-  },
-  mapFilterDateOptionCount: {
-    fontSize: FONTS.xs,
-    fontWeight: "700",
-    color: COLORS.gray400,
-    backgroundColor: COLORS.gray100,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: RADIUS.full,
-  },
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
   map: {
-    flex: 1,
+    width: "100%",
+    height: "100%",
+    ...StyleSheet.absoluteFillObject,
   },
-  recenterBtn: {
-    position: "absolute",
-    right: SPACING.md,
+  simpleHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    backgroundColor: COLORS.white,
+  },
+  simpleBackBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.gray100,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  simpleHeaderTitle: {
+    fontSize: FONTS.lg,
+    fontWeight: "800",
+    color: COLORS.gray900,
+  },
+  centerContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: SPACING.xxl,
+  },
+  loadingText: {
+    fontSize: FONTS.sm,
+    color: COLORS.gray500,
+    marginTop: SPACING.sm,
+    fontWeight: "600",
+  },
+  errorText: {
+    fontSize: FONTS.md,
+    color: COLORS.error,
+    textAlign: "center",
+    marginBottom: SPACING.md,
+  },
+  retryButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.sm + 2,
+  },
+  retryText: {
+    color: COLORS.white,
+    fontWeight: "800",
+    fontSize: FONTS.sm,
+  },
+  // Map Markers
+  eventMarkerOuter: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "rgba(255,255,255,0.95)",
+    backgroundColor: "rgba(13, 159, 110, 0.3)",
     alignItems: "center",
     justifyContent: "center",
-    zIndex: 25,
-    elevation: 25,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+  },
+  eventMarkerInner: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: COLORS.white,
+  },
+  driverMarkerAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 2.5,
+    borderColor: COLORS.white,
+    backgroundColor: COLORS.gray200,
+  },
+  driverMarkerFallback: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 2.5,
+    borderColor: COLORS.white,
+    backgroundColor: COLORS.secondary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  driverMarkerInitial: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  recenterBtn: {
+    position: "absolute",
+    right: SPACING.lg,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.white,
+    alignItems: "center",
+    justifyContent: "center",
+    ...SHADOWS.card,
   },
   floatingHeader: {
     position: "absolute",
@@ -1410,361 +1148,284 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: SPACING.md,
-    paddingBottom: SPACING.md,
-    zIndex: 30,
-    elevation: 30,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.sm,
+    gap: SPACING.sm,
   },
-  headerButton: {
+  headerGlassBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.35)",
+    backgroundColor: "rgba(15, 23, 42, 0.6)",
     alignItems: "center",
     justifyContent: "center",
   },
   headerTitle: {
-    fontSize: FONTS.lg,
-    fontWeight: "bold",
-    color: COLORS.white,
     flex: 1,
+    fontSize: FONTS.md,
+    lineHeight: 20,
+    fontWeight: "800",
+    color: COLORS.white,
     textAlign: "center",
-    marginHorizontal: SPACING.sm,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
+  // Bottom Sheet
   bottomSheet: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
     backgroundColor: COLORS.white,
-    borderTopLeftRadius: RADIUS.xl,
-    borderTopRightRadius: RADIUS.xl,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 20,
-    zIndex: 20,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    ...SHADOWS.large,
   },
   sheetHeader: {
-    paddingBottom: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.md,
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
   },
   dragHandleContainer: {
     alignItems: "center",
-    paddingTop: SPACING.sm,
     paddingBottom: SPACING.xs,
   },
   dragHandle: {
-    width: 40,
+    width: 38,
     height: 4,
     borderRadius: 2,
     backgroundColor: COLORS.gray300,
   },
   peekContent: {
-    alignItems: "center",
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.sm,
+    gap: 4,
   },
-  peekEventName: {
-    fontSize: FONTS.xl,
-    fontWeight: "bold",
-    color: COLORS.gray800,
+  peekTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  peekBadgeGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.xs,
+  },
+  joinedPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  joinedPillText: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: "800",
+    color: COLORS.white,
   },
   peekCompany: {
-    fontSize: FONTS.sm,
+    fontSize: FONTS.xs,
     color: COLORS.gray500,
-    marginTop: 2,
+    fontWeight: "600",
+  },
+  peekSwipeHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  peekSwipeText: {
+    fontSize: 11,
+    color: COLORS.gray400,
+    fontWeight: "600",
+  },
+  peekEventName: {
+    fontSize: FONTS.lg,
+    lineHeight: 24,
+    fontWeight: "800",
+    color: COLORS.gray900,
+  },
+  peekDateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
   },
   peekDate: {
     fontSize: FONTS.xs,
-    color: COLORS.gray500,
-    marginTop: 2,
-  },
-  swipeHint: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: SPACING.xs,
-  },
-  swipeHintText: {
-    fontSize: FONTS.xs,
-    color: COLORS.gray400,
+    lineHeight: 16,
+    color: COLORS.primaryDark,
+    fontWeight: "700",
   },
   sheetScroll: {
     flex: 1,
-  },
-  simpleHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
     backgroundColor: COLORS.white,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
   },
-  simpleHeaderTitle: {
-    fontSize: FONTS.lg,
-    fontWeight: "bold",
-    color: COLORS.gray800,
-    flex: 1,
-    textAlign: "center",
-    marginHorizontal: SPACING.sm,
-  },
-  centerContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: SPACING.md,
-  },
-  loadingText: {
-    fontSize: FONTS.sm,
-    color: COLORS.gray500,
-  },
-  errorText: {
-    fontSize: FONTS.md,
-    color: COLORS.gray500,
-    textAlign: "center",
-    paddingHorizontal: SPACING.xl,
-  },
-  retryButton: {
-    backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-  },
-  retryText: {
-    color: COLORS.white,
-    fontWeight: "600",
-    fontSize: FONTS.sm,
-  },
-  joinSection: {
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-    gap: SPACING.sm,
-  },
-  chatSection: {
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.xs,
-    paddingBottom: SPACING.sm,
-  },
-  chatButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: SPACING.sm,
-    backgroundColor: COLORS.primarySoft,
-    borderRadius: RADIUS.md,
-    paddingVertical: SPACING.md,
-  },
-  chatButtonText: {
-    color: COLORS.primary,
-    fontWeight: "700",
-    fontSize: FONTS.md,
-  },
-  filterBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: SPACING.sm,
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.sm,
-    paddingBottom: SPACING.xs,
-  },
-  filterBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: COLORS.primarySoft,
-    borderRadius: RADIUS.lg,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-  },
-  filterBtnText: {
-    fontSize: FONTS.sm,
-    fontWeight: "600",
-    color: COLORS.primary,
-  },
-  filterBadge: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    minWidth: 20,
-    alignItems: "center",
-  },
-  filterBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: COLORS.white,
-  },
-  resetFilterChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: COLORS.gray100,
-    borderRadius: RADIUS.lg,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-  },
-  resetFilterChipText: {
-    fontSize: FONTS.xs,
-    fontWeight: "600",
-    color: COLORS.gray500,
-  },
-  filterModalOverlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  filterModalContent: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingBottom: 40,
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.md,
-  },
-  filterModalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: SPACING.md,
-  },
-  filterModalTitle: {
-    fontSize: FONTS.lg,
-    fontWeight: "bold",
-    color: COLORS.gray800,
-  },
-  filterOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.md,
-    borderRadius: RADIUS.md,
+  // Participación Card
+  participationCard: {
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
     backgroundColor: COLORS.gray50,
-    marginBottom: SPACING.xs,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    padding: SPACING.md,
   },
-  filterOptionActive: {
+  joinedContainer: {
+    gap: SPACING.sm + 2,
+  },
+  joinedHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  joinedStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
     backgroundColor: COLORS.primarySoft,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.sm + 2,
+    paddingVertical: 4,
   },
-  filterOptionLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: SPACING.sm,
-  },
-  filterOptionTitle: {
-    fontSize: FONTS.md,
-    fontWeight: "600",
-    color: COLORS.gray800,
-  },
-  filterOptionDesc: {
+  joinedStatusText: {
     fontSize: FONTS.xs,
-    color: COLORS.gray500,
-    marginTop: 2,
+    lineHeight: 16,
+    fontWeight: "800",
+    color: COLORS.primaryDark,
   },
-  filterOptionCheck: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: COLORS.primary,
-    borderWidth: 3,
-    borderColor: COLORS.white,
+  leaveText: {
+    fontSize: FONTS.xs,
+    fontWeight: "700",
+    color: COLORS.error,
   },
-  filterDivider: {
-    height: 1,
-    backgroundColor: COLORS.gray100,
-    marginVertical: SPACING.xs,
-  },
-  cityInputRow: {
+  viewParticipantsBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: SPACING.sm,
-    marginTop: SPACING.sm,
-  },
-  cityInputModal: {
-    flex: 1,
-    fontSize: FONTS.sm,
-    color: COLORS.gray800,
+    justifyContent: "space-between",
     backgroundColor: COLORS.white,
-    borderRadius: RADIUS.md,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.sm + 2,
+    borderRadius: RADIUS.lg,
     borderWidth: 1,
     borderColor: COLORS.gray200,
   },
-  citySearchBtn: {
-    backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-  },
-  citySearchBtnDisabled: {
-    opacity: 0.5,
-  },
-  filterApplyBtn: {
-    backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.md,
-    paddingVertical: SPACING.md,
-    alignItems: "center",
-    marginTop: SPACING.md,
-  },
-  filterApplyBtnText: {
-    color: COLORS.white,
-    fontWeight: "bold",
-    fontSize: FONTS.md,
-  },
-  participantsInfo: {
+  viewParticipantsLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: SPACING.xs,
+    gap: SPACING.sm,
+    flex: 1,
   },
-  participantsText: {
-    fontSize: FONTS.sm,
-    color: COLORS.gray500,
-    fontWeight: "500",
-  },
-  joinedRow: {
+  avatarStack: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+  },
+  stackAvatarWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: COLORS.white,
+    overflow: "hidden",
+  },
+  stackAvatarImg: {
+    width: "100%",
+    height: "100%",
+  },
+  stackAvatarFallback: {
+    width: "100%",
+    height: "100%",
     backgroundColor: COLORS.primarySoft,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm + 2,
-  },
-  joinedInfo: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: SPACING.xs,
+    justifyContent: "center",
   },
-  joinedText: {
+  stackAvatarText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: COLORS.primaryDark,
+  },
+  viewParticipantsTexts: {
+    flex: 1,
+  },
+  viewParticipantsTitle: {
     fontSize: FONTS.sm,
-    color: COLORS.primary,
+    lineHeight: 18,
+    fontWeight: "800",
+    color: COLORS.gray900,
+  },
+  viewParticipantsSub: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: COLORS.primaryDark,
     fontWeight: "600",
   },
-  leaveText: {
-    fontSize: FONTS.sm,
-    color: COLORS.error,
-    fontWeight: "600",
+  notJoinedIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  joinButton: {
+  chatEventBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: SPACING.sm,
+    gap: 6,
     backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.md,
-    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.xl,
+    minHeight: 46,
+    ...SHADOWS.small,
   },
-  joinButtonDisabled: {
-    opacity: 0.6,
-  },
-  joinButtonText: {
+  chatEventBtnText: {
+    fontSize: FONTS.sm,
+    lineHeight: 20,
+    fontWeight: "800",
     color: COLORS.white,
-    fontWeight: "bold",
+  },
+  notJoinedContainer: {
+    gap: SPACING.md,
+  },
+  notJoinedInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+  },
+  notJoinedTitle: {
     fontSize: FONTS.md,
+    lineHeight: 20,
+    fontWeight: "800",
+    color: COLORS.gray900,
+  },
+  notJoinedSubtitle: {
+    fontSize: FONTS.xs,
+    lineHeight: 16,
+    color: COLORS.gray500,
+    marginTop: 2,
+  },
+  joinBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.full,
+    minHeight: 48,
+    ...SHADOWS.medium,
+  },
+  joinBtnDisabled: {
+    backgroundColor: COLORS.gray300,
+  },
+  joinBtnText: {
+    fontSize: FONTS.sm,
+    lineHeight: 20,
+    fontWeight: "800",
+    color: COLORS.white,
   },
 });
 

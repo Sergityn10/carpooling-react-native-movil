@@ -222,18 +222,24 @@ const PlaceAutocompleteInput = ({
                 </TouchableOpacity>
               )}
               {savedLocations.map((loc) => {
+                const typeKey = (loc.type || loc.tipo || "other").toLowerCase();
                 const IconComp =
-                  SAVED_LOCATION_ICONS[loc.tipo] || SAVED_LOCATION_ICONS.other;
+                  SAVED_LOCATION_ICONS[typeKey] || SAVED_LOCATION_ICONS.other;
+                const displayName =
+                  loc.display_name || loc.nombre || loc.label || loc.name || "Ubicación";
+                const address = loc.address || loc.direccion || "";
+                const latVal = loc.lat ?? loc.latitud ?? loc.latitude;
+                const lngVal = loc.lng ?? loc.longitud ?? loc.longitude;
                 return (
                   <TouchableOpacity
-                    key={loc.id || loc.name}
+                    key={loc.id || displayName}
                     style={styles.savedItem}
                     onPress={() => {
                       onSelectPlace?.({
-                        name: loc.nombre || loc.name,
-                        address: loc.direccion || loc.address,
-                        latitude: Number(loc.latitud || loc.latitude),
-                        longitude: Number(loc.longitud || loc.longitude),
+                        name: displayName,
+                        address: address,
+                        latitude: latVal != null ? Number(latVal) : undefined,
+                        longitude: lngVal != null ? Number(lngVal) : undefined,
                       });
                       setOpen(false);
                     }}
@@ -253,10 +259,10 @@ const PlaceAutocompleteInput = ({
                     </View>
                     <View style={styles.savedContent}>
                       <Text style={styles.savedLabel}>
-                        {loc.nombre || loc.name}
+                        {displayName}
                       </Text>
                       <Text style={styles.savedAddress} numberOfLines={1}>
-                        {loc.direccion || loc.address}
+                        {address}
                       </Text>
                     </View>
                   </TouchableOpacity>

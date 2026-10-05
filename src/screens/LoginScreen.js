@@ -1,4 +1,4 @@
-// YouConnext - LoginScreen
+// YouConnext - LoginScreen (Pro UI/UX Redesign)
 import React, { useState, useEffect, useRef } from "react";
 import {
   View,
@@ -23,6 +23,8 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
+  ArrowRight,
+  Sparkles,
 } from "lucide-react-native";
 import { useUser } from "../context/UserContext";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../constants";
@@ -57,12 +59,12 @@ const LoginScreen = ({ navigation }) => {
 
   const getFieldError = (field, value) => {
     if (field === "email") {
-      if (!value.trim()) return "El email es requerido";
+      if (!value.trim()) return "Introduce tu correo electrónico";
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()))
-        return "Email no válido";
+        return "El formato del email no es válido";
     }
     if (field === "password") {
-      if (!value.trim()) return "La contraseña es requerida";
+      if (!value.trim()) return "Introduce tu contraseña";
     }
     return undefined;
   };
@@ -95,7 +97,7 @@ const LoginScreen = ({ navigation }) => {
     } catch (error) {
       setFormError(
         error.message ||
-          "No se pudo iniciar sesión. Revisa tu email y contraseña.",
+          "Credenciales incorrectas. Comprueba tu email y contraseña.",
       );
     } finally {
       setLoading(false);
@@ -121,14 +123,6 @@ const LoginScreen = ({ navigation }) => {
 
       await loginGoogleNative(idToken, "login");
     } catch (error) {
-      console.log(
-        "[LoginScreen] Google Sign-In error:",
-        JSON.stringify({
-          code: error.code,
-          message: error.message,
-          description: error.description,
-        }),
-      );
       if (error.code !== "12501") {
         Alert.alert(
           "Error",
@@ -140,24 +134,30 @@ const LoginScreen = ({ navigation }) => {
     }
   };
 
+  const handleForgotPassword = () => {
+    Alert.alert(
+      "Recuperar contraseña",
+      "Si has olvidado tu contraseña, puedes solicitar un enlace de restablecimiento a través de nuestro soporte web.",
+      [{ text: "Entendido" }],
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.flex}
       >
-        {/* Header con botón back */}
+        {/* Header Bar */}
         <View style={styles.headerBar}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => navigation.goBack()}
-            activeOpacity={0.7}
+            activeOpacity={0.8}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            accessibilityRole="button"
-            accessibilityLabel="Volver"
           >
-            <ChevronLeft size={24} color={COLORS.gray700} strokeWidth={2} />
+            <ChevronLeft size={22} color={COLORS.gray800} strokeWidth={2.5} />
           </TouchableOpacity>
         </View>
 
@@ -166,29 +166,34 @@ const LoginScreen = ({ navigation }) => {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Logo y titulo */}
+          {/* Logo & Headline */}
           <View style={styles.header}>
-            <Image
-              source={require("../../assets/logo-sin-bg-198px-ajustado.png")}
-              style={styles.logoImage}
-              resizeMode="contain"
-            />
-            <Text style={styles.title}>Bienvenido de nuevo</Text>
-            <Text style={styles.subtitle}>Inicia sesión para continuar</Text>
+            <View style={styles.logoBadge}>
+              <Image
+                source={require("../../assets/logo-sin-bg-198px-ajustado.png")}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
+            </View>
+            <Text style={styles.title}>¡Hola de nuevo!</Text>
+            <Text style={styles.subtitle}>
+              Inicia sesión para acceder a tus trayectos, eventos y comunidad.
+            </Text>
           </View>
 
-          {/* Error global del formulario */}
-          {formError && (
-            <View style={styles.formErrorBanner} accessibilityRole="alert">
-              <AlertCircle size={18} color={COLORS.error} strokeWidth={2.2} />
-              <Text style={styles.formErrorText}>{formError}</Text>
-            </View>
-          )}
+          {/* Form Card */}
+          <View style={styles.formCard}>
+            {/* Global form error banner */}
+            {formError && (
+              <View style={styles.formErrorBanner}>
+                <AlertCircle size={18} color={COLORS.error} strokeWidth={2.2} />
+                <Text style={styles.formErrorText}>{formError}</Text>
+              </View>
+            )}
 
-          {/* Formulario */}
-          <View style={styles.form}>
+            {/* Email Field */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email</Text>
+              <Text style={styles.label}>Correo electrónico</Text>
               <View
                 style={[
                   styles.inputWrapper,
@@ -197,7 +202,7 @@ const LoginScreen = ({ navigation }) => {
                 ]}
               >
                 <Mail
-                  size={20}
+                  size={19}
                   color={
                     errors.email
                       ? COLORS.error
@@ -205,17 +210,16 @@ const LoginScreen = ({ navigation }) => {
                         ? COLORS.primary
                         : COLORS.gray400
                   }
-                  strokeWidth={2}
+                  strokeWidth={2.2}
                 />
                 <TextInput
                   style={styles.input}
-                  placeholder="correo@ejemplo.com"
+                  placeholder="ejemplo@correo.com"
                   placeholderTextColor={COLORS.gray400}
                   value={email}
                   onChangeText={(text) => {
                     setEmail(text);
-                    if (errors.email)
-                      setErrors({ ...errors, email: undefined });
+                    if (errors.email) setErrors({ ...errors, email: undefined });
                     if (formError) setFormError(null);
                   }}
                   onFocus={() => setFocusedField("email")}
@@ -227,17 +231,29 @@ const LoginScreen = ({ navigation }) => {
                   textContentType="emailAddress"
                   returnKeyType="next"
                   onSubmitEditing={() => passwordRef.current?.focus()}
-                  submitBehavior="submit"
-                  accessibilityLabel="Email"
                 />
               </View>
               {errors.email && (
-                <Text style={styles.errorText}>{errors.email}</Text>
+                <View style={styles.fieldErrorRow}>
+                  <AlertCircle size={13} color={COLORS.error} strokeWidth={2} />
+                  <Text style={styles.errorText}>{errors.email}</Text>
+                </View>
               )}
             </View>
 
+            {/* Password Field */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Contraseña</Text>
+              <View style={styles.labelRow}>
+                <Text style={styles.label}>Contraseña</Text>
+                <TouchableOpacity
+                  onPress={handleForgotPassword}
+                  activeOpacity={0.7}
+                  hitSlop={6}
+                >
+                  <Text style={styles.forgotPasswordText}>¿La has olvidado?</Text>
+                </TouchableOpacity>
+              </View>
+
               <View
                 style={[
                   styles.inputWrapper,
@@ -246,7 +262,7 @@ const LoginScreen = ({ navigation }) => {
                 ]}
               >
                 <Lock
-                  size={20}
+                  size={19}
                   color={
                     errors.password
                       ? COLORS.error
@@ -254,12 +270,12 @@ const LoginScreen = ({ navigation }) => {
                         ? COLORS.primary
                         : COLORS.gray400
                   }
-                  strokeWidth={2}
+                  strokeWidth={2.2}
                 />
                 <TextInput
                   ref={passwordRef}
                   style={styles.input}
-                  placeholder="Tu contraseña"
+                  placeholder="Tu contraseña secreta"
                   placeholderTextColor={COLORS.gray400}
                   value={password}
                   onChangeText={(text) => {
@@ -277,81 +293,88 @@ const LoginScreen = ({ navigation }) => {
                   textContentType="password"
                   returnKeyType="go"
                   onSubmitEditing={handleSubmit}
-                  accessibilityLabel="Contraseña"
                 />
                 <TouchableOpacity
                   onPress={() => setShowPassword(!showPassword)}
                   activeOpacity={0.7}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
-                  }
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
                   {showPassword ? (
-                    <EyeOff size={20} color={COLORS.gray500} strokeWidth={2} />
+                    <EyeOff size={19} color={COLORS.gray500} strokeWidth={2} />
                   ) : (
-                    <Eye size={20} color={COLORS.gray500} strokeWidth={2} />
+                    <Eye size={19} color={COLORS.gray500} strokeWidth={2} />
                   )}
                 </TouchableOpacity>
               </View>
               {errors.password && (
-                <Text style={styles.errorText}>{errors.password}</Text>
+                <View style={styles.fieldErrorRow}>
+                  <AlertCircle size={13} color={COLORS.error} strokeWidth={2} />
+                  <Text style={styles.errorText}>{errors.password}</Text>
+                </View>
               )}
             </View>
 
-            <Button
-              title="Iniciar sesión"
-              onPress={handleSubmit}
-              variant="primary"
-              size="large"
-              loading={loading}
-              style={styles.submitButton}
-            />
-          </View>
-
-          {/* Separador */}
-          <View style={styles.dividerContainer}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>o continúa con</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          {/* Botón Google */}
-          {googleAvailable && (
+            {/* Submit Button */}
             <TouchableOpacity
               style={[
-                styles.googleButton,
-                (googleLoading || loading) && styles.googleButtonLoading,
+                styles.submitButton,
+                loading && styles.submitButtonLoading,
               ]}
-              onPress={handleGoogleAuth}
-              disabled={googleLoading || loading}
-              activeOpacity={0.8}
-              accessibilityRole="button"
-              accessibilityLabel="Continuar con Google"
-              accessibilityState={{ disabled: googleLoading || loading }}
+              onPress={handleSubmit}
+              disabled={loading}
+              activeOpacity={0.9}
             >
-              {googleLoading ? (
-                <ActivityIndicator size="small" color={COLORS.gray700} />
+              {loading ? (
+                <ActivityIndicator size="small" color={COLORS.white} />
               ) : (
                 <>
-                  <GoogleIcon size={22} />
-                  <Text style={styles.googleButtonText}>
-                    Continuar con Google
-                  </Text>
+                  <Text style={styles.submitButtonText}>Iniciar sesión</Text>
+                  <ArrowRight size={18} color={COLORS.white} strokeWidth={2.5} />
                 </>
               )}
             </TouchableOpacity>
-          )}
 
-          {/* Link a registro */}
+            {/* Divider */}
+            <View style={styles.dividerContainer}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>o bien continúa con</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Google Sign-in */}
+            {googleAvailable && (
+              <TouchableOpacity
+                style={[
+                  styles.googleButton,
+                  (googleLoading || loading) && styles.googleButtonLoading,
+                ]}
+                onPress={handleGoogleAuth}
+                disabled={googleLoading || loading}
+                activeOpacity={0.8}
+              >
+                {googleLoading ? (
+                  <ActivityIndicator size="small" color={COLORS.gray700} />
+                ) : (
+                  <>
+                    <GoogleIcon size={22} />
+                    <Text style={styles.googleButtonText}>
+                      Continuar con Google
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Footer toggle to Register */}
           <View style={styles.toggleContainer}>
-            <Text style={styles.toggleText}>¿No tienes cuenta?</Text>
+            <Text style={styles.toggleText}>¿Aún no tienes cuenta?</Text>
             <TouchableOpacity
               onPress={() => navigation.navigate("Register")}
               activeOpacity={0.7}
+              hitSlop={4}
             >
-              <Text style={styles.toggleLink}>Regístrate</Text>
+              <Text style={styles.toggleLink}>Crear cuenta gratis</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -375,9 +398,9 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: COLORS.white,
     alignItems: "center",
     justifyContent: "center",
@@ -387,29 +410,49 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.xxl,
+    justifyContent: "center",
   },
   header: {
     alignItems: "center",
-    paddingVertical: SPACING.xl,
+    marginBottom: SPACING.lg,
+  },
+  logoBadge: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: COLORS.white,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: SPACING.md,
+    ...SHADOWS.small,
   },
   logoImage: {
-    width: 100,
-    height: 100,
-    marginBottom: SPACING.md,
+    width: 54,
+    height: 54,
   },
   title: {
-    fontSize: FONTS.xxl,
-    lineHeight: 30,
-    fontWeight: "700",
-    letterSpacing: -0.3,
+    fontSize: FONTS.xxl + 2,
+    lineHeight: 34,
+    fontWeight: "900",
+    letterSpacing: -0.5,
     color: COLORS.gray900,
     marginBottom: SPACING.xs,
+    textAlign: "center",
   },
   subtitle: {
-    fontSize: FONTS.md,
-    lineHeight: 23,
+    fontSize: FONTS.sm + 1,
+    lineHeight: 22,
     color: COLORS.gray500,
     textAlign: "center",
+    paddingHorizontal: SPACING.md,
+  },
+  formCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.gray100,
+    ...SHADOWS.medium,
   },
   formErrorBanner: {
     flexDirection: "row",
@@ -423,30 +466,40 @@ const styles = StyleSheet.create({
   },
   formErrorText: {
     flex: 1,
-    fontSize: FONTS.sm,
-    lineHeight: 20,
+    fontSize: FONTS.xs,
+    lineHeight: 18,
     color: COLORS.error,
-    fontWeight: "500",
-  },
-  form: {
-    width: "100%",
+    fontWeight: "700",
   },
   inputGroup: {
     marginBottom: SPACING.md,
   },
-  label: {
-    fontSize: FONTS.sm,
-    lineHeight: 20,
-    color: COLORS.gray700,
+  labelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: SPACING.xs,
-    fontWeight: "600",
+  },
+  label: {
+    fontSize: FONTS.xs,
+    lineHeight: 16,
+    color: COLORS.gray700,
+    fontWeight: "700",
+    marginBottom: SPACING.xs,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  forgotPasswordText: {
+    fontSize: FONTS.xs,
+    fontWeight: "700",
+    color: COLORS.primary,
   },
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    minHeight: 54,
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.md,
+    minHeight: 52,
+    backgroundColor: COLORS.gray50,
+    borderRadius: RADIUS.lg,
     paddingHorizontal: SPACING.md,
     borderWidth: 1.5,
     borderColor: COLORS.gray200,
@@ -454,6 +507,7 @@ const styles = StyleSheet.create({
   inputWrapperFocused: {
     borderColor: COLORS.primary,
     backgroundColor: COLORS.white,
+    ...SHADOWS.small,
   },
   inputWrapperError: {
     borderColor: COLORS.error,
@@ -465,22 +519,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.sm,
     fontSize: FONTS.md,
     color: COLORS.gray900,
+    fontWeight: "600",
+  },
+  fieldErrorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 4,
+    marginLeft: 2,
   },
   errorText: {
     fontSize: FONTS.xs,
-    lineHeight: 16,
     color: COLORS.error,
-    fontWeight: "500",
-    marginTop: SPACING.xs,
-    marginLeft: SPACING.xs,
+    fontWeight: "600",
   },
   submitButton: {
-    marginTop: SPACING.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: SPACING.xs,
+    minHeight: 52,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.primary,
+    marginTop: SPACING.xs,
+    ...SHADOWS.medium,
+  },
+  submitButtonLoading: {
+    opacity: 0.8,
+  },
+  submitButtonText: {
+    fontSize: FONTS.md,
+    fontWeight: "800",
+    color: COLORS.white,
+    letterSpacing: 0.2,
   },
   dividerContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginVertical: SPACING.lg,
+    marginVertical: SPACING.md + 4,
   },
   dividerLine: {
     flex: 1,
@@ -488,30 +564,30 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.gray200,
   },
   dividerText: {
-    fontSize: FONTS.sm,
+    fontSize: FONTS.xs,
     color: COLORS.gray400,
     marginHorizontal: SPACING.md,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   googleButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 54,
+    minHeight: 52,
     backgroundColor: COLORS.white,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.full,
     paddingVertical: SPACING.sm,
     borderWidth: 1.5,
     borderColor: COLORS.gray200,
+    ...SHADOWS.small,
   },
   googleButtonLoading: {
     opacity: 0.7,
   },
   googleButtonText: {
-    fontSize: FONTS.md,
-    lineHeight: 22,
-    fontWeight: "600",
-    color: COLORS.gray700,
+    fontSize: FONTS.sm + 1,
+    fontWeight: "700",
+    color: COLORS.gray800,
     marginLeft: SPACING.sm,
   },
   toggleContainer: {
@@ -519,18 +595,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginTop: SPACING.xl,
+    gap: 4,
   },
   toggleText: {
-    fontSize: FONTS.md,
-    lineHeight: 22,
+    fontSize: FONTS.sm,
     color: COLORS.gray500,
   },
   toggleLink: {
-    fontSize: FONTS.md,
-    lineHeight: 22,
+    fontSize: FONTS.sm,
     color: COLORS.primary,
-    fontWeight: "700",
-    marginLeft: SPACING.xs,
+    fontWeight: "800",
   },
 });
 

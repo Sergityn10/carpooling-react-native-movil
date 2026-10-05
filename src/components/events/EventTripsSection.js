@@ -1,4 +1,4 @@
-// YouConnext - Event Trips Section Component
+// YouConnext - Event Trips Section Component (Pro UI/UX Redesign with Nearby Filter)
 import React from "react";
 import {
   View,
@@ -10,12 +10,16 @@ import {
 import {
   Car,
   Plus,
-  Navigation as NavIcon,
-  ArrowRight,
   Search,
+  ChevronRight,
+  MapPin,
+  LocateFixed,
+  X,
+  SlidersHorizontal,
 } from "lucide-react-native";
-import { COLORS, SPACING, RADIUS, FONTS } from "../../constants";
+import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../../constants";
 import { ViajeCard } from "../index";
+import AnimatedCardEntrance from "../common/AnimatedCardEntrance";
 
 const EventTripsSection = ({
   trayectosIda = [],
@@ -24,67 +28,93 @@ const EventTripsSection = ({
   onCrearViaje,
   onBuscarViaje,
   onViajePress,
+  onVerTodos,
+  onBuscarCerca,
+  onResetFiltros,
+  isNearbyActive = false,
+  loadingNearby = false,
   activeTab = "ida",
   onTabChange,
 }) => {
   const trayectos = activeTab === "ida" ? trayectosIda : trayectosVuelta;
+  const previewTrips = trayectos.slice(0, 3);
+  const totalCount = trayectos.length;
 
   const renderEmpty = () => (
-    <View style={styles.emptyTrips}>
-      <NavIcon size={40} color={COLORS.gray300} strokeWidth={1.5} />
-      <Text style={styles.emptyTripsTitle}>
-        No hay viajes de {activeTab === "ida" ? "ida" : "vuelta"}
+    <View style={styles.emptyCard}>
+      <View style={styles.emptyIconBox}>
+        <Car size={32} color={COLORS.primary} strokeWidth={1.8} />
+      </View>
+      <Text style={styles.emptyTitle}>
+        {isNearbyActive
+          ? `Sin viajes de ${activeTab === "ida" ? "ida" : "vuelta"} cerca de ti`
+          : `Sin viajes de ${activeTab === "ida" ? "ida" : "vuelta"} por ahora`}
       </Text>
-      <Text style={styles.emptyTripsText}>
-        Sé el primero en crear un viaje de{" "}
-        {activeTab === "ida" ? "ida hacia" : "vuelta desde"} este evento
+      <Text style={styles.emptySubtitle}>
+        {isNearbyActive
+          ? "No se encontraron trayectos que pasen en un radio de 5 km de tu ubicación."
+          : "¿Vas en tu vehículo? Comparte tus plazas libres con otros asistentes y ahorra gastos de combustible."}
       </Text>
-      <TouchableOpacity
-        style={styles.emptyCrearButton}
-        onPress={onCrearViaje}
-        activeOpacity={0.8}
-      >
-        <Car size={18} color={COLORS.white} strokeWidth={2.5} />
-        <Text style={styles.emptyCrearText}>Crear viaje</Text>
-      </TouchableOpacity>
+
+      {isNearbyActive ? (
+        <TouchableOpacity
+          style={styles.resetFilterBtn}
+          onPress={onResetFiltros}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.resetFilterBtnText}>Ver todos los viajes</Text>
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity
+          style={styles.emptyCreateBtn}
+          onPress={onCrearViaje}
+          activeOpacity={0.88}
+        >
+          <Car size={16} color={COLORS.white} strokeWidth={2.5} />
+          <Text style={styles.emptyCreateBtnText}>Ofrecer plazas</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 
   return (
-    <View style={styles.section}>
-      <View style={styles.tripsHeader}>
-        <View style={styles.tripsTitleRow}>
-          <Car size={18} color={COLORS.gray700} strokeWidth={2.5} />
-          <Text style={styles.sectionTitle}>Viajes</Text>
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.headerRow}>
+        <View style={styles.titleRow}>
+          <Car size={18} color={COLORS.gray900} strokeWidth={2.5} />
+          <Text style={styles.sectionTitle}>Viajes compartidos</Text>
         </View>
-        <View style={styles.tripsHeaderActions}>
+
+        <View style={styles.actionBtns}>
           {onBuscarViaje && (
             <TouchableOpacity
-              style={styles.buscarViajeButton}
+              style={styles.buscarBtn}
               onPress={() => onBuscarViaje(activeTab)}
               activeOpacity={0.8}
             >
-              <Search size={16} color={COLORS.primary} strokeWidth={2.5} />
-              <Text style={styles.buscarViajeText}>Buscar</Text>
+              <Search size={14} color={COLORS.primaryDark} strokeWidth={2.5} />
+              <Text style={styles.buscarBtnText}>Buscar</Text>
             </TouchableOpacity>
           )}
+
           <TouchableOpacity
-            style={styles.crearViajeButton}
+            style={styles.crearBtn}
             onPress={onCrearViaje}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
           >
-            <Plus size={16} color={COLORS.primary} strokeWidth={2.5} />
-            <Text style={styles.crearViajeText}>Crear viaje</Text>
+            <Plus size={14} color={COLORS.white} strokeWidth={2.5} />
+            <Text style={styles.crearBtnText}>Ofrecer</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Tabs Ida / Vuelta */}
+      {/* Segmented Control Ida / Vuelta */}
       <View style={styles.tabsContainer}>
         <TouchableOpacity
           style={[styles.tab, activeTab === "ida" && styles.tabActive]}
           onPress={() => onTabChange("ida")}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
           <Text
             style={[
@@ -92,18 +122,31 @@ const EventTripsSection = ({
               activeTab === "ida" && styles.tabTextActive,
             ]}
           >
-            Ida
+            Ida al evento
           </Text>
           {trayectosIda.length > 0 && (
-            <View style={styles.tabBadge}>
-              <Text style={styles.tabBadgeText}>{trayectosIda.length}</Text>
+            <View
+              style={[
+                styles.tabBadge,
+                activeTab === "ida" && styles.tabBadgeActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabBadgeText,
+                  activeTab === "ida" && styles.tabBadgeTextActive,
+                ]}
+              >
+                {trayectosIda.length}
+              </Text>
             </View>
           )}
         </TouchableOpacity>
+
         <TouchableOpacity
           style={[styles.tab, activeTab === "vuelta" && styles.tabActive]}
           onPress={() => onTabChange("vuelta")}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
           <Text
             style={[
@@ -114,26 +157,103 @@ const EventTripsSection = ({
             Vuelta
           </Text>
           {trayectosVuelta.length > 0 && (
-            <View style={styles.tabBadge}>
-              <Text style={styles.tabBadgeText}>{trayectosVuelta.length}</Text>
+            <View
+              style={[
+                styles.tabBadge,
+                activeTab === "vuelta" && styles.tabBadgeActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabBadgeText,
+                  activeTab === "vuelta" && styles.tabBadgeTextActive,
+                ]}
+              >
+                {trayectosVuelta.length}
+              </Text>
             </View>
           )}
         </TouchableOpacity>
       </View>
 
-      {loading ? (
-        <View style={styles.tripsLoading}>
+      {/* Filtros rápidos: Cerca de mí / Todos */}
+      <View style={styles.filterPillsRow}>
+        <TouchableOpacity
+          style={[
+            styles.filterPill,
+            !isNearbyActive && styles.filterPillActive,
+          ]}
+          onPress={onResetFiltros}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.filterPillText,
+              !isNearbyActive && styles.filterPillTextActive,
+            ]}
+          >
+            Todos los viajes
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.filterPill,
+            isNearbyActive && styles.filterPillActiveNearby,
+          ]}
+          onPress={onBuscarCerca}
+          disabled={loadingNearby}
+          activeOpacity={0.8}
+        >
+          {loadingNearby ? (
+            <ActivityIndicator size={12} color={COLORS.primaryDark} />
+          ) : (
+            <LocateFixed
+              size={13}
+              color={isNearbyActive ? COLORS.white : COLORS.gray600}
+              strokeWidth={2.4}
+            />
+          )}
+          <Text
+            style={[
+              styles.filterPillText,
+              isNearbyActive && styles.filterPillTextActiveNearby,
+            ]}
+          >
+            Cerca de mí (5 km)
+          </Text>
+          {isNearbyActive && (
+            <X size={12} color={COLORS.white} strokeWidth={2.5} />
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* Lista / Previsualización */}
+      {loading || loadingNearby ? (
+        <View style={styles.loadingBox}>
           <ActivityIndicator size="small" color={COLORS.primary} />
-          <Text style={styles.tripsLoadingText}>Cargando viajes...</Text>
+          <Text style={styles.loadingText}>Buscando trayectos...</Text>
         </View>
       ) : trayectos.length > 0 ? (
-        trayectos.map((viaje, index) => (
-          <ViajeCard
-            key={viaje.id || index}
-            viaje={viaje}
-            onPress={() => onViajePress(viaje)}
-          />
-        ))
+        <View style={styles.tripsList}>
+          {previewTrips.map((viaje, index) => (
+            <AnimatedCardEntrance key={viaje.id || index} index={index}>
+              <ViajeCard viaje={viaje} onPress={() => onViajePress(viaje)} />
+            </AnimatedCardEntrance>
+          ))}
+
+          {/* Botón Ver Todos los Trayectos si hay varios */}
+          <TouchableOpacity
+            style={styles.verTodosBtn}
+            onPress={() => onVerTodos(activeTab)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.verTodosBtnText}>
+              Ver todos los viajes de {activeTab === "ida" ? "ida" : "vuelta"} ({totalCount})
+            </Text>
+            <ChevronRight size={18} color={COLORS.primaryDark} strokeWidth={2.5} />
+          </TouchableOpacity>
+        </View>
       ) : (
         renderEmpty()
       )}
@@ -142,141 +262,246 @@ const EventTripsSection = ({
 };
 
 const styles = StyleSheet.create({
-  section: {
+  container: {
     paddingHorizontal: SPACING.lg,
-    marginTop: SPACING.md,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.xl,
   },
-  sectionTitle: {
-    fontSize: FONTS.md,
-    fontWeight: "bold",
-    color: COLORS.gray800,
-  },
-  tripsHeader: {
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.md,
   },
-  tripsTitleRow: {
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  sectionTitle: {
+    fontSize: FONTS.lg,
+    lineHeight: 24,
+    fontWeight: "800",
+    color: COLORS.gray900,
+    letterSpacing: -0.3,
+  },
+  actionBtns: {
     flexDirection: "row",
     alignItems: "center",
     gap: SPACING.xs,
   },
-  crearViajeButton: {
+  buscarBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
     backgroundColor: COLORS.primarySoft,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.sm + 2,
+    paddingVertical: 6,
   },
-  buscarViajeButton: {
+  buscarBtnText: {
+    fontSize: FONTS.xs,
+    lineHeight: 16,
+    fontWeight: "800",
+    color: COLORS.primaryDark,
+  },
+  crearBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: COLORS.primarySoft,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.sm + 2,
+    paddingVertical: 6,
   },
-  buscarViajeText: {
+  crearBtnText: {
     fontSize: FONTS.xs,
-    fontWeight: "600",
-    color: COLORS.primary,
-  },
-  tripsHeaderActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: SPACING.xs,
-  },
-  crearViajeText: {
-    fontSize: FONTS.xs,
-    fontWeight: "600",
-    color: COLORS.primary,
+    lineHeight: 16,
+    fontWeight: "800",
+    color: COLORS.white,
   },
   tabsContainer: {
     flexDirection: "row",
-    gap: SPACING.xs,
-    marginBottom: SPACING.md,
+    backgroundColor: COLORS.gray100,
+    borderRadius: RADIUS.full,
+    padding: 3,
+    marginBottom: SPACING.sm,
   },
   tab: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: SPACING.xs,
-    paddingVertical: SPACING.sm,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.gray100,
+    gap: 6,
+    minHeight: 38,
+    borderRadius: RADIUS.full,
   },
   tabActive: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.white,
+    ...SHADOWS.small,
   },
   tabText: {
-    fontSize: FONTS.sm,
-    fontWeight: "600",
+    fontSize: FONTS.xs,
+    lineHeight: 16,
+    fontWeight: "700",
     color: COLORS.gray500,
   },
   tabTextActive: {
-    color: COLORS.white,
+    color: COLORS.primaryDark,
+    fontWeight: "800",
   },
   tabBadge: {
     minWidth: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.gray200,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 5,
+    paddingHorizontal: 4,
+  },
+  tabBadgeActive: {
+    backgroundColor: COLORS.primarySoft,
   },
   tabBadgeText: {
     fontSize: 10,
-    fontWeight: "700",
-    color: COLORS.primary,
-  },
-  tripsLoading: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: SPACING.xl,
-    gap: SPACING.sm,
-  },
-  tripsLoadingText: {
-    fontSize: FONTS.sm,
-    color: COLORS.gray500,
-  },
-  emptyTrips: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: SPACING.xxl,
-    gap: SPACING.sm,
-  },
-  emptyTripsTitle: {
-    fontSize: FONTS.md,
-    fontWeight: "bold",
+    fontWeight: "800",
     color: COLORS.gray600,
   },
-  emptyTripsText: {
-    fontSize: FONTS.sm,
-    color: COLORS.gray400,
-    textAlign: "center",
-    paddingHorizontal: SPACING.xl,
+  tabBadgeTextActive: {
+    color: COLORS.primaryDark,
   },
-  emptyCrearButton: {
+  filterPillsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.xs,
+    marginBottom: SPACING.md,
+  },
+  filterPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: COLORS.gray100,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 6,
+  },
+  filterPillActive: {
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.gray300,
+  },
+  filterPillActiveNearby: {
+    backgroundColor: COLORS.primary,
+  },
+  filterPillText: {
+    fontSize: FONTS.xs,
+    lineHeight: 16,
+    fontWeight: "700",
+    color: COLORS.gray600,
+  },
+  filterPillTextActive: {
+    color: COLORS.gray900,
+    fontWeight: "800",
+  },
+  filterPillTextActiveNearby: {
+    color: COLORS.white,
+    fontWeight: "800",
+  },
+  tripsList: {
+    gap: SPACING.sm,
+  },
+  verTodosBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: SPACING.xs,
-    backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-    marginTop: SPACING.sm,
+    gap: 6,
+    backgroundColor: COLORS.primarySoft,
+    borderWidth: 1,
+    borderColor: "rgba(13, 159, 110, 0.3)",
+    borderRadius: RADIUS.xl,
+    paddingVertical: SPACING.md,
+    marginTop: SPACING.xs,
   },
-  emptyCrearText: {
-    color: COLORS.white,
-    fontWeight: "600",
+  verTodosBtnText: {
     fontSize: FONTS.sm,
+    lineHeight: 20,
+    fontWeight: "800",
+    color: COLORS.primaryDark,
+  },
+  loadingBox: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: SPACING.xl,
+    gap: SPACING.xs,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xl,
+  },
+  loadingText: {
+    fontSize: FONTS.xs,
+    color: COLORS.gray500,
+    fontWeight: "600",
+  },
+  emptyCard: {
+    alignItems: "center",
+    paddingVertical: SPACING.xl,
+    paddingHorizontal: SPACING.lg,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.gray100,
+  },
+  emptyIconBox: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: COLORS.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: SPACING.sm + 2,
+  },
+  emptyTitle: {
+    fontSize: FONTS.md,
+    lineHeight: 22,
+    fontWeight: "800",
+    color: COLORS.gray900,
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    fontSize: FONTS.xs,
+    lineHeight: 18,
+    color: COLORS.gray500,
+    textAlign: "center",
+    marginTop: 4,
+    marginBottom: SPACING.md,
+    maxWidth: 280,
+  },
+  emptyCreateBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm + 2,
+    ...SHADOWS.small,
+  },
+  emptyCreateBtnText: {
+    fontSize: FONTS.sm,
+    lineHeight: 20,
+    fontWeight: "800",
+    color: COLORS.white,
+  },
+  resetFilterBtn: {
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm + 2,
+  },
+  resetFilterBtnText: {
+    fontSize: FONTS.sm,
+    lineHeight: 20,
+    fontWeight: "800",
+    color: COLORS.primaryDark,
   },
 });
 

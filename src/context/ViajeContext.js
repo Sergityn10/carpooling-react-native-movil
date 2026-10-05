@@ -227,18 +227,32 @@ export const ViajeProvider = ({ children }) => {
   // Iniciar tracking GPS (background + foreground)
   const iniciarTracking = async () => {
     try {
-      // Solicitar permisos de foreground
-      const { status: fgStatus } =
-        await Location.requestForegroundPermissionsAsync();
-      if (fgStatus !== "granted") {
-        throw new Error("Permiso de ubicación denegado");
+      // Comprobar permisos de foreground
+      let fgStatus = "denied";
+      try {
+        const fgCheck = await Location.getForegroundPermissionsAsync();
+        fgStatus = fgCheck.status;
+        if (fgStatus !== "granted") {
+          const fgReq = await Location.requestForegroundPermissionsAsync();
+          fgStatus = fgReq.status;
+        }
+      } catch (err) {
+        console.warn("Error verificando permisos de ubicación foreground:", err);
       }
 
-      // Solicitar permisos de background
-      const { status: bgStatus } =
-        await Location.requestBackgroundPermissionsAsync();
-      if (bgStatus !== "granted") {
-        console.warn("Permiso de ubicación en background denegado");
+      if (fgStatus !== "granted") {
+        console.log("Tracking GPS en modo manual (sin permisos de ubicación)");
+        setTrackingActivo(true);
+        return;
+      }
+
+      // Comprobar permisos de background
+      let bgStatus = "denied";
+      try {
+        const bgCheck = await Location.getBackgroundPermissionsAsync();
+        bgStatus = bgCheck.status;
+      } catch {
+        // ignore
       }
 
       let servicesEnabled = await Location.hasServicesEnabledAsync();
@@ -251,24 +265,26 @@ export const ViajeProvider = ({ children }) => {
         servicesEnabled = await Location.hasServicesEnabledAsync();
       }
 
-      if (!servicesEnabled) {
-        throw new Error("Servicios de ubicación desactivados");
-      }
-
       setTrackingActivo(true);
 
-      // Iniciar background location updates (cada SAVE_INTERVAL)
-      await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
-        accuracy: Location.Accuracy.High,
-        timeInterval: GPS_CONFIG.SAVE_INTERVAL,
-        distanceInterval: GPS_CONFIG.MIN_DISTANCE,
-        deferredUpdatesInterval: GPS_CONFIG.SAVE_INTERVAL,
-        showsBackgroundLocationIndicator: true,
-        foregroundService: {
-          notificationTitle: "YouConnext",
-          notificationBody: "Trackeando tu viaje en curso...",
-        },
-      });
+      // Iniciar background location updates si está concedido
+      if (bgStatus === "granted") {
+        try {
+          await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
+            accuracy: Location.Accuracy.High,
+            timeInterval: GPS_CONFIG.SAVE_INTERVAL,
+            distanceInterval: GPS_CONFIG.MIN_DISTANCE,
+            deferredUpdatesInterval: GPS_CONFIG.SAVE_INTERVAL,
+            showsBackgroundLocationIndicator: true,
+            foregroundService: {
+              notificationTitle: "YouConnext",
+              notificationBody: "Trackeando tu viaje en curso...",
+            },
+          });
+        } catch (err) {
+          console.warn("No se pudo iniciar background location task:", err);
+        }
+      }
 
       // También suscribirse a foreground para UI en tiempo real
       locationSubscription.current = await Location.watchPositionAsync(

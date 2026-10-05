@@ -47,7 +47,13 @@ const EventCard = ({ event, onPress, featured, joinedAt }) => {
   const tags = event.tags || [];
   const companyName = event.company?.name || "";
   const distanceKm = event.distance_km;
-  const hasImage = event.image && event.image.length > 100;
+  const hasImage = Boolean(event.image && typeof event.image === "string" && event.image.length > 20);
+  const getImageUri = (img) => {
+    if (img.startsWith("data:") || img.startsWith("http://") || img.startsWith("https://")) {
+      return img;
+    }
+    return `data:image/jpeg;base64,${img}`;
+  };
   const dateLabel = formatEventDate(event.start_date, event.end_date);
   const joinedLabel = joinedAt
     ? new Date(joinedAt).toLocaleDateString("es-ES", {
@@ -61,67 +67,67 @@ const EventCard = ({ event, onPress, featured, joinedAt }) => {
       <TouchableOpacity
         style={styles.featuredCard}
         onPress={onPress}
-        activeOpacity={0.85}
+        activeOpacity={0.88}
       >
-        {hasImage ? (
-          <Image
-            source={{
-              uri: event.image.startsWith("data:")
-                ? event.image
-                : `data:image/jpeg;base64,${event.image}`,
-            }}
-            style={styles.featuredImage}
-          />
-        ) : (
-          <View style={styles.featuredImagePlaceholder}>
-            <Tag size={40} color={COLORS.gray300} strokeWidth={1.5} />
-          </View>
-        )}
-        <View style={styles.featuredOverlay} />
-        <View style={styles.featuredGradientBottom} />
-        <View style={styles.featuredContent}>
-          {companyName ? (
-            <View style={styles.featuredCompanyBadge}>
-              <Building2 size={12} color={COLORS.white} strokeWidth={2.5} />
-              <Text style={styles.featuredCompanyText}>{companyName}</Text>
-            </View>
-          ) : null}
-          <Text style={styles.featuredTitle} numberOfLines={2}>
-            {event.name}
-          </Text>
-          {event.description ? (
-            <Text style={styles.featuredDescription} numberOfLines={2}>
-              {event.description}
-            </Text>
-          ) : null}
-          {dateLabel && (
-            <View style={styles.featuredDate}>
-              <CalendarDays size={14} color={COLORS.white} strokeWidth={2.5} />
-              <Text style={styles.featuredDateText}>{dateLabel}</Text>
+        <View style={styles.featuredInner}>
+          {hasImage ? (
+            <Image
+              source={{
+                uri: getImageUri(event.image),
+              }}
+              style={styles.featuredImage}
+            />
+          ) : (
+            <View style={styles.featuredImagePlaceholder}>
+              <Tag size={40} color={COLORS.gray300} strokeWidth={1.5} />
             </View>
           )}
-          <View style={styles.featuredFooter}>
-            {distanceKm != null && (
-              <View style={styles.featuredDistance}>
-                <MapPin size={14} color={COLORS.white} strokeWidth={2.5} />
-                <Text style={styles.featuredDistanceText}>
-                  {distanceKm < 1
-                    ? `${Math.round(distanceKm * 1000)} m`
-                    : `${distanceKm.toFixed(1)} km`}
-                </Text>
+          <View style={styles.featuredOverlay} />
+          <View style={styles.featuredGradientBottom} />
+          <View style={styles.featuredContent}>
+            {companyName ? (
+              <View style={styles.featuredCompanyBadge}>
+                <Building2 size={12} color={COLORS.white} strokeWidth={2.5} />
+                <Text style={styles.featuredCompanyText}>{companyName}</Text>
+              </View>
+            ) : null}
+            <Text style={styles.featuredTitle} numberOfLines={2}>
+              {event.name}
+            </Text>
+            {event.description ? (
+              <Text style={styles.featuredDescription} numberOfLines={2}>
+                {event.description}
+              </Text>
+            ) : null}
+            {dateLabel && (
+              <View style={styles.featuredDate}>
+                <CalendarDays size={14} color={COLORS.white} strokeWidth={2.5} />
+                <Text style={styles.featuredDateText}>{dateLabel}</Text>
               </View>
             )}
-            {tags.length > 0 && (
-              <View style={styles.featuredTags}>
-                {tags.slice(0, 2).map((t, i) => (
-                  <View key={i} style={styles.featuredTag}>
-                    <Text style={styles.featuredTagText}>
-                      {t.tag?.name || t.name || ""}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            )}
+            <View style={styles.featuredFooter}>
+              {distanceKm != null && (
+                <View style={styles.featuredDistance}>
+                  <MapPin size={14} color={COLORS.white} strokeWidth={2.5} />
+                  <Text style={styles.featuredDistanceText}>
+                    {distanceKm < 1
+                      ? `${Math.round(distanceKm * 1000)} m`
+                      : `${distanceKm.toFixed(1)} km`}
+                  </Text>
+                </View>
+              )}
+              {tags.length > 0 && (
+                <View style={styles.featuredTags}>
+                  {tags.slice(0, 2).map((t, i) => (
+                    <View key={i} style={styles.featuredTag}>
+                      <Text style={styles.featuredTagText}>
+                        {t.tag?.name || t.name || ""}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
           </View>
         </View>
       </TouchableOpacity>
@@ -137,9 +143,7 @@ const EventCard = ({ event, onPress, featured, joinedAt }) => {
       {hasImage ? (
         <Image
           source={{
-            uri: event.image.startsWith("data:")
-              ? event.image
-              : `data:image/jpeg;base64,${event.image}`,
+            uri: getImageUri(event.image),
           }}
           style={styles.cardImage}
         />

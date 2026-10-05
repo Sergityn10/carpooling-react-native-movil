@@ -1,41 +1,62 @@
-// YouConnext - Event Hero Image Component
+// YouConnext - Event Hero Image Component (Pro Design with Badges & Gradient)
 import React from "react";
 import { View, StyleSheet, Image } from "react-native";
-import { Tag } from "lucide-react-native";
-import { COLORS } from "../../constants";
+import { Ticket } from "lucide-react-native";
+import { COLORS, RADIUS } from "../../constants";
+import GradientBackground from "../common/GradientBackground";
 
 const EventHeroImage = ({ image }) => {
-  const hasImage = image && image.length > 100;
+  const hasImage = Boolean(image && typeof image === "string" && image.length > 20);
 
-  if (hasImage) {
-    return (
-      <Image
-        source={{
-          uri: image.startsWith("data:")
-            ? image
-            : `data:image/jpeg;base64,${image}`,
-        }}
-        style={styles.heroImage}
-      />
-    );
-  }
+  const getImageUri = (img) => {
+    if (img.startsWith("data:") || img.startsWith("http://") || img.startsWith("https://")) {
+      return img;
+    }
+    return `data:image/jpeg;base64,${img}`;
+  };
 
   return (
-    <View style={styles.heroPlaceholder}>
-      <Tag size={48} color={COLORS.gray300} strokeWidth={1.5} />
+    <View style={styles.container}>
+      {hasImage ? (
+        <Image
+          source={{
+            uri: getImageUri(image),
+          }}
+          style={styles.heroImage}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={styles.heroPlaceholder}>
+          <GradientBackground
+            colors={[COLORS.secondarySoft, COLORS.primarySoft]}
+          />
+          <Ticket size={48} color={COLORS.primary} strokeWidth={1.5} />
+        </View>
+      )}
+      <GradientBackground
+        colors={["#000000", "#000000"]}
+        opacities={[0, 0.6]}
+        start={{ x: 0, y: 0.4 }}
+        end={{ x: 0, y: 1 }}
+      />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  container: {
+    width: "100%",
+    height: 220,
+    backgroundColor: COLORS.gray100,
+    position: "relative",
+  },
   heroImage: {
     width: "100%",
-    height: 200,
+    height: "100%",
   },
   heroPlaceholder: {
     width: "100%",
-    height: 200,
-    backgroundColor: COLORS.gray100,
+    height: "100%",
     alignItems: "center",
     justifyContent: "center",
   },

@@ -399,7 +399,7 @@ GET /api/events/nearby?lat=40.416775&lng=-3.703790&radius=25&limit=10
 **Parámetros de URL:**
 - `id` — UUID del evento.
 
-**Descripción:** Devuelve la lista de usuarios apuntados a un evento, ordenados por fecha de unión (más recientes primero). Incluye información pública de cada usuario (`id`, `name`, `img_perfil`) y la fecha en la que se unió (`joined_at`).
+**Descripción:** Devuelve la lista de usuarios apuntados a un evento, ordenados por fecha de unión (más recientes primero). Incluye información pública de cada usuario (`id`, `name`, `img_perfil`, `ciudad`, `provincia`) y la fecha en la que se unió (`joined_at`). `ciudad` y `provincia` pueden ser `null` si el usuario no las ha informado.
 
 **Salida (200):**
 ```json
@@ -410,6 +410,8 @@ GET /api/events/nearby?lat=40.416775&lng=-3.703790&radius=25&limit=10
       "id": "uuid",
       "name": "Nombre del usuario",
       "img_perfil": "base64... o null",
+      "ciudad": "Madrid o null",
+      "provincia": "Madrid o null",
       "joined_at": "2025-07-15T10:30:00.000Z"
     }
   ]

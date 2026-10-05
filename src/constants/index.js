@@ -58,6 +58,9 @@ export const COLORS = {
     blueEnd: "#38BDF8",
     limeStart: "#84CC16",
     limeEnd: "#A3E635",
+    hero: ["#065F46", "#0A7E58", "#10B981"],
+    ocean: ["#075985", "#0284C7", "#38BDF8"],
+    fresh: ["#0D9F6E", "#0EA5E9"],
   },
 };
 
@@ -71,49 +74,109 @@ export const SPACING = {
   xxl: 48,
 };
 
-// Tamaños de fuente
-export const FONTS = {
+// Tamaños y pesos de fuente
+const FONT_SIZES = {
   xs: 12,
   sm: 14,
   md: 16,
   lg: 18,
   xl: 20,
   xxl: 24,
+  "2xl": 24,
   xxxl: 32,
+  "3xl": 32,
   title: 40,
 };
 
-// Sombras
+const FONT_WEIGHTS = {
+  regular: "400",
+  medium: "500",
+  semibold: "600",
+  bold: "700",
+  extrabold: "800",
+};
+
+export const FONTS = {
+  ...FONT_SIZES,
+  sizes: FONT_SIZES,
+  weights: FONT_WEIGHTS,
+};
+
+const SHADOW_SMALL = {
+  shadowColor: "#0F172A",
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.06,
+  shadowRadius: 6,
+  elevation: 2,
+};
+
+const SHADOW_MEDIUM = {
+  shadowColor: "#0F172A",
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.08,
+  shadowRadius: 12,
+  elevation: 3,
+};
+
+const SHADOW_LARGE = {
+  shadowColor: "#0F172A",
+  shadowOffset: { width: 0, height: 8 },
+  shadowOpacity: 0.12,
+  shadowRadius: 20,
+  elevation: 6,
+};
+
+const SHADOW_XLARGE = {
+  shadowColor: "#0F172A",
+  shadowOffset: { width: 0, height: 12 },
+  shadowOpacity: 0.16,
+  shadowRadius: 28,
+  elevation: 8,
+};
+
+// Sombras suaves y redondeadas (cross-platform iOS y Android)
 export const SHADOWS = {
-  small: {
-    shadowColor: "#000",
+  xs: SHADOW_SMALL,
+  sm: SHADOW_SMALL,
+  small: SHADOW_SMALL,
+  md: SHADOW_MEDIUM,
+  medium: SHADOW_MEDIUM,
+  lg: SHADOW_LARGE,
+  large: SHADOW_LARGE,
+  xl: SHADOW_XLARGE,
+  soft: {
+    shadowColor: "#0F172A",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
     elevation: 2,
   },
-  medium: {
-    shadowColor: "#000",
+  card: {
+    shadowColor: "#0F172A",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  large: {
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    elevation: 3,
   },
 };
 
+export const coloredShadow = (color, opacity = 0.22) => ({
+  shadowColor: color,
+  shadowOffset: { width: 0, height: 6 },
+  shadowOpacity: opacity,
+  shadowRadius: 16,
+  elevation: 4,
+});
+
 // Border radius
 export const RADIUS = {
+  xs: 4,
   sm: 8,
   md: 12,
   lg: 16,
   xl: 24,
+  "2xl": 32,
+  xxl: 32,
   full: 9999,
 };
 

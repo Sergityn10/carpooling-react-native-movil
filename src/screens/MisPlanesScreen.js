@@ -1,5 +1,5 @@
-// YouConnext - MisPlanesScreen (Mis viajes + Mis eventos)
-import React, { useState, useCallback, useEffect } from "react";
+// YouConnext - MisPlanesScreen (Pro UI/UX Redesign)
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -32,23 +32,42 @@ import {
   X,
   MapPin,
   Euro,
+  MessageCircle,
+  Play,
+  CheckCircle2,
+  Sparkles,
+  QrCode,
+  Search,
+  PlusCircle,
 } from "lucide-react-native";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../constants";
-import { EventCard } from "../components";
+import {
+  EventCard,
+  EmptyState,
+  CarouselSkeleton,
+  PressableScale,
+  AnimatedCardEntrance,
+  PulseDot,
+} from "../components";
 import { useUser } from "../context/UserContext";
 import { eventService } from "../services/eventService";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { trayectoService } from "../services/travels/trayectoService";
 import { reservaService } from "../services/travels/reservaService";
-import { paymentService } from "../services/paymentService";
+import { messageService } from "../services/messages/messageService";
 import { parseTripDate, localToUtcApi } from "../services/dateUtils";
 
 const TAB_VIAJES = "viajes";
 const TAB_EVENTOS = "eventos";
 
+const FILTER_TODOS = "todos";
+const FILTER_PROXIMOS = "proximos";
+const FILTER_COMPLETADOS = "completados";
+
 const MisPlanesScreen = ({ navigation }) => {
   const { user } = useUser();
   const [activeTab, setActiveTab] = useState(TAB_VIAJES);
+  const [viajesFilter, setViajesFilter] = useState(FILTER_TODOS);
 
   // --- Mis viajes ---
   const [viajes, setViajes] = useState([]);
@@ -69,7 +88,6 @@ const MisPlanesScreen = ({ navigation }) => {
     precio: "",
   });
   const [editLoading, setEditLoading] = useState(false);
-  const [editEventoInfo, setEditEventoInfo] = useState(null);
   const [editOrigenLocked, setEditOrigenLocked] = useState(false);
   const [editDestinoLocked, setEditDestinoLocked] = useState(false);
   const [showEditDatePicker, setShowEditDatePicker] = useState(false);
@@ -100,22 +118,12 @@ const MisPlanesScreen = ({ navigation }) => {
             : Array.isArray(raw?.trayectos)
               ? raw.trayectos
               : [];
-      } else {
-        console.warn(
-          "Error al cargar trayectos como conductor:",
-          conductorRes.reason,
-        );
       }
 
       let misReservas = [];
       if (pasajeroRes.status === "fulfilled") {
         const raw = pasajeroRes.value;
         misReservas = raw?.pasajerosList || raw?.data?.pasajerosList || [];
-      } else {
-        console.warn(
-          "Error al cargar reservas como pasajero:",
-          pasajeroRes.reason,
-        );
       }
 
       const condViajes = misTrayectos.map((t) => ({
@@ -127,8 +135,8 @@ const MisPlanesScreen = ({ navigation }) => {
         disponible: t.disponible,
         precio: t.precio,
         precio_conductor: t.precio_conductor,
-        conductorName: `${user.name} ${user.surname}`.trim(),
-        status: t.status || t.estado || "pendiente",
+        conductorName: `${user.name || user.nombre || "Conductor"}`.trim(),
+        status: (t.status || t.estado || "pendiente").toLowerCase(),
         rol: "conductor",
         keyId: `cond-${t.id}`,
         originalData: t,
@@ -145,7 +153,7 @@ const MisPlanesScreen = ({ navigation }) => {
           plazas: t.plazas,
           precio: t.precio,
           conductorName: t.conductor || "Conductor",
-          status: t.status || t.estado || "pendiente",
+          status: (t.status || t.estado || "pendiente").toLowerCase(),
           reservaStatus: r.status,
           rol: "pasajero",
           keyId: `pas-${r.id_reserva}`,
@@ -165,7 +173,7 @@ const MisPlanesScreen = ({ navigation }) => {
     } finally {
       setLoadingViajes(false);
     }
-  }, [user?.id]);
+  }, [user]);
 
   const fetchEventos = useCallback(async () => {
     setErrorEventos(null);
@@ -198,6 +206,20 @@ const MisPlanesScreen = ({ navigation }) => {
     setRefreshingEventos(false);
   };
 
+  const filteredViajes = useMemo(() => {
+    if (viajesFilter === FILTER_PROXIMOS) {
+      return viajes.filter(
+        (v) => v.status !== "completado" && v.status !== "cancelado",
+      );
+    }
+    if (viajesFilter === FILTER_COMPLETADOS) {
+      return viajes.filter(
+        (v) => v.status === "completado" || v.status === "cancelado",
+      );
+    }
+    return viajes;
+  }, [viajes, viajesFilter]);
+
   const handleRetomarPago = async (idReserva, tripId) => {
     setResumingPagoId(idReserva);
     try {
@@ -205,7 +227,6 @@ const MisPlanesScreen = ({ navigation }) => {
         ? `https://app.youconnext.es/redirect?to=viaje-detalle&id=${tripId}`
         : "https://app.youconnext.es/redirect?to=perfil";
       const response = await reservaService.resumePago(idReserva, returnUrl);
-      console.log("[handleRetomarPago] Response:", JSON.stringify(response));
       if (response?.stripe_url) {
         await Linking.openURL(response.stripe_url);
       } else {
@@ -227,6 +248,37 @@ const MisPlanesScreen = ({ navigation }) => {
     } else {
       navigation.navigate("MiViaje", { viaje: viaje.originalData });
     }
+  };
+
+  const handleOpenChat = async (viaje, e) => {
+    e.stopPropagation();
+    try {
+      const tripId = viaje.id;
+      let chat = null;
+      try {
+        const res = await messageService.obtenerChatPorTripId(tripId);
+        chat = res.data || res;
+      } catch {
+        const created = await messageService.crearChatGrupal({
+          trip_id: tripId,
+          name: `${viaje.origen} → ${viaje.destino}`,
+        });
+        chat = created.data || created;
+      }
+      if (chat && (chat.chat_id || chat.id)) {
+        navigation.navigate("ChatDetalle", {
+          chat,
+          chatId: chat.chat_id || chat.id,
+        });
+      }
+    } catch (err) {
+      console.log("Error al abrir chat:", err);
+    }
+  };
+
+  const handleOpenQR = (viaje, e) => {
+    e.stopPropagation();
+    navigation.navigate("EscanearQR", { viaje: viaje.originalData });
   };
 
   const handleEventPress = (event) => {
@@ -278,13 +330,11 @@ const MisPlanesScreen = ({ navigation }) => {
     });
     setEditOrigenLocked(false);
     setEditDestinoLocked(false);
-    setEditEventoInfo(null);
 
     if (t.evento_id) {
       try {
         const eventRes = await eventService.getEventById(t.evento_id);
         const eventData = eventRes?.event || eventRes;
-        setEditEventoInfo(eventData);
         const eventLat = Number(eventData?.latitude);
         const eventLng = Number(eventData?.longitude);
         const origLat = Number(t.origen_lat);
@@ -305,10 +355,6 @@ const MisPlanesScreen = ({ navigation }) => {
           Math.abs(destLat - eventLat) < tol &&
           Math.abs(destLng - eventLng) < tol
         ) {
-          setEditDestinoLocked(true);
-        } else if (t.origen === eventData?.name) {
-          setEditOrigenLocked(true);
-        } else if (t.destino === eventData?.name) {
           setEditDestinoLocked(true);
         }
       } catch (e) {
@@ -356,9 +402,9 @@ const MisPlanesScreen = ({ navigation }) => {
     const date = parseTripDate(viaje);
     if (!date) return "Fecha por confirmar";
     return date.toLocaleDateString("es-ES", {
+      weekday: "short",
       day: "2-digit",
       month: "short",
-      year: "numeric",
     });
   };
 
@@ -372,66 +418,87 @@ const MisPlanesScreen = ({ navigation }) => {
     });
   };
 
-  const renderViaje = ({ item }) => {
+  const renderViaje = ({ item, index }) => {
     const esConductor = item.rol === "conductor";
+    const isEnCurso = item.status === "en curso" || item.status === "activo";
+    const isCompletado = item.status === "completado";
+    const isCancelado = item.status === "cancelado";
+
     return (
-      <TouchableOpacity
-        style={styles.viajeCard}
-        onPress={() => handleViajePress(item)}
-        activeOpacity={0.85}
-      >
-        <View style={styles.viajeCardHeader}>
-          <View
-            style={[
-              styles.rolBadge,
-              esConductor ? styles.conductorBadge : styles.pasajeroBadge,
-            ]}
-          >
-            {esConductor ? (
-              <Car size={12} color={COLORS.primary} strokeWidth={2.5} />
-            ) : (
-              <UserIcon size={12} color={COLORS.secondary} strokeWidth={2.5} />
-            )}
-            <Text
+      <AnimatedCardEntrance index={index}>
+        <PressableScale
+          style={[
+            styles.viajeCard,
+            isEnCurso && styles.viajeCardEnCurso,
+            isCompletado && styles.viajeCardCompletado,
+          ]}
+          onPress={() => handleViajePress(item)}
+          scaleTo={0.98}
+        >
+        {/* Top Header Row */}
+        <View style={styles.cardTopRow}>
+          <View style={styles.badgeGroup}>
+            <View
               style={[
-                styles.rolBadgeText,
-                esConductor
-                  ? styles.conductorBadgeText
-                  : styles.pasajeroBadgeText,
+                styles.rolBadge,
+                esConductor ? styles.conductorBadge : styles.pasajeroBadge,
               ]}
             >
-              {esConductor ? "Conductor" : "Pasajero"}
-            </Text>
+              {esConductor ? (
+                <Car size={12} color={COLORS.primaryDark} strokeWidth={2.5} />
+              ) : (
+                <UserIcon size={12} color={COLORS.secondaryDark} strokeWidth={2.5} />
+              )}
+              <Text
+                style={[
+                  styles.rolBadgeText,
+                  esConductor
+                    ? styles.conductorBadgeText
+                    : styles.pasajeroBadgeText,
+                ]}
+              >
+                {esConductor ? "Conductor" : "Pasajero"}
+              </Text>
+            </View>
+
+            {isEnCurso && (
+              <View style={styles.enCursoBadge}>
+                <PulseDot color={COLORS.white} size={6} />
+                <Text style={styles.enCursoText}>En curso</Text>
+              </View>
+            )}
+
+            {isCompletado && (
+              <View style={styles.completadoBadge}>
+                <CheckCircle2 size={10} color={COLORS.gray600} strokeWidth={2.5} />
+                <Text style={styles.completadoText}>Completado</Text>
+              </View>
+            )}
           </View>
-          <View style={styles.priceBadge}>
-            <Text style={styles.priceBadgeText}>
+
+          <View style={styles.priceChip}>
+            <Text style={styles.priceChipText}>
               {esConductor
-                ? item.precio_conductor != null
+                ? item.precio_conductor != null && item.precio_conductor > 0
                   ? `${item.precio_conductor}€`
-                  : item.precio != null
+                  : item.precio != null && item.precio > 0
                     ? `${item.precio}€`
                     : "Gratis"
-                : item.precio != null
+                : item.precio != null && item.precio > 0
                   ? `${item.precio}€`
                   : "Gratis"}
             </Text>
           </View>
         </View>
 
-        <View style={styles.viajeRoute}>
+        {/* Ruta */}
+        <View style={styles.routeContainer}>
           <View style={styles.routeTimeline}>
-            <View
-              style={[styles.timelineDot, { backgroundColor: COLORS.primary }]}
-            />
-            <View style={styles.timelineLine} />
-            <View
-              style={[
-                styles.timelineDot,
-                { backgroundColor: COLORS.secondary },
-              ]}
-            />
+            <View style={[styles.dot, { backgroundColor: COLORS.success }]} />
+            <View style={styles.routeLine} />
+            <View style={[styles.dot, { backgroundColor: COLORS.error }]} />
           </View>
-          <View style={styles.routePlaces}>
+          <View style={styles.routeTexts}>
             <Text style={styles.routePlaceText} numberOfLines={1}>
               {item.origen}
             </Text>
@@ -441,10 +508,11 @@ const MisPlanesScreen = ({ navigation }) => {
           </View>
         </View>
 
+        {/* Pago pendiente banner */}
         {!esConductor && item.reservaStatus === "pending" && (
           <View style={styles.pagoPendienteBanner}>
             <View style={styles.pagoPendienteInfo}>
-              <AlertCircle size={16} color={COLORS.warning} strokeWidth={2.5} />
+              <AlertCircle size={15} color={COLORS.warning} strokeWidth={2.5} />
               <Text style={styles.pagoPendienteText}>Pago pendiente</Text>
             </View>
             <TouchableOpacity
@@ -457,11 +525,7 @@ const MisPlanesScreen = ({ navigation }) => {
                 <ActivityIndicator size="small" color={COLORS.white} />
               ) : (
                 <>
-                  <CreditCard
-                    size={14}
-                    color={COLORS.white}
-                    strokeWidth={2.5}
-                  />
+                  <CreditCard size={13} color={COLORS.white} strokeWidth={2.5} />
                   <Text style={styles.retornarPagoBtnText}>Retomar pago</Text>
                 </>
               )}
@@ -469,86 +533,120 @@ const MisPlanesScreen = ({ navigation }) => {
           </View>
         )}
 
-        <View style={styles.viajeCardFooter}>
-          <View style={styles.footerInfoRow}>
-            <View style={styles.footerInfoItem}>
-              <Clock size={14} color={COLORS.gray500} strokeWidth={2} />
-              <Text style={styles.footerInfoText}>
+        {/* Footer */}
+        <View style={styles.cardFooter}>
+          <View style={styles.footerMetaCol}>
+            <View style={styles.metaRow}>
+              <Clock size={13} color={COLORS.gray500} strokeWidth={2.2} />
+              <Text style={styles.metaText}>
                 {formatFecha(item.hora)} · {formatHora(item.hora)}
               </Text>
             </View>
-            <View style={styles.footerInfoItem}>
-              <Users size={14} color={COLORS.gray500} strokeWidth={2} />
-              <Text style={styles.footerInfoText} numberOfLines={1}>
+            <View style={styles.metaRow}>
+              <Users size={13} color={COLORS.gray500} strokeWidth={2.2} />
+              <Text style={styles.metaText} numberOfLines={1}>
                 {esConductor
                   ? `${item.disponible ?? 0} plazas libres`
-                  : `Con: ${item.conductorName}`}
+                  : `Conductor: ${item.conductorName}`}
               </Text>
             </View>
           </View>
-          {esConductor ? (
-            <View style={styles.footerActions}>
-              <TouchableOpacity
-                style={styles.actionBtn}
-                onPress={() => handleEditarViaje(item)}
-                activeOpacity={0.7}
-              >
-                <Pencil size={16} color={COLORS.primary} strokeWidth={2.5} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.actionBtnDanger]}
-                onPress={() => handleEliminarViaje(item)}
-                activeOpacity={0.7}
-              >
-                <Trash2 size={16} color={COLORS.error} strokeWidth={2.5} />
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <ChevronRight size={16} color={COLORS.gray400} strokeWidth={2.5} />
-          )}
+
+          {/* Quick Actions en la tarjeta */}
+          <View style={styles.cardQuickActions}>
+            {!isCompletado && !isCancelado && (
+              <>
+                <TouchableOpacity
+                  style={styles.quickIconBtn}
+                  onPress={(e) => handleOpenChat(item, e)}
+                  activeOpacity={0.8}
+                  hitSlop={4}
+                >
+                  <MessageCircle size={16} color={COLORS.primaryDark} strokeWidth={2.4} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.quickIconBtn}
+                  onPress={(e) => handleOpenQR(item, e)}
+                  activeOpacity={0.8}
+                  hitSlop={4}
+                >
+                  <QrCode size={16} color={COLORS.secondaryDark} strokeWidth={2.4} />
+                </TouchableOpacity>
+              </>
+            )}
+
+            {esConductor && !isCompletado && !isCancelado && (
+              <>
+                <TouchableOpacity
+                  style={styles.quickIconBtn}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleEditarViaje(item);
+                  }}
+                  activeOpacity={0.8}
+                  hitSlop={4}
+                >
+                  <Pencil size={15} color={COLORS.gray700} strokeWidth={2.4} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.quickIconBtn, styles.quickIconBtnDanger]}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleEliminarViaje(item);
+                  }}
+                  activeOpacity={0.8}
+                  hitSlop={4}
+                >
+                  <Trash2 size={15} color={COLORS.error} strokeWidth={2.4} />
+                </TouchableOpacity>
+              </>
+            )}
+
+            <ChevronRight size={18} color={COLORS.gray400} strokeWidth={2.5} />
+          </View>
         </View>
-      </TouchableOpacity>
+      </PressableScale>
+    </AnimatedCardEntrance>
     );
   };
 
-  const renderEvento = ({ item }) => (
-    <EventCard
-      event={item}
-      onPress={() => handleEventPress(item)}
-      joinedAt={item.joined_at}
-    />
+  const renderEvento = ({ item, index }) => (
+    <AnimatedCardEntrance index={index}>
+      <EventCard
+        event={item}
+        onPress={() => handleEventPress(item)}
+        joinedAt={item.joined_at}
+      />
+    </AnimatedCardEntrance>
   );
 
   const renderEmptyViajes = () => {
     if (loadingViajes) return null;
     if (errorViajes) {
       return (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>Error</Text>
-          <Text style={styles.emptyText}>{errorViajes}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={fetchViajes}>
-            <Text style={styles.retryText}>Reintentar</Text>
-          </TouchableOpacity>
-        </View>
+        <EmptyState
+          icon={Route}
+          tint={COLORS.error}
+          tintSoft={COLORS.errorSoft}
+          title="Error al cargar viajes"
+          subtitle={errorViajes}
+          actionLabel="Reintentar"
+          onActionPress={fetchViajes}
+        />
       );
     }
     return (
-      <View style={styles.emptyContainer}>
-        <View style={styles.emptyIcon}>
-          <Route size={40} color={COLORS.gray300} strokeWidth={2} />
-        </View>
-        <Text style={styles.emptyTitle}>Sin viajes programados</Text>
-        <Text style={styles.emptyText}>
-          Aún no tienes trayectos publicados ni reservas de viaje activas.
-        </Text>
-        <TouchableOpacity
-          style={styles.emptyCta}
-          onPress={() => navigation.navigate("SearchTab")}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.emptyCtaText}>Explorar viajes</Text>
-        </TouchableOpacity>
-      </View>
+      <EmptyState
+        icon={Route}
+        tint={COLORS.primary}
+        tintSoft={COLORS.primarySoft}
+        title="Sin planes de viaje aún"
+        subtitle="Publica tu propio trayecto como conductor o busca viajes disponibles como pasajero."
+        actionLabel="Explorar viajes"
+        onActionPress={() => navigation.navigate("SearchTab")}
+      />
     );
   };
 
@@ -556,32 +654,27 @@ const MisPlanesScreen = ({ navigation }) => {
     if (loadingEventos) return null;
     if (errorEventos) {
       return (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>Error</Text>
-          <Text style={styles.emptyText}>{errorEventos}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={fetchEventos}>
-            <Text style={styles.retryText}>Reintentar</Text>
-          </TouchableOpacity>
-        </View>
+        <EmptyState
+          icon={Calendar}
+          tint={COLORS.error}
+          tintSoft={COLORS.errorSoft}
+          title="Error al cargar eventos"
+          subtitle={errorEventos}
+          actionLabel="Reintentar"
+          onActionPress={fetchEventos}
+        />
       );
     }
     return (
-      <View style={styles.emptyContainer}>
-        <View style={styles.emptyIcon}>
-          <Calendar size={40} color={COLORS.gray300} strokeWidth={2} />
-        </View>
-        <Text style={styles.emptyTitle}>No tienes eventos</Text>
-        <Text style={styles.emptyText}>
-          Aún no te has unido a ningún evento. Búscalos en Explorar.
-        </Text>
-        <TouchableOpacity
-          style={styles.emptyCta}
-          onPress={() => navigation.navigate("SearchTab")}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.emptyCtaText}>Explorar eventos</Text>
-        </TouchableOpacity>
-      </View>
+      <EmptyState
+        icon={Calendar}
+        tint={COLORS.secondary}
+        tintSoft={COLORS.secondarySoft}
+        title="No te has unido a eventos"
+        subtitle="Descubre eventos, conciertos y festivales cerca de ti en la pestaña Explorar."
+        actionLabel="Explorar eventos"
+        onActionPress={() => navigation.navigate("SearchTab")}
+      />
     );
   };
 
@@ -589,10 +682,25 @@ const MisPlanesScreen = ({ navigation }) => {
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
 
+      {/* Header con botón para publicar/crear viaje rápido */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Mis planes</Text>
+        <View style={styles.headerTextCol}>
+          <Text style={styles.headerTitle}>Mis planes</Text>
+          <Text style={styles.headerSubtitle}>
+            Gestiona tus viajes activos y eventos guardados
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.addPlanBtn}
+          onPress={() => navigation.navigate("CrearViaje")}
+          activeOpacity={0.85}
+        >
+          <PlusCircle size={18} color={COLORS.white} strokeWidth={2.5} />
+          <Text style={styles.addPlanBtnText}>Crear</Text>
+        </TouchableOpacity>
       </View>
 
+      {/* Segmented Control principales (Viajes / Eventos) */}
       <View style={styles.segmentedWrapper}>
         <View style={styles.segmentedControl}>
           <TouchableOpacity
@@ -601,11 +709,11 @@ const MisPlanesScreen = ({ navigation }) => {
               activeTab === TAB_VIAJES && styles.segmentBtnActive,
             ]}
             onPress={() => setActiveTab(TAB_VIAJES)}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
           >
             <Car
-              size={14}
-              color={activeTab === TAB_VIAJES ? COLORS.primary : COLORS.gray500}
+              size={15}
+              color={activeTab === TAB_VIAJES ? COLORS.primaryDark : COLORS.gray500}
               strokeWidth={2.5}
             />
             <Text
@@ -614,52 +722,115 @@ const MisPlanesScreen = ({ navigation }) => {
                 activeTab === TAB_VIAJES && styles.segmentTextActive,
               ]}
             >
-              Viajes
+              Viajes ({viajes.length})
             </Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             style={[
               styles.segmentBtn,
               activeTab === TAB_EVENTOS && styles.segmentBtnActive,
             ]}
             onPress={() => setActiveTab(TAB_EVENTOS)}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
           >
             <Calendar
-              size={14}
+              size={15}
               color={
-                activeTab === TAB_EVENTOS ? COLORS.primary : COLORS.gray500
+                activeTab === TAB_EVENTOS ? COLORS.secondaryDark : COLORS.gray500
               }
               strokeWidth={2.5}
             />
             <Text
               style={[
                 styles.segmentText,
-                activeTab === TAB_EVENTOS && styles.segmentTextActive,
+                activeTab === TAB_EVENTOS && styles.segmentTextActiveSecondary,
               ]}
             >
-              Eventos
+              Eventos ({eventos.length})
             </Text>
           </TouchableOpacity>
         </View>
+
+        {/* Sub-filtros para viajes */}
+        {activeTab === TAB_VIAJES && viajes.length > 0 && (
+          <View style={styles.filterPillsRow}>
+            <TouchableOpacity
+              style={[
+                styles.filterPill,
+                viajesFilter === FILTER_TODOS && styles.filterPillActive,
+              ]}
+              onPress={() => setViajesFilter(FILTER_TODOS)}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.filterPillText,
+                  viajesFilter === FILTER_TODOS && styles.filterPillTextActive,
+                ]}
+              >
+                Todos
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.filterPill,
+                viajesFilter === FILTER_PROXIMOS && styles.filterPillActive,
+              ]}
+              onPress={() => setViajesFilter(FILTER_PROXIMOS)}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.filterPillText,
+                  viajesFilter === FILTER_PROXIMOS && styles.filterPillTextActive,
+                ]}
+              >
+                Próximos
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.filterPill,
+                viajesFilter === FILTER_COMPLETADOS && styles.filterPillActive,
+              ]}
+              onPress={() => setViajesFilter(FILTER_COMPLETADOS)}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.filterPillText,
+                  viajesFilter === FILTER_COMPLETADOS &&
+                    styles.filterPillTextActive,
+                ]}
+              >
+                Completados
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
+      {/* Contenido según tab activo */}
       {activeTab === TAB_VIAJES ? (
         <FlatList
-          data={viajes}
+          data={filteredViajes}
           keyExtractor={(item) => item.keyId}
           renderItem={renderViaje}
           ListEmptyComponent={renderEmptyViajes}
           ListHeaderComponent={
             loadingViajes ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
-                <Text style={styles.loadingText}>Cargando tus viajes...</Text>
+              <View style={styles.skeletonContainer}>
+                <CarouselSkeleton withImage={false} />
               </View>
             ) : null
           }
           contentContainerStyle={
-            viajes.length === 0 ? styles.emptyList : styles.resultsList
+            filteredViajes.length === 0
+              ? styles.emptyListContent
+              : styles.listContent
           }
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -679,14 +850,15 @@ const MisPlanesScreen = ({ navigation }) => {
           ListEmptyComponent={renderEmptyEventos}
           ListHeaderComponent={
             loadingEventos ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
-                <Text style={styles.loadingText}>Cargando tus eventos...</Text>
+              <View style={styles.skeletonContainer}>
+                <CarouselSkeleton />
               </View>
             ) : null
           }
           contentContainerStyle={
-            eventos.length === 0 ? styles.emptyList : styles.resultsList
+            eventos.length === 0
+              ? styles.emptyListContent
+              : styles.listContent
           }
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -700,7 +872,7 @@ const MisPlanesScreen = ({ navigation }) => {
         />
       )}
 
-      {/* Modal de edición de trayecto */}
+      {/* Modal de Edición de Trayecto */}
       <Modal
         visible={editModalVisible}
         animationType="slide"
@@ -713,8 +885,9 @@ const MisPlanesScreen = ({ navigation }) => {
             <TouchableOpacity
               onPress={() => setEditModalVisible(false)}
               style={styles.modalCloseBtn}
+              hitSlop={8}
             >
-              <X size={22} color={COLORS.gray600} strokeWidth={2.5} />
+              <X size={20} color={COLORS.gray700} strokeWidth={2.5} />
             </TouchableOpacity>
           </View>
 
@@ -723,7 +896,6 @@ const MisPlanesScreen = ({ navigation }) => {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* Origen */}
             <View style={styles.modalField}>
               <Text style={styles.modalFieldLabel}>Origen</Text>
               <View
@@ -732,7 +904,7 @@ const MisPlanesScreen = ({ navigation }) => {
                   editOrigenLocked && styles.modalInputLocked,
                 ]}
               >
-                <MapPin size={18} color={COLORS.gray400} strokeWidth={2} />
+                <MapPin size={18} color={COLORS.success} strokeWidth={2.5} />
                 <TextInput
                   style={styles.modalInput}
                   value={editForm.origen}
@@ -747,7 +919,6 @@ const MisPlanesScreen = ({ navigation }) => {
               </View>
             </View>
 
-            {/* Destino */}
             <View style={styles.modalField}>
               <Text style={styles.modalFieldLabel}>Destino</Text>
               <View
@@ -756,7 +927,7 @@ const MisPlanesScreen = ({ navigation }) => {
                   editDestinoLocked && styles.modalInputLocked,
                 ]}
               >
-                <MapPin size={18} color={COLORS.gray400} strokeWidth={2} />
+                <MapPin size={18} color={COLORS.error} strokeWidth={2.5} />
                 <TextInput
                   style={styles.modalInput}
                   value={editForm.destino}
@@ -771,18 +942,17 @@ const MisPlanesScreen = ({ navigation }) => {
               </View>
             </View>
 
-            {/* Fecha */}
             <View style={styles.modalField}>
               <Text style={styles.modalFieldLabel}>Fecha</Text>
               <TouchableOpacity
                 style={styles.modalInputRow}
                 onPress={() => setShowEditDatePicker(true)}
-                activeOpacity={0.7}
+                activeOpacity={0.8}
               >
-                <Calendar size={18} color={COLORS.gray400} strokeWidth={2} />
+                <Calendar size={18} color={COLORS.primary} strokeWidth={2.5} />
                 <Text style={styles.modalInputText}>
                   {editForm.fecha.toLocaleDateString("es-ES", {
-                    weekday: "long",
+                    weekday: "short",
                     day: "numeric",
                     month: "long",
                     year: "numeric",
@@ -791,15 +961,14 @@ const MisPlanesScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
 
-            {/* Hora */}
             <View style={styles.modalField}>
-              <Text style={styles.modalFieldLabel}>Hora</Text>
+              <Text style={styles.modalFieldLabel}>Hora salida</Text>
               <TouchableOpacity
                 style={styles.modalInputRow}
                 onPress={() => setShowEditTimePicker(true)}
-                activeOpacity={0.7}
+                activeOpacity={0.8}
               >
-                <Clock size={18} color={COLORS.gray400} strokeWidth={2} />
+                <Clock size={18} color={COLORS.primary} strokeWidth={2.5} />
                 <Text style={styles.modalInputText}>
                   {editForm.hora.toLocaleTimeString("es-ES", {
                     hour: "2-digit",
@@ -809,9 +978,8 @@ const MisPlanesScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
 
-            {/* Plazas */}
             <View style={styles.modalField}>
-              <Text style={styles.modalFieldLabel}>Plazas</Text>
+              <Text style={styles.modalFieldLabel}>Plazas disponibles</Text>
               <View style={styles.plazasRow}>
                 {[1, 2, 3, 4, 5, 6, 7].map((n) => (
                   <TouchableOpacity
@@ -824,6 +992,7 @@ const MisPlanesScreen = ({ navigation }) => {
                     onPress={() =>
                       setEditForm({ ...editForm, plazas: String(n) })
                     }
+                    activeOpacity={0.8}
                   >
                     <Text
                       style={[
@@ -839,13 +1008,12 @@ const MisPlanesScreen = ({ navigation }) => {
               </View>
             </View>
 
-            {/* Precio */}
             <View style={styles.modalField}>
               <Text style={styles.modalFieldLabel}>
                 Precio por pasajero (€)
               </Text>
               <View style={styles.modalInputRow}>
-                <Euro size={18} color={COLORS.gray400} strokeWidth={2} />
+                <Euro size={18} color={COLORS.primary} strokeWidth={2.5} />
                 <TextInput
                   style={styles.modalInput}
                   value={editForm.precio}
@@ -861,7 +1029,7 @@ const MisPlanesScreen = ({ navigation }) => {
               style={styles.saveBtn}
               onPress={handleGuardarEdicion}
               disabled={editLoading}
-              activeOpacity={0.8}
+              activeOpacity={0.88}
             >
               {editLoading ? (
                 <ActivityIndicator size="small" color={COLORS.white} />
@@ -875,7 +1043,7 @@ const MisPlanesScreen = ({ navigation }) => {
             <DateTimePicker
               value={editForm.fecha}
               mode="date"
-              display={Platform.OS === "ios" ? "inline" : "default"}
+              display={Platform.OS === "ios" ? "spinner" : "default"}
               onChange={(event, selectedDate) => {
                 setShowEditDatePicker(false);
                 if (selectedDate) {
@@ -888,7 +1056,7 @@ const MisPlanesScreen = ({ navigation }) => {
             <DateTimePicker
               value={editForm.hora}
               mode="time"
-              display={Platform.OS === "ios" ? "inline" : "default"}
+              display={Platform.OS === "ios" ? "spinner" : "default"}
               onChange={(event, selectedTime) => {
                 setShowEditTimePicker(false);
                 if (selectedTime) {
@@ -909,21 +1077,53 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.sm,
+    paddingTop: SPACING.sm + 2,
     paddingBottom: SPACING.sm,
     backgroundColor: COLORS.white,
   },
+  headerTextCol: {
+    flex: 1,
+    paddingRight: SPACING.sm,
+  },
   headerTitle: {
     fontSize: FONTS.xxl,
-    fontWeight: "bold",
-    color: COLORS.gray800,
+    lineHeight: 30,
+    fontWeight: "800",
+    color: COLORS.gray900,
+    letterSpacing: -0.4,
+  },
+  headerSubtitle: {
+    fontSize: FONTS.xs,
+    lineHeight: 16,
+    color: COLORS.gray500,
+    marginTop: 2,
+  },
+  addPlanBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    ...SHADOWS.small,
+  },
+  addPlanBtnText: {
+    fontSize: FONTS.xs,
+    lineHeight: 16,
+    fontWeight: "800",
+    color: COLORS.white,
   },
   segmentedWrapper: {
     backgroundColor: COLORS.white,
     paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.md,
-    ...SHADOWS.small,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
   },
   segmentedControl: {
     flexDirection: "row",
@@ -937,7 +1137,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingVertical: SPACING.sm,
+    minHeight: 38,
     borderRadius: RADIUS.full,
   },
   segmentBtnActive: {
@@ -946,98 +1146,82 @@ const styles = StyleSheet.create({
   },
   segmentText: {
     fontSize: FONTS.sm,
+    lineHeight: 18,
     fontWeight: "700",
     color: COLORS.gray500,
   },
   segmentTextActive: {
-    color: COLORS.primary,
+    color: COLORS.primaryDark,
   },
-  resultsList: {
-    padding: SPACING.lg,
+  segmentTextActiveSecondary: {
+    color: COLORS.secondaryDark,
   },
-  emptyList: {
-    flex: 1,
+  filterPillsRow: {
+    flexDirection: "row",
+    gap: SPACING.xs,
+    marginTop: SPACING.sm + 2,
   },
-  loadingContainer: {
-    alignItems: "center",
-    paddingVertical: SPACING.xl,
-  },
-  loadingText: {
-    fontSize: FONTS.sm,
-    color: COLORS.gray500,
-    marginTop: SPACING.sm,
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: SPACING.xl,
-    paddingTop: SPACING.xxl,
-  },
-  emptyIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: COLORS.gray100,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: SPACING.md,
-  },
-  emptyTitle: {
-    fontSize: FONTS.lg,
-    fontWeight: "bold",
-    color: COLORS.gray700,
-    marginBottom: SPACING.xs,
-  },
-  emptyText: {
-    fontSize: FONTS.sm,
-    color: COLORS.gray500,
-    textAlign: "center",
-  },
-  retryButton: {
-    backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-    marginTop: SPACING.md,
-  },
-  retryText: {
-    color: COLORS.white,
-    fontWeight: "600",
-    fontSize: FONTS.sm,
-  },
-  emptyCta: {
-    backgroundColor: COLORS.primary,
+  filterPill: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 5,
     borderRadius: RADIUS.full,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm + 2,
-    marginTop: SPACING.lg,
+    backgroundColor: COLORS.gray100,
   },
-  emptyCtaText: {
-    color: COLORS.white,
+  filterPillActive: {
+    backgroundColor: COLORS.primarySoft,
+  },
+  filterPillText: {
+    fontSize: FONTS.xs,
+    lineHeight: 16,
     fontWeight: "700",
-    fontSize: FONTS.sm,
+    color: COLORS.gray500,
   },
-  // ---- Viaje card ----
+  filterPillTextActive: {
+    color: COLORS.primaryDark,
+  },
+  listContent: {
+    padding: SPACING.lg,
+    gap: SPACING.md,
+  },
+  emptyListContent: {
+    flexGrow: 1,
+    padding: SPACING.lg,
+    justifyContent: "center",
+  },
+  skeletonContainer: {
+    paddingVertical: SPACING.md,
+  },
+  // ---- Tarjeta de Viaje ----
   viajeCard: {
     backgroundColor: COLORS.white,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xl,
     padding: SPACING.md,
-    marginBottom: SPACING.md,
-    ...SHADOWS.small,
+    gap: SPACING.sm + 2,
+    ...SHADOWS.card,
   },
-  viajeCardHeader: {
+  viajeCardEnCurso: {
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+  },
+  viajeCardCompletado: {
+    opacity: 0.85,
+  },
+  cardTopRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: SPACING.sm,
+    justifyContent: "space-between",
+  },
+  badgeGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.xs,
   },
   rolBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
     borderRadius: RADIUS.full,
-    paddingHorizontal: SPACING.sm,
+    paddingHorizontal: SPACING.sm + 2,
     paddingVertical: 4,
   },
   conductorBadge: {
@@ -1048,127 +1232,162 @@ const styles = StyleSheet.create({
   },
   rolBadgeText: {
     fontSize: FONTS.xs,
-    fontWeight: "700",
+    lineHeight: 16,
+    fontWeight: "800",
   },
   conductorBadgeText: {
-    color: COLORS.primary,
+    color: COLORS.primaryDark,
   },
   pasajeroBadgeText: {
-    color: COLORS.secondary,
+    color: COLORS.secondaryDark,
   },
-  priceBadge: {
+  enCursoBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.sm + 2,
+    paddingVertical: 4,
+  },
+  enCursoText: {
+    fontSize: FONTS.xs,
+    lineHeight: 16,
+    fontWeight: "800",
+    color: COLORS.white,
+  },
+  completadoBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: COLORS.gray100,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.sm + 2,
+    paddingVertical: 4,
+  },
+  completadoText: {
+    fontSize: FONTS.xs,
+    lineHeight: 16,
+    fontWeight: "700",
+    color: COLORS.gray600,
+  },
+  priceChip: {
     backgroundColor: COLORS.primarySoft,
-    borderRadius: RADIUS.sm,
+    borderRadius: RADIUS.md,
     paddingHorizontal: SPACING.sm + 2,
     paddingVertical: 3,
   },
-  priceBadgeText: {
+  priceChipText: {
     fontSize: FONTS.md,
+    lineHeight: 20,
     fontWeight: "800",
-    color: COLORS.primary,
+    color: COLORS.primaryDark,
   },
-  viajeRoute: {
+  routeContainer: {
     flexDirection: "row",
     alignItems: "center",
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
+    gap: SPACING.sm + 2,
   },
   routeTimeline: {
     alignItems: "center",
-    gap: 4,
+    paddingVertical: 2,
   },
-  timelineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  dot: {
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
   },
-  timelineLine: {
+  routeLine: {
     width: 2,
-    height: 16,
+    height: 18,
     backgroundColor: COLORS.gray200,
+    marginVertical: 2,
   },
-  routePlaces: {
+  routeTexts: {
     flex: 1,
-    gap: SPACING.sm,
+    gap: SPACING.xs + 2,
   },
   routePlaceText: {
-    fontSize: FONTS.sm,
-    color: COLORS.gray700,
-    fontWeight: "500",
+    fontSize: FONTS.md,
+    lineHeight: 20,
+    fontWeight: "700",
+    color: COLORS.gray900,
   },
   pagoPendienteBanner: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: COLORS.warningSoft,
-    borderRadius: RADIUS.md,
-    padding: SPACING.sm,
-    marginBottom: SPACING.sm,
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
   },
   pagoPendienteInfo: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 6,
   },
   pagoPendienteText: {
     fontSize: FONTS.xs,
-    fontWeight: "600",
+    lineHeight: 16,
+    fontWeight: "800",
     color: COLORS.warning,
   },
   retornarPagoBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 5,
     backgroundColor: COLORS.warning,
-    borderRadius: RADIUS.sm,
-    paddingHorizontal: SPACING.sm,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.md,
     paddingVertical: 6,
   },
   retornarPagoBtnText: {
     fontSize: FONTS.xs,
-    fontWeight: "700",
+    lineHeight: 16,
+    fontWeight: "800",
     color: COLORS.white,
   },
-  viajeCardFooter: {
+  cardFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     borderTopWidth: 1,
     borderTopColor: COLORS.gray100,
-    paddingTop: SPACING.sm,
+    paddingTop: SPACING.sm + 2,
   },
-  footerInfoRow: {
-    flexDirection: "row",
-    gap: SPACING.md,
+  footerMetaCol: {
+    gap: 3,
     flex: 1,
   },
-  footerInfoItem: {
+  metaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    flexShrink: 1,
+    gap: 5,
   },
-  footerInfoText: {
+  metaText: {
     fontSize: FONTS.xs,
+    lineHeight: 16,
+    fontWeight: "600",
     color: COLORS.gray500,
-    fontWeight: "500",
   },
-  footerActions: {
+  cardQuickActions: {
     flexDirection: "row",
+    alignItems: "center",
     gap: SPACING.xs,
   },
-  actionBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: RADIUS.sm,
+  quickIconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: COLORS.gray100,
     alignItems: "center",
     justifyContent: "center",
   },
-  actionBtnDanger: {
+  quickIconBtnDanger: {
     backgroundColor: COLORS.errorSoft,
   },
-  // ---- Edit modal ----
+  // Modal edición
   modalContainer: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -1185,11 +1404,17 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: FONTS.xl,
-    fontWeight: "bold",
-    color: COLORS.gray800,
+    lineHeight: 26,
+    fontWeight: "800",
+    color: COLORS.gray900,
   },
   modalCloseBtn: {
-    padding: SPACING.xs,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: COLORS.gray100,
+    alignItems: "center",
+    justifyContent: "center",
   },
   modalBody: {
     flex: 1,
@@ -1199,20 +1424,23 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
   },
   modalFieldLabel: {
-    fontSize: FONTS.sm,
-    fontWeight: "600",
-    color: COLORS.gray600,
+    fontSize: FONTS.xs,
+    lineHeight: 16,
+    fontWeight: "700",
+    color: COLORS.gray500,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
     marginBottom: SPACING.xs,
   },
   modalInputRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: SPACING.sm,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: COLORS.gray200,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.xl,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    minHeight: 48,
     backgroundColor: COLORS.white,
   },
   modalInputLocked: {
@@ -1222,22 +1450,27 @@ const styles = StyleSheet.create({
   modalInput: {
     flex: 1,
     fontSize: FONTS.md,
-    color: COLORS.gray800,
+    lineHeight: 20,
+    fontWeight: "600",
+    color: COLORS.gray900,
     padding: 0,
   },
   modalInputText: {
     flex: 1,
     fontSize: FONTS.md,
-    color: COLORS.gray800,
+    lineHeight: 20,
+    fontWeight: "600",
+    color: COLORS.gray900,
   },
   lockedBadge: {
-    fontSize: FONTS.xs,
-    fontWeight: "700",
-    color: COLORS.secondary,
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: "800",
+    color: COLORS.secondaryDark,
     backgroundColor: COLORS.secondarySoft,
-    paddingHorizontal: SPACING.xs,
-    paddingVertical: 2,
-    borderRadius: RADIUS.sm,
+    paddingHorizontal: SPACING.xs + 2,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
   },
   plazasRow: {
     flexDirection: "row",
@@ -1245,8 +1478,8 @@ const styles = StyleSheet.create({
   },
   plazaButton: {
     flex: 1,
-    height: 44,
-    borderRadius: RADIUS.md,
+    minHeight: 44,
+    borderRadius: RADIUS.lg,
     borderWidth: 1.5,
     borderColor: COLORS.gray200,
     alignItems: "center",
@@ -1259,25 +1492,28 @@ const styles = StyleSheet.create({
   },
   plazaButtonText: {
     fontSize: FONTS.md,
-    fontWeight: "600",
-    color: COLORS.gray500,
+    lineHeight: 20,
+    fontWeight: "700",
+    color: COLORS.gray600,
   },
   plazaButtonTextActive: {
-    color: COLORS.primary,
+    color: COLORS.primaryDark,
   },
   saveBtn: {
     backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.md,
-    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.full,
+    minHeight: 52,
     alignItems: "center",
     justifyContent: "center",
     marginTop: SPACING.md,
-    marginBottom: SPACING.xl,
+    marginBottom: SPACING.xxl,
+    ...SHADOWS.medium,
   },
   saveBtnText: {
     color: COLORS.white,
     fontSize: FONTS.md,
-    fontWeight: "700",
+    lineHeight: 22,
+    fontWeight: "800",
   },
 });
 

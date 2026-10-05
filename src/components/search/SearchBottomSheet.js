@@ -1,4 +1,4 @@
-// YouConnext - SearchBottomSheet Component
+// YouConnext - SearchBottomSheet Component (Fixed Modal Layout & Pro UI/UX)
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
@@ -12,28 +12,33 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   X,
   Search,
   MapPin,
   Calendar,
-  Navigation,
-  ChevronRight,
   Clock,
   Trash2,
+  ArrowUpDown,
+  Users,
+  Plus,
+  Minus,
+  Home,
+  Briefcase,
+  BookOpen,
+  Dumbbell,
 } from "lucide-react-native";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../../constants";
 import LocationSelectSheet from "./LocationSelectSheet";
 import { useUser } from "../../context/UserContext";
 import { ubicacionTravelService } from "../../services/travels/ubicacionService";
 import { trayectoService } from "../../services/travels/trayectoService";
-import { Home, Briefcase, BookOpen, Dumbbell } from "lucide-react-native";
 
 const MAX_RECENT_SEARCHES = 5;
-
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
-const SHEET_HEIGHT = SCREEN_HEIGHT * 0.6;
+const SHEET_HEIGHT = Math.min(SCREEN_HEIGHT * 0.82, 680);
 
 const SavedIconMap = {
   home: Home,
@@ -45,12 +50,14 @@ const SavedIconMap = {
 
 const SearchBottomSheet = ({ visible, onClose, onSearch, initialParams }) => {
   const { user } = useUser();
+  const insets = useSafeAreaInsets();
   const [slideAnim] = useState(new Animated.Value(SHEET_HEIGHT));
   const [originText, setOriginText] = useState("");
   const [originPlace, setOriginPlace] = useState(null);
   const [destText, setDestText] = useState("");
   const [destPlace, setDestPlace] = useState(null);
   const [selectedDate, setSelectedDate] = useState("");
+  const [passengers, setPassengers] = useState(1);
   const [showNativeDatePicker, setShowNativeDatePicker] = useState(false);
   const [activeSelectType, setActiveSelectType] = useState(null);
   const [recentSearches, setRecentSearches] = useState([]);
@@ -109,7 +116,7 @@ const SearchBottomSheet = ({ visible, onClose, onSearch, initialParams }) => {
           originLng: item.origin_lng,
           destLat: item.destination_lat,
           destLng: item.destination_lng,
-          passengers: item.passengers,
+          passengers: item.passengers || 1,
           createdAt: item.created_at,
         }));
         setRecentSearches(mapped);
@@ -125,28 +132,83 @@ const SearchBottomSheet = ({ visible, onClose, onSearch, initialParams }) => {
       const res = await ubicacionTravelService.obtenerUbicacionesPorUsuario(
         user.id,
       );
-      const apiLocations = res.data || res.ubicaciones || res || [];
+      const apiLocations = Array.isArray(res)
+        ? res
+        : res?.data || res?.ubicaciones || [];
       if (Array.isArray(apiLocations)) {
         const mapped = apiLocations
-          .filter((loc) => loc.direccion)
-          .map((loc) => ({
-            id: loc.id || loc.id_ubicacion,
-            label: loc.nombre || loc.tipo || "Otro",
-            type: loc.tipo || "other",
-            address: loc.direccion,
-            coords: loc.latitud
-              ? {
-                  latitude: Number(loc.latitud),
-                  longitude: Number(loc.longitud),
-                }
-              : null,
-          }));
+          .filter((loc) => loc && (loc.address || loc.direccion || loc.display_name))
+          .map((loc) => {
+            const typeKey = (loc.type || loc.tipo || "other").toLowerCase();
+            const latVal = loc.lat ?? loc.latitud ?? loc.latitude;
+            const lngVal = loc.lng ?? loc.longitud ?? loc.longitude;
+            return {
+              id: loc.id || loc.id_ubicacion || String(Math.random()),
+              label: loc.display_name || loc.nombre || loc.type || "Otro",
+              type: typeKey,
+              address: loc.address || loc.direccion || "",
+              city: loc.city || loc.ciudad || "",
+              coords:
+                latVal != null && lngVal != null
+                  ? {
+                      latitude: Number(latVal),
+                      longitude: Number(lngVal),
+                    }
+                  : null,
+            };
+          });
         setSavedLocations(mapped);
       }
     } catch (e) {
       console.log("Error al cargar ubicaciones guardadas:", e);
     }
   }, [user?.id]);
+
+  useEffect(() => {
+    if (visible) {
+      loadRecentSearches();
+      loadSavedLocations();
+      if (initialParams) {
+        setOriginText(initialParams.origin || "");
+        setOriginPlace(initialParams.originPlace || null);
+        setDestText(initialParams.destination || "");
+        setDestPlace(initialParams.destPlace || null);
+        setSelectedDate(initialParams.date || todayStr);
+        setPassengers(initialParams.passengers || 1);
+      } else if (!selectedDate) {
+        setSelectedDate(todayStr);
+      }
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        bounciness: 3,
+        speed: 14,
+      }).start();
+    } else {
+      Animated.timing(slideAnim, {
+        toValue: SHEET_HEIGHT,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible, initialParams]);
+
+  const handleClose = () => {
+    Animated.timing(slideAnim, {
+      toValue: SHEET_HEIGHT,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => onClose());
+  };
+
+  const handleSwapRoute = () => {
+    const tempText = originText;
+    const tempPlace = originPlace;
+    setOriginText(destText);
+    setOriginPlace(destPlace);
+    setDestText(tempText);
+    setDestPlace(tempPlace);
+  };
 
   const handleQuickSelectLocation = (location) => {
     const placeData = {
@@ -158,21 +220,15 @@ const SearchBottomSheet = ({ visible, onClose, onSearch, initialParams }) => {
     if (!originText) {
       setOriginPlace(placeData);
       setOriginText(location.address);
-    } else if (!destText) {
+    } else {
       setDestPlace(placeData);
       setDestText(location.address);
-    } else {
-      setOriginPlace(placeData);
-      setOriginText(location.address);
-      setDestPlace(null);
-      setDestText("");
     }
   };
 
   const handleDeleteRecentSearch = async (id, e) => {
     e.stopPropagation();
-    const updated = recentSearches.filter((s) => s.id !== id);
-    setRecentSearches(updated);
+    setRecentSearches((prev) => prev.filter((s) => s.id !== id));
   };
 
   const handleSelectRecentSearch = (search) => {
@@ -202,47 +258,15 @@ const SearchBottomSheet = ({ visible, onClose, onSearch, initialParams }) => {
     setSelectedDate(
       searchDate && searchDate >= todayStr ? searchDate : todayStr,
     );
-  };
-
-  useEffect(() => {
-    if (visible) {
-      loadRecentSearches();
-      loadSavedLocations();
-      if (initialParams) {
-        setOriginText(initialParams.origin || "");
-        setOriginPlace(initialParams.originPlace || null);
-        setDestText(initialParams.destination || "");
-        setDestPlace(initialParams.destPlace || null);
-        setSelectedDate(initialParams.date || "");
-      }
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      Animated.timing(slideAnim, {
-        toValue: SHEET_HEIGHT,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [visible, initialParams]);
-
-  const handleClose = () => {
-    Animated.timing(slideAnim, {
-      toValue: SHEET_HEIGHT,
-      duration: 250,
-      useNativeDriver: true,
-    }).start(() => onClose());
+    if (search.passengers) setPassengers(search.passengers);
   };
 
   const handleSearch = () => {
     const params = {
       origin: originPlace?.address || originText,
       destination: destPlace?.address || destText,
-      date: selectedDate || new Date().toISOString().split("T")[0],
-      passengers: 1,
+      date: selectedDate || todayStr,
+      passengers,
     };
     onSearch(params);
     handleClose();
@@ -256,18 +280,19 @@ const SearchBottomSheet = ({ visible, onClose, onSearch, initialParams }) => {
   };
 
   const dateLabel = () => {
-    if (!selectedDate) return "Hoy";
-    if (selectedDate === todayStr) return "Hoy";
+    if (!selectedDate || selectedDate === todayStr) return "Hoy";
     if (selectedDate === tomorrowStr) return "Mañana";
     const d = new Date(selectedDate);
     return d.toLocaleDateString("es-ES", {
-      weekday: "long",
+      weekday: "short",
       day: "numeric",
       month: "short",
     });
   };
 
-  const canSearch = (originPlace || originText) && (destPlace || destText);
+  const canSearch = Boolean(originPlace || originText || destPlace || destText);
+
+  if (!visible) return null;
 
   return (
     <Modal
@@ -275,24 +300,37 @@ const SearchBottomSheet = ({ visible, onClose, onSearch, initialParams }) => {
       transparent
       animationType="none"
       onRequestClose={handleClose}
+      statusBarTranslucent
     >
       <View style={styles.overlay}>
+        {/* Backdrop tap para cerrar */}
         <TouchableOpacity
-          style={styles.backdrop}
-          onPress={handleClose}
+          style={StyleSheet.absoluteFillObject}
           activeOpacity={1}
-        />
-        <Animated.View
-          style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}
+          onPress={handleClose}
         >
-          {/* Handle bar */}
+          <View style={styles.backdrop} />
+        </TouchableOpacity>
+
+        {/* Contenedor del desplegable */}
+        <Animated.View
+          style={[
+            styles.sheet,
+            {
+              transform: [{ translateY: slideAnim }],
+              paddingBottom:
+                insets.bottom > 0 ? insets.bottom + SPACING.xs : SPACING.lg,
+            },
+          ]}
+        >
+          {/* Barra superior de agarre */}
           <View style={styles.handleBar} />
 
-          {/* Header */}
+          {/* Cabecera */}
           <View style={styles.header}>
             <Text style={styles.title}>Buscar trayecto</Text>
             <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-              <X size={20} color={COLORS.gray600} strokeWidth={2.5} />
+              <X size={18} color={COLORS.gray600} strokeWidth={2.5} />
             </TouchableOpacity>
           </View>
 
@@ -304,171 +342,282 @@ const SearchBottomSheet = ({ visible, onClose, onSearch, initialParams }) => {
               ref={scrollViewRef}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.scrollContent}
             >
-              {/* Origen */}
-              <View style={styles.inputGroup}>
-                <View style={styles.inputIcon}>
-                  <Navigation
-                    size={18}
-                    color={COLORS.success}
-                    strokeWidth={2.5}
+              {/* Tarjeta de ruta (Origen + Destino + Intercambiador) */}
+              <View style={styles.routeCard}>
+                <View style={styles.routeTimeline}>
+                  <View
+                    style={[styles.dot, { backgroundColor: COLORS.success }]}
+                  />
+                  <View style={styles.line} />
+                  <View
+                    style={[styles.dot, { backgroundColor: COLORS.error }]}
                   />
                 </View>
-                <TouchableOpacity
-                  style={styles.fakeInput}
-                  onPress={() => setActiveSelectType("origin")}
-                >
-                  <Text
-                    style={[
-                      styles.fakeInputText,
-                      originText && styles.fakeInputTextActive,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {originText || "Selecciona tu origen"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
 
-              {/* Destino */}
-              <View style={styles.inputGroup}>
-                <View style={styles.inputIcon}>
-                  <MapPin size={18} color={COLORS.error} strokeWidth={2.5} />
+                <View style={styles.routeInputs}>
+                  {/* Origen */}
+                  <TouchableOpacity
+                    style={styles.routeInputRow}
+                    onPress={() => setActiveSelectType("origin")}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.routeInputContent}>
+                      <Text style={styles.inputLabel}>Origen</Text>
+                      <Text
+                        style={[
+                          styles.inputText,
+                          !originText && styles.placeholderText,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {originText || "¿Desde dónde sales?"}
+                      </Text>
+                    </View>
+                    {originText ? (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setOriginText("");
+                          setOriginPlace(null);
+                        }}
+                        style={styles.clearBtn}
+                      >
+                        <X size={14} color={COLORS.gray400} strokeWidth={2.5} />
+                      </TouchableOpacity>
+                    ) : null}
+                  </TouchableOpacity>
+
+                  <View style={styles.inputDivider} />
+
+                  {/* Destino */}
+                  <TouchableOpacity
+                    style={styles.routeInputRow}
+                    onPress={() => setActiveSelectType("destination")}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.routeInputContent}>
+                      <Text style={styles.inputLabel}>Destino</Text>
+                      <Text
+                        style={[
+                          styles.inputText,
+                          !destText && styles.placeholderText,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {destText || "¿A dónde quieres ir?"}
+                      </Text>
+                    </View>
+                    {destText ? (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setDestText("");
+                          setDestPlace(null);
+                        }}
+                        style={styles.clearBtn}
+                      >
+                        <X size={14} color={COLORS.gray400} strokeWidth={2.5} />
+                      </TouchableOpacity>
+                    ) : null}
+                  </TouchableOpacity>
                 </View>
+
+                {/* Botón Invertir Ruta */}
                 <TouchableOpacity
-                  style={styles.fakeInput}
-                  onPress={() => setActiveSelectType("destination")}
+                  style={styles.swapButton}
+                  onPress={handleSwapRoute}
+                  activeOpacity={0.8}
+                  hitSlop={8}
                 >
-                  <Text
-                    style={[
-                      styles.fakeInputText,
-                      destText && styles.fakeInputTextActive,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {destText || "Selecciona tu destino"}
-                  </Text>
+                  <ArrowUpDown
+                    size={16}
+                    color={COLORS.primary}
+                    strokeWidth={2.5}
+                  />
                 </TouchableOpacity>
               </View>
 
-              {/* Ubicaciones guardadas — accès rápido */}
+              {/* Lugares guardados */}
               {savedLocations.length > 0 && (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.savedLocationsRow}
-                  contentContainerStyle={styles.savedLocationsContent}
-                >
-                  {savedLocations.map((loc) => {
-                    const Icon = SavedIconMap[loc.type] || MapPin;
+                <View style={styles.savedSection}>
+                  <Text style={styles.sectionTitle}>Ubicaciones guardadas</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.savedRow}
+                  >
+                    {savedLocations.map((loc) => {
+                      const Icon = SavedIconMap[loc.type] || MapPin;
+                      return (
+                        <TouchableOpacity
+                          key={loc.id}
+                          style={styles.savedChip}
+                          onPress={() => handleQuickSelectLocation(loc)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={styles.savedIconChip}>
+                            <Icon
+                              size={13}
+                              color={COLORS.primary}
+                              strokeWidth={2.5}
+                            />
+                          </View>
+                          <Text
+                            style={styles.savedChipText}
+                            numberOfLines={1}
+                          >
+                            {loc.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
+
+              {/* Selector de Fecha */}
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>¿Cuándo viajas?</Text>
+                <View style={styles.dateRow}>
+                  {datePresets.map((preset) => {
+                    const isActive =
+                      (selectedDate || todayStr) === preset.value;
                     return (
                       <TouchableOpacity
-                        key={loc.id}
-                        style={styles.savedLocationChip}
-                        onPress={() => handleQuickSelectLocation(loc)}
-                        activeOpacity={0.7}
+                        key={preset.value}
+                        style={[
+                          styles.datePresetCard,
+                          isActive && styles.datePresetCardActive,
+                        ]}
+                        onPress={() => setSelectedDate(preset.value)}
+                        activeOpacity={0.8}
                       >
-                        <Icon
-                          size={14}
-                          color={COLORS.primary}
-                          strokeWidth={2.5}
-                        />
                         <Text
-                          style={styles.savedLocationLabel}
-                          numberOfLines={1}
+                          style={[
+                            styles.datePresetLabel,
+                            isActive && styles.datePresetTextActive,
+                          ]}
                         >
-                          {loc.label}
+                          {preset.label}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.datePresetSub,
+                            isActive && styles.datePresetSubActive,
+                          ]}
+                        >
+                          {preset.sublabel}
                         </Text>
                       </TouchableOpacity>
                     );
                   })}
-                </ScrollView>
-              )}
-
-              {/* Fecha — chips horizontales */}
-              <Text style={styles.sectionLabel}>Fecha</Text>
-              <View style={styles.dateChipsRow}>
-                {datePresets.map((preset) => {
-                  const isActive = (selectedDate || todayStr) === preset.value;
-                  return (
-                    <TouchableOpacity
-                      key={preset.value}
-                      style={[
-                        styles.dateChip,
-                        isActive && styles.dateChipActive,
-                      ]}
-                      onPress={() => setSelectedDate(preset.value)}
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        style={[
-                          styles.dateChipLabel,
-                          isActive && styles.dateChipLabelActive,
-                        ]}
-                      >
-                        {preset.label}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.dateChipSub,
-                          isActive && styles.dateChipSubActive,
-                        ]}
-                      >
-                        {preset.sublabel}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-                <TouchableOpacity
-                  style={styles.dateChipMore}
-                  onPress={() => setShowNativeDatePicker(true)}
-                  activeOpacity={0.7}
-                >
-                  <Calendar
-                    size={18}
-                    color={COLORS.gray600}
-                    strokeWidth={2.5}
-                  />
-                  <Text style={styles.dateChipMoreText}>Más</Text>
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.dateMoreBtn}
+                    onPress={() => setShowNativeDatePicker(true)}
+                    activeOpacity={0.8}
+                  >
+                    <Calendar
+                      size={18}
+                      color={COLORS.gray700}
+                      strokeWidth={2.2}
+                    />
+                    <Text style={styles.dateMoreText}>
+                      {selectedDate &&
+                      !datePresets.some((p) => p.value === selectedDate)
+                        ? dateLabel()
+                        : "Otra"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
-              {selectedDate &&
-                !datePresets.some((p) => p.value === selectedDate) && (
-                  <View style={styles.customDateRow}>
-                    <Calendar
-                      size={14}
-                      color={COLORS.primary}
-                      strokeWidth={2.5}
-                    />
-                    <Text style={styles.customDateText}>{dateLabel()}</Text>
-                    <TouchableOpacity onPress={() => setSelectedDate("")}>
-                      <X size={14} color={COLORS.gray400} strokeWidth={2.5} />
+              {/* Selector de Pasajeros */}
+              <View style={styles.section}>
+                <View style={styles.passengerCard}>
+                  <View style={styles.passengerInfo}>
+                    <View style={styles.passengerIconBox}>
+                      <Users
+                        size={18}
+                        color={COLORS.primary}
+                        strokeWidth={2.5}
+                      />
+                    </View>
+                    <View>
+                      <Text style={styles.passengerTitle}>Pasajeros</Text>
+                      <Text style={styles.passengerSubtitle}>
+                        {passengers === 1
+                          ? "1 plaza"
+                          : `${passengers} plazas`}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.counterRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.counterBtn,
+                        passengers <= 1 && styles.counterBtnDisabled,
+                      ]}
+                      onPress={() =>
+                        setPassengers((p) => Math.max(1, p - 1))
+                      }
+                      disabled={passengers <= 1}
+                      activeOpacity={0.8}
+                    >
+                      <Minus
+                        size={16}
+                        color={
+                          passengers <= 1 ? COLORS.gray300 : COLORS.gray800
+                        }
+                        strokeWidth={2.5}
+                      />
+                    </TouchableOpacity>
+                    <Text style={styles.counterValue}>{passengers}</Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.counterBtn,
+                        passengers >= 8 && styles.counterBtnDisabled,
+                      ]}
+                      onPress={() =>
+                        setPassengers((p) => Math.min(8, p + 1))
+                      }
+                      disabled={passengers >= 8}
+                      activeOpacity={0.8}
+                    >
+                      <Plus
+                        size={16}
+                        color={
+                          passengers >= 8 ? COLORS.gray300 : COLORS.gray800
+                        }
+                        strokeWidth={2.5}
+                      />
                     </TouchableOpacity>
                   </View>
-                )}
+                </View>
+              </View>
 
               {/* Búsquedas recientes */}
               {recentSearches.length > 0 && (
-                <View style={styles.recentSection}>
-                  <Text style={styles.sectionLabel}>Búsquedas recientes</Text>
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Búsquedas recientes</Text>
                   {recentSearches.map((search) => (
                     <TouchableOpacity
                       key={search.id}
                       style={styles.recentItem}
                       onPress={() => handleSelectRecentSearch(search)}
-                      activeOpacity={0.7}
+                      activeOpacity={0.8}
                     >
-                      <View style={styles.recentIcon}>
+                      <View style={styles.recentIconBox}>
                         <Clock
-                          size={16}
+                          size={15}
                           color={COLORS.primary}
-                          strokeWidth={2.5}
+                          strokeWidth={2.2}
                         />
                       </View>
-                      <View style={styles.recentTextContainer}>
+                      <View style={styles.recentTexts}>
                         <Text style={styles.recentRoute} numberOfLines={1}>
-                          {search.origin} → {search.destination}
+                          {search.origin || "Origen"} →{" "}
+                          {search.destination || "Destino"}
                         </Text>
                         {search.date && (
                           <Text style={styles.recentDate} numberOfLines={1}>
@@ -477,11 +626,12 @@ const SearchBottomSheet = ({ visible, onClose, onSearch, initialParams }) => {
                         )}
                       </View>
                       <TouchableOpacity
-                        style={styles.recentDelete}
+                        style={styles.recentDeleteBtn}
                         onPress={(e) => handleDeleteRecentSearch(search.id, e)}
+                        hitSlop={8}
                       >
                         <Trash2
-                          size={16}
+                          size={15}
                           color={COLORS.gray400}
                           strokeWidth={2}
                         />
@@ -492,30 +642,33 @@ const SearchBottomSheet = ({ visible, onClose, onSearch, initialParams }) => {
               )}
             </ScrollView>
 
-            {/* Botón buscar */}
-            <TouchableOpacity
-              style={[
-                styles.searchButton,
-                !canSearch && styles.searchButtonDisabled,
-              ]}
-              onPress={handleSearch}
-              disabled={!canSearch}
-            >
-              <Search size={20} color={COLORS.white} strokeWidth={2.5} />
-              <Text style={styles.searchButtonText}>Buscar</Text>
-            </TouchableOpacity>
+            {/* Botón Buscar Trayectos */}
+            <View style={styles.footerAction}>
+              <TouchableOpacity
+                style={[
+                  styles.searchBtn,
+                  !canSearch && styles.searchBtnDisabled,
+                ]}
+                onPress={handleSearch}
+                disabled={!canSearch}
+                activeOpacity={0.88}
+              >
+                <Search size={20} color={COLORS.white} strokeWidth={2.5} />
+                <Text style={styles.searchBtnText}>Buscar trayectos</Text>
+              </TouchableOpacity>
+            </View>
           </KeyboardAvoidingView>
         </Animated.View>
       </View>
 
-      {/* Selector de ubicación (slide secundario) */}
+      {/* Selector de ubicación secundario */}
       <LocationSelectSheet
         visible={activeSelectType !== null}
         onClose={() => setActiveSelectType(null)}
         title={
           activeSelectType === "origin"
-            ? "Selecciona tu origen"
-            : "Selecciona tu destino"
+            ? "Selecciona origen"
+            : "Selecciona destino"
         }
         onSelect={(location) => {
           if (activeSelectType === "origin") {
@@ -528,7 +681,7 @@ const SearchBottomSheet = ({ visible, onClose, onSearch, initialParams }) => {
         }}
       />
 
-      {/* Native date picker */}
+      {/* Date picker nativo */}
       {showNativeDatePicker && (
         <DateTimePicker
           value={
@@ -550,20 +703,19 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(15, 23, 42, 0.55)",
   },
   sheet: {
     height: SHEET_HEIGHT,
     backgroundColor: COLORS.white,
-    borderTopLeftRadius: RADIUS.xl,
-    borderTopRightRadius: RADIUS.xl,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.lg,
     ...SHADOWS.large,
   },
   handleBar: {
-    width: 40,
+    width: 36,
     height: 4,
     borderRadius: 2,
     backgroundColor: COLORS.gray300,
@@ -578,14 +730,16 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   title: {
-    fontSize: FONTS.lg,
-    fontWeight: "bold",
-    color: COLORS.gray800,
+    fontSize: FONTS.xl,
+    lineHeight: 26,
+    fontWeight: "800",
+    color: COLORS.gray900,
+    letterSpacing: -0.3,
   },
   closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: COLORS.gray100,
     alignItems: "center",
     justifyContent: "center",
@@ -593,165 +747,262 @@ const styles = StyleSheet.create({
   formContainer: {
     flex: 1,
   },
-  inputGroup: {
+  scrollContent: {
+    paddingBottom: SPACING.md,
+  },
+  // Route Card
+  routeCard: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: COLORS.gray50,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    padding: SPACING.md,
+    position: "relative",
     marginBottom: SPACING.md,
   },
-  savedLocationsRow: {
-    marginBottom: SPACING.md,
+  routeTimeline: {
+    alignItems: "center",
+    marginRight: SPACING.md,
+    paddingVertical: 6,
   },
-  savedLocationsContent: {
-    gap: SPACING.xs,
-    paddingRight: SPACING.md,
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
-  savedLocationChip: {
+  line: {
+    width: 2,
+    height: 28,
+    backgroundColor: COLORS.gray300,
+    marginVertical: 3,
+  },
+  routeInputs: {
+    flex: 1,
+    paddingRight: SPACING.lg,
+  },
+  routeInputRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: SPACING.xs,
-    backgroundColor: COLORS.primarySoft,
-    borderRadius: RADIUS.full,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingVertical: 4,
   },
-  savedLocationLabel: {
-    fontSize: FONTS.sm,
-    fontWeight: "600",
-    color: COLORS.primaryDark,
+  routeInputContent: {
+    flex: 1,
   },
-  inputIcon: {
+  inputLabel: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: "700",
+    color: COLORS.gray400,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  inputText: {
+    fontSize: FONTS.md,
+    lineHeight: 22,
+    fontWeight: "700",
+    color: COLORS.gray900,
+    marginTop: 2,
+  },
+  placeholderText: {
+    color: COLORS.gray400,
+    fontWeight: "500",
+  },
+  clearBtn: {
+    padding: 4,
+  },
+  inputDivider: {
+    height: 1,
+    backgroundColor: COLORS.gray200,
+    marginVertical: SPACING.xs,
+  },
+  swapButton: {
+    position: "absolute",
+    right: SPACING.md,
+    top: "50%",
+    marginTop: -18,
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: COLORS.gray100,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: SPACING.sm,
-  },
-  fakeInput: {
-    flex: 1,
-    height: 48,
-    backgroundColor: COLORS.gray50,
+    backgroundColor: COLORS.white,
     borderWidth: 1,
     borderColor: COLORS.gray200,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SPACING.md,
+    alignItems: "center",
     justifyContent: "center",
+    ...SHADOWS.small,
   },
-  fakeInputText: {
-    fontSize: FONTS.md,
-    color: COLORS.gray400,
-  },
-  fakeInputTextActive: {
-    color: COLORS.gray800,
-    fontWeight: "500",
-  },
-  sectionLabel: {
-    fontSize: FONTS.xs,
-    color: COLORS.gray500,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    marginBottom: SPACING.sm,
-    marginTop: SPACING.xs,
-  },
-  dateChipsRow: {
-    flexDirection: "row",
-    gap: SPACING.sm,
+  // Saved section
+  savedSection: {
     marginBottom: SPACING.md,
   },
-  dateChip: {
+  sectionTitle: {
+    fontSize: FONTS.xs,
+    lineHeight: 16,
+    fontWeight: "700",
+    color: COLORS.gray400,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: SPACING.sm,
+  },
+  savedRow: {
+    gap: SPACING.sm,
+  },
+  savedChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 7,
+  },
+  savedIconChip: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: COLORS.white,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  savedChipText: {
+    fontSize: FONTS.xs,
+    lineHeight: 16,
+    fontWeight: "700",
+    color: COLORS.primaryDark,
+  },
+  // Dates
+  section: {
+    marginBottom: SPACING.md,
+  },
+  dateRow: {
+    flexDirection: "row",
+    gap: SPACING.sm,
+  },
+  datePresetCard: {
     flex: 1,
     alignItems: "center",
-    paddingVertical: SPACING.sm,
-    borderRadius: RADIUS.md,
+    justifyContent: "center",
+    paddingVertical: SPACING.sm + 2,
+    borderRadius: RADIUS.lg,
     borderWidth: 1.5,
     borderColor: COLORS.gray200,
     backgroundColor: COLORS.white,
   },
-  dateChipActive: {
+  datePresetCardActive: {
     borderColor: COLORS.primary,
     backgroundColor: COLORS.primarySoft,
   },
-  dateChipLabel: {
+  datePresetLabel: {
     fontSize: FONTS.sm,
-    fontWeight: "bold",
-    color: COLORS.gray600,
+    lineHeight: 18,
+    fontWeight: "800",
+    color: COLORS.gray800,
   },
-  dateChipLabelActive: {
-    color: COLORS.primary,
+  datePresetTextActive: {
+    color: COLORS.primaryDark,
   },
-  dateChipSub: {
-    fontSize: 11,
+  datePresetSub: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: "600",
     color: COLORS.gray400,
     marginTop: 2,
   },
-  dateChipSubActive: {
+  datePresetSubActive: {
     color: COLORS.primaryDark,
   },
-  dateChipMore: {
-    width: 56,
+  dateMoreBtn: {
+    minWidth: 64,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: SPACING.sm,
-    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: RADIUS.lg,
     borderWidth: 1.5,
     borderColor: COLORS.gray200,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.gray50,
     gap: 2,
   },
-  dateChipMoreText: {
-    fontSize: 11,
-    color: COLORS.gray500,
-    fontWeight: "500",
+  dateMoreText: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: "700",
+    color: COLORS.gray700,
   },
-  customDateRow: {
+  // Passenger
+  passengerCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: SPACING.xs,
-    backgroundColor: COLORS.primarySoft,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    marginBottom: SPACING.md,
+    justifyContent: "space-between",
+    backgroundColor: COLORS.gray50,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    padding: SPACING.md,
   },
-  customDateText: {
-    flex: 1,
-    fontSize: FONTS.sm,
-    color: COLORS.primaryDark,
-    fontWeight: "600",
-    textTransform: "capitalize",
-  },
-  searchButton: {
+  passengerInfo: {
     flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.md,
+  },
+  passengerIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.primarySoft,
     alignItems: "center",
     justifyContent: "center",
-    gap: SPACING.xs,
-    backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.md,
-    paddingVertical: SPACING.md,
-    marginTop: SPACING.sm,
   },
-  searchButtonDisabled: {
-    backgroundColor: COLORS.gray300,
-  },
-  searchButtonText: {
-    color: COLORS.white,
-    fontWeight: "bold",
+  passengerTitle: {
     fontSize: FONTS.md,
+    lineHeight: 20,
+    fontWeight: "700",
+    color: COLORS.gray900,
   },
-  recentSection: {
-    marginTop: SPACING.sm,
+  passengerSubtitle: {
+    fontSize: FONTS.xs,
+    lineHeight: 16,
+    color: COLORS.gray500,
+    marginTop: 1,
   },
+  counterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+  },
+  counterBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.gray300,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  counterBtnDisabled: {
+    backgroundColor: COLORS.gray100,
+    borderColor: COLORS.gray200,
+  },
+  counterValue: {
+    fontSize: FONTS.md,
+    fontWeight: "800",
+    color: COLORS.gray900,
+    minWidth: 20,
+    textAlign: "center",
+  },
+  // Recents
   recentItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.sm,
-    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.sm + 2,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.lg,
     backgroundColor: COLORS.gray50,
     marginBottom: SPACING.xs,
   },
-  recentIcon: {
+  recentIconBox: {
     width: 32,
     height: 32,
     borderRadius: 16,
@@ -760,21 +1011,46 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: SPACING.sm,
   },
-  recentTextContainer: {
+  recentTexts: {
     flex: 1,
   },
   recentRoute: {
     fontSize: FONTS.sm,
-    fontWeight: "600",
+    lineHeight: 18,
+    fontWeight: "700",
     color: COLORS.gray800,
   },
   recentDate: {
     fontSize: FONTS.xs,
-    color: COLORS.gray500,
-    marginTop: 2,
+    lineHeight: 16,
+    color: COLORS.gray400,
+    marginTop: 1,
   },
-  recentDelete: {
-    padding: SPACING.xs,
+  recentDeleteBtn: {
+    padding: 6,
+  },
+  // Footer Button
+  footerAction: {
+    paddingTop: SPACING.xs,
+  },
+  searchBtn: {
+    minHeight: 52,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.primary,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: SPACING.sm,
+    ...SHADOWS.medium,
+  },
+  searchBtnDisabled: {
+    backgroundColor: COLORS.gray300,
+  },
+  searchBtnText: {
+    fontSize: FONTS.md,
+    lineHeight: 22,
+    fontWeight: "800",
+    color: COLORS.white,
   },
 });
 

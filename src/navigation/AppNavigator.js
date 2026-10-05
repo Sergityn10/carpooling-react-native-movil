@@ -47,6 +47,7 @@ import {
   ChatListScreen,
   ChatDetailScreen,
   DirectChatScreen,
+  EventParticipantsScreen,
 } from "../screens";
 
 const Stack = createNativeStackNavigator();
@@ -269,6 +270,7 @@ const AppNavigator = () => {
         <Stack.Screen name="Perfil" component={PerfilScreen} />
         <Stack.Screen name="MisUbicaciones" component={MisUbicacionesScreen} />
         <Stack.Screen name="EventDetalle" component={EventDetailScreen} />
+        <Stack.Screen name="EventParticipants" component={EventParticipantsScreen} />
         <Stack.Screen name="MisEventos" component={MisEventosScreen} />
         <Stack.Screen name="PerfilPublico" component={PerfilPublicoScreen} />
         <Stack.Screen name="Opiniones" component={OpinionesScreen} />

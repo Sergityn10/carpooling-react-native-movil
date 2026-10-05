@@ -53,13 +53,19 @@ const formatRating = (rating) => {
 };
 
 const PerfilPublicoScreen = ({ route, navigation }) => {
-  const { userId } = route.params || {};
+  const {
+    userId: paramUserId,
+    id: paramId,
+    user: passedUser,
+    user_id: paramUser_id,
+  } = route.params || {};
+  const userId = paramUserId || paramId || passedUser?.id || paramUser_id;
   const { user: currentUser } = useUser();
-  const [profile, setProfile] = useState(null);
+  const [profile, setProfile] = useState(passedUser || null);
   const [opinions, setOpinions] = useState([]);
   const [commentatorInfo, setCommentatorInfo] = useState({});
   const [reservaStats, setReservaStats] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!passedUser);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [opinionsExpanded, setOpinionsExpanded] = useState(false);

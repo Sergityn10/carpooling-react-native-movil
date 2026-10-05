@@ -1,73 +1,28 @@
-// YouConnext - AuthScreen (pantalla de bienvenida)
-import React, { useState, useEffect } from "react";
+// YouConnext - AuthScreen (Welcome / Gateway Screen)
+import React from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  Alert,
-  ActivityIndicator,
   ScrollView,
   Image,
   Linking,
   StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { GoogleSignin } from "@react-native-google-signin/google-signin";
-import { ArrowRight } from "lucide-react-native";
-import { useUser } from "../context/UserContext";
+import {
+  LogIn,
+  UserPlus,
+  ArrowRight,
+  Leaf,
+  Users,
+  Zap,
+  ShieldCheck,
+} from "lucide-react-native";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../constants";
-import { Button, GoogleIcon } from "../components";
-
-const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-
-GoogleSignin.configure({
-  webClientId: GOOGLE_WEB_CLIENT_ID,
-  offlineAccess: false,
-});
 
 const AuthScreen = ({ navigation }) => {
-  const { loginGoogleNative } = useUser();
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const [googleAvailable, setGoogleAvailable] = useState(true);
-
-  useEffect(() => {
-    GoogleSignin.hasPlayServices()
-      .then((hasServices) => setGoogleAvailable(!!hasServices))
-      .catch(() => setGoogleAvailable(false));
-  }, []);
-
-  const handleGoogleAuth = async () => {
-    setGoogleLoading(true);
-    try {
-      try {
-        await GoogleSignin.signOut();
-      } catch (e) {}
-
-      const userInfo = await GoogleSignin.signIn();
-      const tokens = await GoogleSignin.getTokens();
-      const idToken = tokens.idToken;
-
-      if (!idToken) {
-        Alert.alert("Error", "No se pudo obtener el token de Google.");
-        setGoogleLoading(false);
-        return;
-      }
-
-      await loginGoogleNative(idToken, "login");
-    } catch (error) {
-      // 12501 = el usuario canceló el diálogo de Google, no es un error real
-      if (error.code !== "12501") {
-        Alert.alert(
-          "No se pudo continuar",
-          error.message || "No se pudo completar la autenticación con Google.",
-        );
-      }
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
-
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
@@ -75,9 +30,9 @@ const AuthScreen = ({ navigation }) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero section con logo */}
+        {/* Hero Brand Section */}
         <View style={styles.heroSection}>
-          <View style={styles.logoWrapper}>
+          <View style={styles.logoBadge}>
             <Image
               source={require("../../assets/logo-sin-bg-198px-ajustado.png")}
               style={styles.logoImage}
@@ -86,88 +41,67 @@ const AuthScreen = ({ navigation }) => {
           </View>
           <Text style={styles.appName}>YouConnext</Text>
           <Text style={styles.tagline}>
-            Comparte coche con tu comunidad. Ahorra en cada viaje y reduce tu
-            huella de carbono.
+            Comparte coche con tu comunidad universitaria y profesional. Sostenible,
+            económico y seguro.
           </Text>
         </View>
 
-        {/* Feature pills */}
+        {/* Feature Pills */}
         <View style={styles.featuresRow}>
           <View style={styles.featurePill}>
-            <View
-              style={[styles.featureDot, { backgroundColor: COLORS.primary }]}
-            />
+            <Leaf size={14} color={COLORS.primary} strokeWidth={2.5} />
             <Text style={styles.featureText}>Sostenible</Text>
           </View>
           <View style={styles.featurePill}>
-            <View
-              style={[styles.featureDot, { backgroundColor: COLORS.secondary }]}
-            />
+            <Users size={14} color={COLORS.secondary} strokeWidth={2.5} />
             <Text style={styles.featureText}>Comunidad</Text>
           </View>
           <View style={styles.featurePill}>
-            <View
-              style={[styles.featureDot, { backgroundColor: COLORS.accent }]}
-            />
+            <Zap size={14} color="#F59E0B" strokeWidth={2.5} />
             <Text style={styles.featureText}>Ahorro</Text>
           </View>
         </View>
 
-        {/* Botones principales */}
-        <View style={styles.actionsContainer}>
-          <Button
-            title="Iniciar sesión"
+        {/* Actions Card: Iniciar Sesión vs Registrarse */}
+        <View style={styles.actionsCard}>
+          <Text style={styles.actionsCardTitle}>Bienvenido a la comunidad</Text>
+          <Text style={styles.actionsCardSubtitle}>
+            Elige una opción para continuar
+          </Text>
+
+          {/* 1. Botón Iniciar Sesión */}
+          <TouchableOpacity
+            style={styles.primaryButton}
             onPress={() => navigation.navigate("Login")}
-            variant="primary"
-            size="large"
-            style={styles.mainButton}
-          />
+            activeOpacity={0.88}
+          >
+            <View style={styles.buttonIconLeft}>
+              <LogIn size={20} color={COLORS.white} strokeWidth={2.4} />
+            </View>
+            <Text style={styles.primaryButtonText}>Iniciar sesión</Text>
+            <ArrowRight size={18} color={COLORS.white} strokeWidth={2.5} />
+          </TouchableOpacity>
 
-          <Button
-            title="Crear cuenta nueva"
+          {/* 2. Botón Registrarse (Crear cuenta) */}
+          <TouchableOpacity
+            style={styles.secondaryButton}
             onPress={() => navigation.navigate("Register")}
-            variant="outline"
-            size="large"
-            style={styles.mainButton}
-          />
-
-          {/* Separador */}
-          <View style={styles.dividerContainer}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>o continúa con</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          {/* Boton Google */}
-          {googleAvailable && (
-            <TouchableOpacity
-              style={[
-                styles.googleButton,
-                googleLoading && styles.googleButtonLoading,
-              ]}
-              onPress={handleGoogleAuth}
-              disabled={googleLoading}
-              activeOpacity={0.8}
-              accessibilityRole="button"
-              accessibilityLabel="Continuar con Google"
-              accessibilityState={{ disabled: googleLoading }}
-            >
-              {googleLoading ? (
-                <ActivityIndicator size="small" color={COLORS.gray700} />
-              ) : (
-                <>
-                  <GoogleIcon size={22} />
-                  <Text style={styles.googleButtonText}>
-                    Continuar con Google
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
+            activeOpacity={0.85}
+          >
+            <View style={styles.buttonIconLeft}>
+              <UserPlus size={20} color={COLORS.primary} strokeWidth={2.4} />
+            </View>
+            <Text style={styles.secondaryButtonText}>Crear cuenta nueva</Text>
+            <ArrowRight size={18} color={COLORS.primary} strokeWidth={2.5} />
+          </TouchableOpacity>
         </View>
 
-        {/* Footer */}
+        {/* Trust & Legal Footer */}
         <View style={styles.footer}>
+          <View style={styles.trustBadge}>
+            <ShieldCheck size={13} color={COLORS.gray400} strokeWidth={2} />
+            <Text style={styles.trustText}>Conexión cifrada y segura</Text>
+          </View>
           <Text style={styles.footerText}>
             Al continuar aceptas nuestros{" "}
             <Text
@@ -205,30 +139,37 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.xl,
-    paddingBottom: SPACING.lg,
+    paddingBottom: SPACING.xl,
   },
   heroSection: {
     alignItems: "center",
-    marginBottom: SPACING.xl,
-  },
-  logoWrapper: {
     marginBottom: SPACING.lg,
   },
+  logoBadge: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: COLORS.white,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: SPACING.md,
+    ...SHADOWS.medium,
+  },
   logoImage: {
-    width: 120,
-    height: 120,
+    width: 60,
+    height: 60,
   },
   appName: {
-    fontSize: FONTS.xxxl,
-    lineHeight: 38,
-    fontWeight: "700",
-    letterSpacing: -0.5,
+    fontSize: FONTS.xxxl + 2,
+    lineHeight: 40,
+    fontWeight: "900",
+    letterSpacing: -0.6,
     color: COLORS.gray900,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.xs,
   },
   tagline: {
-    fontSize: FONTS.md,
-    lineHeight: 23,
+    fontSize: FONTS.sm + 1,
+    lineHeight: 22,
     color: COLORS.gray500,
     textAlign: "center",
     paddingHorizontal: SPACING.md,
@@ -236,87 +177,113 @@ const styles = StyleSheet.create({
   featuresRow: {
     flexDirection: "row",
     justifyContent: "center",
-    gap: SPACING.sm,
-    marginBottom: SPACING.xxl,
+    gap: SPACING.xs + 2,
+    marginBottom: SPACING.xl,
   },
   featurePill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: SPACING.xs,
+    gap: 6,
     backgroundColor: COLORS.white,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingVertical: 7,
     borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: COLORS.gray100,
     ...SHADOWS.small,
-  },
-  featureDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
   },
   featureText: {
     fontSize: FONTS.xs,
-    lineHeight: 16,
-    fontWeight: "600",
-    color: COLORS.gray700,
+    fontWeight: "700",
+    color: COLORS.gray800,
   },
-  actionsContainer: {
+  actionsCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.gray100,
     marginBottom: SPACING.xl,
+    gap: SPACING.sm,
+    ...SHADOWS.medium,
   },
-  mainButton: {
-    marginBottom: SPACING.md,
+  actionsCardTitle: {
+    fontSize: FONTS.md + 1,
+    fontWeight: "800",
+    color: COLORS.gray900,
+    textAlign: "center",
+    marginTop: SPACING.xs,
   },
-  dividerContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: SPACING.lg,
+  actionsCardSubtitle: {
+    fontSize: FONTS.xs + 1,
+    color: COLORS.gray500,
+    textAlign: "center",
+    marginBottom: SPACING.sm,
   },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: COLORS.gray200,
-  },
-  dividerText: {
-    fontSize: FONTS.sm,
-    color: COLORS.gray400,
-    marginHorizontal: SPACING.md,
-    fontWeight: "500",
-  },
-  googleButton: {
+  primaryButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 54,
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.md,
-    paddingVertical: SPACING.sm,
-    borderWidth: 1.5,
-    borderColor: COLORS.gray200,
+    minHeight: 52,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.lg,
+    ...SHADOWS.medium,
   },
-  googleButtonLoading: {
-    opacity: 0.7,
+  buttonIconLeft: {
+    marginRight: SPACING.sm,
   },
-  googleButtonText: {
+  primaryButtonText: {
+    flex: 1,
     fontSize: FONTS.md,
-    lineHeight: 22,
-    fontWeight: "600",
-    color: COLORS.gray700,
-    marginLeft: SPACING.sm,
+    fontWeight: "800",
+    color: COLORS.white,
+    letterSpacing: 0.2,
+  },
+  secondaryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 52,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.white,
+    borderWidth: 1.5,
+    borderColor: COLORS.primarySoft,
+    paddingHorizontal: SPACING.lg,
+    backgroundColor: COLORS.primarySoft,
+  },
+  secondaryButtonText: {
+    flex: 1,
+    fontSize: FONTS.md,
+    fontWeight: "800",
+    color: COLORS.primaryDark,
+    letterSpacing: 0.2,
   },
   footer: {
     alignItems: "center",
-    paddingHorizontal: SPACING.xl,
+    paddingHorizontal: SPACING.md,
+    gap: SPACING.xs,
+  },
+  trustBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 2,
+  },
+  trustText: {
+    fontSize: 11,
+    color: COLORS.gray400,
+    fontWeight: "600",
   },
   footerText: {
-    fontSize: FONTS.xs,
-    color: COLORS.gray500,
+    fontSize: FONTS.xs - 1,
+    color: COLORS.gray400,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 16,
   },
   footerLink: {
-    fontSize: FONTS.xs,
     color: COLORS.primary,
-    textDecorationLine: "underline",
+    fontWeight: "700",
   },
 });
 

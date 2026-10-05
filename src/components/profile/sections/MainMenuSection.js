@@ -1,3 +1,4 @@
+// YouConnext - MainMenuSection Component (Balanced Professional Design)
 import React from "react";
 import {
   View,
@@ -17,16 +18,17 @@ import {
   Calendar,
   History,
   Building,
-  Heart,
   Star,
-  TrendingUp,
   Zap,
   ChevronRight,
   ScrollText,
   ShieldCheck,
+  HelpCircle,
 } from "lucide-react-native";
-import { COLORS, SPACING } from "../../../constants";
+import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../../../constants";
 import styles from "../profileStyles";
+import GradientBackground from "../../common/GradientBackground";
+import PressableScale from "../../common/PressableScale";
 
 const getBonoInfo = (user) => {
   const cc = user.completitud_cae;
@@ -35,7 +37,6 @@ const getBonoInfo = (user) => {
   if (cc && cc.porcentaje_total < 100 && cc.campos_faltantes?.length > 0) {
     return {
       show: true,
-      icon: Car,
       title: "Mi Bono Energético",
       subtitle: `${cc.campos_faltantes.length} pasos para poder generar CAEs`,
     };
@@ -47,7 +48,6 @@ const getBonoInfo = (user) => {
   ) {
     return {
       show: true,
-      icon: Zap,
       title: "Mi Bono Energético",
       subtitle: `${comp.campos_faltantes.length} pasos restantes para completar tu perfil`,
     };
@@ -55,20 +55,29 @@ const getBonoInfo = (user) => {
   return { show: false };
 };
 
-const MenuRow = ({ icon, iconColor, iconBg, label, onPress }) => (
-  <TouchableOpacity
-    style={styles.menuRowItem}
+// Filas del menú con íconos neutrales limpios para evitar saturación de color
+const MenuRow = ({ icon: Icon, label, badge, onPress, isLast = false }) => (
+  <PressableScale
+    style={[styles.menuRowItem, isLast && styles.menuRowItemLast]}
     onPress={onPress}
-    activeOpacity={0.6}
+    scaleTo={0.98}
+    accessibilityRole="button"
   >
     <View style={styles.menuRowLeft}>
-      <View style={[styles.menuRowIcon, { backgroundColor: iconBg }]}>
-        {icon}
+      <View style={styles.menuRowIconNeutral}>
+        <Icon size={18} color={COLORS.gray800} strokeWidth={2.2} />
       </View>
       <Text style={styles.menuRowText}>{label}</Text>
     </View>
-    <ChevronRight size={18} color={COLORS.gray300} strokeWidth={2} />
-  </TouchableOpacity>
+    <View style={styles.menuRowRight}>
+      {badge ? (
+        <View style={styles.menuBadge}>
+          <Text style={styles.menuBadgeText}>{badge}</Text>
+        </View>
+      ) : null}
+      <ChevronRight size={18} color={COLORS.gray400} strokeWidth={2.2} />
+    </View>
+  </PressableScale>
 );
 
 const MainMenuSection = ({
@@ -78,259 +87,298 @@ const MainMenuSection = ({
   publicStats,
   walletBalanceEuros,
   onNavigate,
-}) => (
-  <ScrollView
-    style={styles.sectionContent}
-    showsVerticalScrollIndicator={false}
-    contentContainerStyle={styles.menuScroll}
-  >
-    {/* Cabecera profesional */}
-    <View style={styles.profileHeaderCard}>
-      <View style={styles.headerAvatarContainer}>
-        <View style={styles.headerAvatarRing}>
-          {user.img_perfil ? (
-            <Image
-              source={{ uri: user.img_perfil }}
-              style={styles.avatarMainImage}
-            />
-          ) : (
-            <View style={styles.avatarMain}>
-              <Text style={styles.avatarTextMain}>
-                {user.name?.charAt(0)?.toUpperCase() || "?"}
+}) => {
+  const completion = user?.completitud?.porcentaje_total ?? 0;
+  const displayName = `${user?.name || user?.nombre || "Usuario"} ${user?.surname || user?.apellidos || ""}`.trim();
+  const initial = (user?.name || user?.nombre || "U").charAt(0).toUpperCase();
+  const locationText = [user?.ciudad, user?.provincia].filter(Boolean).join(", ");
+  const bono = getBonoInfo(user);
+
+  return (
+    <ScrollView
+      style={styles.sectionContent}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.menuScroll}
+    >
+      {/* Cabecera Principal del Usuario con Avatar y Progreso */}
+      <View style={styles.profileHeaderCard}>
+        <View style={styles.headerAvatarContainer}>
+          <TouchableOpacity
+            style={styles.headerAvatarRing}
+            onPress={() => onNavigate("mi-perfil")}
+            activeOpacity={0.85}
+          >
+            {user?.img_perfil ? (
+              <Image
+                source={{ uri: user.img_perfil }}
+                style={styles.avatarMainImage}
+              />
+            ) : (
+              <View style={styles.avatarMain}>
+                <Text style={styles.avatarTextMain}>{initial}</Text>
+              </View>
+            )}
+            <View style={styles.editAvatarIconBadge}>
+              <UserIcon size={11} color={COLORS.white} strokeWidth={2.5} />
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.headerTextInfo}>
+          <View style={styles.headerNameRow}>
+            <Text style={styles.profileMainName} numberOfLines={1}>
+              {displayName}
+            </Text>
+            {completion === 100 && (
+              <ShieldCheck size={18} color={COLORS.primary} strokeWidth={2.5} />
+            )}
+          </View>
+
+          {locationText ? (
+            <View style={styles.headerLocationRow}>
+              <MapPin size={13} color={COLORS.gray400} strokeWidth={2.2} />
+              <Text style={styles.headerLocationText} numberOfLines={1}>
+                {locationText}
               </Text>
             </View>
-          )}
-        </View>
-      </View>
-      <View style={styles.headerTextInfo}>
-        <Text style={styles.profileMainName}>
-          {user.name} {user.surname}
-        </Text>
-        {(user.ciudad || user.provincia) && (
-          <View style={styles.headerLocationRow}>
-            <MapPin size={12} color={COLORS.gray400} strokeWidth={2} />
-            <Text style={styles.headerLocationText}>
-              {[user.ciudad, user.provincia].filter(Boolean).join(", ")}
+          ) : user?.email ? (
+            <Text style={styles.headerEmailText} numberOfLines={1}>
+              {user.email}
             </Text>
-          </View>
-        )}
-        <Text style={styles.profileCompletionHint}>
-          Perfil completo al {user.completitud?.porcentaje_total ?? 0}%
-        </Text>
-        <View style={styles.completionBarBackground}>
-          <View
-            style={[
-              styles.completionBarFill,
-              { width: `${user.completitud?.porcentaje_total ?? 0}%` },
-            ]}
-          />
+          ) : null}
+
+          {/* Notificación y Barra de Progreso de Perfil */}
+          <TouchableOpacity
+            style={styles.completionContainer}
+            onPress={() => onNavigate("mi-perfil")}
+            activeOpacity={0.8}
+          >
+            <View style={styles.completionLabelRow}>
+              <Text style={styles.profileCompletionHint}>
+                Perfil {completion}% completo
+              </Text>
+              {completion < 100 && (
+                <Text style={styles.completionActionText}>Completar →</Text>
+              )}
+            </View>
+            <View style={styles.completionBarBackground}>
+              <View
+                style={[
+                  styles.completionBarFill,
+                  { width: `${Math.max(6, completion)}%` },
+                ]}
+              />
+            </View>
+          </TouchableOpacity>
         </View>
       </View>
-    </View>
 
-    {/* Tarjeta Mi Bono Energético */}
-    {(() => {
-      const bono = getBonoInfo(user);
-      if (!bono.show) return null;
-      const BonoIcon = bono.icon;
-      return (
+      {/* Tarjeta Destacada del Monedero con Degradado de Marca */}
+      <PressableScale
+        style={styles.walletHeroCard}
+        onPress={() => onNavigate("monedero")}
+        scaleTo={0.98}
+      >
+        <View style={styles.walletHeroInner}>
+          <GradientBackground
+            colors={COLORS.gradient.hero}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            borderRadius={RADIUS.xl}
+          />
+          <View style={styles.walletHeroContent}>
+            <View style={styles.walletHeroTop}>
+              <View style={styles.walletHeroPill}>
+                <Wallet size={14} color={COLORS.white} strokeWidth={2.4} />
+                <Text style={styles.walletHeroPillText}>Mi Monedero</Text>
+              </View>
+              <View style={styles.walletArrowBadge}>
+                <ChevronRight size={14} color={COLORS.primaryDark} strokeWidth={2.5} />
+              </View>
+            </View>
+
+            <View style={styles.walletBalanceRow}>
+              <View>
+                <Text style={styles.walletBalanceLabel}>Saldo disponible</Text>
+                <Text style={styles.walletBalanceValue}>
+                  {walletBalanceEuros || "0.00"} €
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.walletWithdrawBtn}
+                onPress={() => onNavigate("monedero")}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.walletWithdrawBtnText}>Gestionar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </PressableScale>
+
+      {/* Tarjeta de Notificación del Bono Energético */}
+      {bono.show && (
         <TouchableOpacity
           style={styles.bonoCard}
           onPress={() => onNavigate("bono-energetico")}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
           <View style={styles.bonoIconWrapper}>
-            <BonoIcon size={22} color={COLORS.white} strokeWidth={2.5} />
+            <Zap size={20} color={COLORS.white} strokeWidth={2.5} />
           </View>
           <View style={styles.bonoCardContent}>
             <Text style={styles.bonoCardTitle}>{bono.title}</Text>
             <Text style={styles.bonoCardSubtitle}>{bono.subtitle}</Text>
           </View>
-          <ChevronRight size={20} color={COLORS.gray400} strokeWidth={2} />
-        </TouchableOpacity>
-      );
-    })()}
-
-    {/* Tarjeta de aviso del monedero */}
-    {user.monedero &&
-      (user.monedero.disponible !== true ||
-        user.monedero?.config?.wallet_enabled === false) && (
-        <TouchableOpacity
-          style={styles.bonoCard}
-          onPress={() => onNavigate("monedero")}
-          activeOpacity={0.8}
-        >
-          <View style={styles.bonoIconWrapper}>
-            <Wallet size={22} color={COLORS.white} strokeWidth={2.5} />
-          </View>
-          <View style={styles.bonoCardContent}>
-            <Text style={styles.bonoCardTitle}>Monedero</Text>
-            <Text style={styles.bonoCardSubtitle}>
-              {user.monedero.mensaje ||
-                "Configura tu monedero para recibir ganancias"}
-            </Text>
-          </View>
-          <ChevronRight size={20} color={COLORS.gray400} strokeWidth={2} />
+          <ChevronRight size={18} color={COLORS.warning} strokeWidth={2.5} />
         </TouchableOpacity>
       )}
 
-    {/* Tarjeta de Ahorro generado */}
-    <View style={styles.savingsCard}>
-      <View style={styles.savingsLeft}>
-        <View style={styles.savingsIconLabelRow}>
-          <TrendingUp size={16} color={COLORS.white} strokeWidth={2.5} />
-          <Text style={styles.savingsLabel}>Saldo del monedero</Text>
-          <View style={styles.infoCircle}>
-            <Text style={styles.infoCircleText}>i</Text>
-          </View>
+      {/* Estadísticas de 3 Columnas */}
+      <View style={styles.statsCardBlock}>
+        <View style={styles.statsCol}>
+          <Text style={styles.statsValueNumber}>
+            {publicStats.completed_trips || 0}
+          </Text>
+          <Text style={styles.statsColLabel}>Viajes</Text>
+          <Text style={styles.statsColSublabel}>completados</Text>
         </View>
-        <Text style={styles.savingsDate}>Disponible para retirar</Text>
+
+        <View style={styles.statsDividerLine} />
+
+        <View style={styles.statsCol}>
+          <Text style={styles.statsValueNumber}>
+            {(publicStats.kwh_generated || 0).toFixed(1)}
+          </Text>
+          <Text style={styles.statsColLabel}>kWh</Text>
+          <Text style={styles.statsColSublabel}>generados</Text>
+        </View>
+
+        <View style={styles.statsDividerLine} />
+
+        <View style={styles.statsCol}>
+          <Text style={styles.statsValueNumber}>
+            {(publicStats.eur_generated || 0).toFixed(1)}€
+          </Text>
+          <Text style={styles.statsColLabel}>Ahorro</Text>
+          <Text style={styles.statsColSublabel}>acumulado</Text>
+        </View>
       </View>
-      <Text style={styles.savingsValue}>{walletBalanceEuros} €</Text>
-    </View>
 
-    {/* Bloque de estadísticas de 3 columnas */}
-    <View style={styles.statsCardBlock}>
-      <View style={styles.statsCol}>
-        <Text style={styles.statsValueNumber}>
-          {publicStats.completed_trips}
-        </Text>
-        <Text style={styles.statsColLabel}>Viajes</Text>
-        <Text style={styles.statsColLabel}>realizados</Text>
+      {/* Sección: Mi Cuenta (Íconos Neutrales y Limpios) */}
+      <Text style={styles.menuSectionLabel}>Mi Cuenta</Text>
+      <View style={styles.menuItemsBlock}>
+        <MenuRow
+          icon={UserIcon}
+          label="Datos personales"
+          onPress={() => onNavigate("mi-perfil")}
+        />
+        <MenuRow
+          icon={MapPin}
+          label="Mis ubicaciones frecuentes"
+          onPress={() => navigation.navigate("MisUbicaciones")}
+        />
+        <MenuRow
+          icon={Car}
+          label="Mis vehículos"
+          onPress={() => onNavigate("mis-vehiculos")}
+        />
+        <MenuRow
+          icon={Calendar}
+          label="Mi rutina de movilidad"
+          onPress={() => onNavigate("rutinas")}
+        />
+        <MenuRow
+          icon={Building}
+          label="Mi empresa / Universidad"
+          isLast
+          onPress={() =>
+            Alert.alert(
+              "Centro oficial",
+              "Vincula tu correo corporativo o universitario para acceder a viajes exclusivos de tu comunidad.",
+            )
+          }
+        />
       </View>
-      <View style={styles.statsDividerLine} />
-      <View style={styles.statsCol}>
-        <Text style={styles.statsValueNumber}>
-          {publicStats.kwh_generated.toFixed(2)}
-        </Text>
-        <Text style={styles.statsColLabel}>kWh</Text>
-        <Text style={styles.statsColLabel}>generados</Text>
+
+      {/* Sección: Actividad y Finanzas */}
+      <Text style={styles.menuSectionLabel}>Actividad y Finanzas</Text>
+      <View style={styles.menuItemsBlock}>
+        <MenuRow
+          icon={History}
+          label="Historial de viajes"
+          onPress={() => onNavigate("historial")}
+        />
+        <MenuRow
+          icon={Calendar}
+          label="Mis eventos"
+          onPress={() => navigation.navigate("MisEventos")}
+        />
+        <MenuRow
+          icon={Star}
+          label="Valoraciones y opiniones"
+          onPress={() => navigation.navigate("Opiniones")}
+        />
+        <MenuRow
+          icon={Zap}
+          label="Mi Bono Energético (CAEs)"
+          badge="Ahorro"
+          onPress={() => onNavigate("bono-energetico")}
+        />
+        <MenuRow
+          icon={Wallet}
+          label="Monedero y cobros"
+          isLast
+          onPress={() => onNavigate("monedero")}
+        />
       </View>
-      <View style={styles.statsDividerLine} />
-      <View style={styles.statsCol}>
-        <Text style={styles.statsValueNumber}>
-          {publicStats.eur_generated.toFixed(2)}€
-        </Text>
-        <Text style={styles.statsColLabel}>Ahorro</Text>
-        <Text style={styles.statsColLabel}>generado</Text>
+
+      {/* Sección: Configuración y Privacidad */}
+      <Text style={styles.menuSectionLabel}>Configuración y Privacidad</Text>
+      <View style={styles.menuItemsBlock}>
+        <MenuRow
+          icon={ShieldCheck}
+          label="Permisos y privacidad de datos"
+          badge="Control"
+          isLast
+          onPress={() => onNavigate("permisos")}
+        />
       </View>
-    </View>
 
-    {/* Sección: Cuenta */}
-    <Text style={styles.menuSectionLabel}>Cuenta</Text>
-    <View style={styles.menuItemsBlock}>
-      <MenuRow
-        icon={<UserIcon size={20} color={COLORS.primary} strokeWidth={2} />}
-        iconBg={COLORS.primarySoft}
-        label="Mi perfil"
-        onPress={() => onNavigate("mi-perfil")}
-      />
-      <MenuRow
-        icon={<MapPin size={20} color={COLORS.secondary} strokeWidth={2} />}
-        iconBg={COLORS.secondarySoft}
-        label="Mis direcciones"
-        onPress={() => navigation.navigate("MisUbicaciones")}
-      />
-      <MenuRow
-        icon={<Calendar size={20} color={COLORS.secondary} strokeWidth={2} />}
-        iconBg={COLORS.secondarySoft}
-        label="Mi rutina"
-        onPress={() => onNavigate("rutinas")}
-      />
-      <MenuRow
-        icon={<Car size={20} color={COLORS.primary} strokeWidth={2} />}
-        iconBg={COLORS.primarySoft}
-        label="Mis vehículos"
-        onPress={() => onNavigate("mis-vehiculos")}
-      />
-      <MenuRow
-        icon={<History size={20} color={COLORS.gray600} strokeWidth={2} />}
-        iconBg={COLORS.gray100}
-        label="Historial de trayectos"
-        onPress={() => onNavigate("historial")}
-      />
-      <MenuRow
-        icon={<Calendar size={20} color={COLORS.accent} strokeWidth={2} />}
-        iconBg={COLORS.accentSoft}
-        label="Mis eventos"
-        onPress={() => navigation.navigate("MisEventos")}
-      />
-      <MenuRow
-        icon={<Building size={20} color={COLORS.gray600} strokeWidth={2} />}
-        iconBg={COLORS.gray100}
-        label="Mi empresa/universidad"
-        onPress={() =>
-          Alert.alert(
-            "Mi empresa/universidad",
-            "Esta funcionalidad te permite vincular tu perfil a tu centro oficial para viajes restringidos.",
-          )
-        }
-      />
-    </View>
+      {/* Sección: Legal y Ayuda */}
+      <Text style={styles.menuSectionLabel}>Legal y Ayuda</Text>
+      <View style={styles.menuItemsBlock}>
+        <MenuRow
+          icon={HelpCircle}
+          label="Centro de ayuda"
+          onPress={() => Linking.openURL("https://youconnext.es")}
+        />
+        <MenuRow
+          icon={ScrollText}
+          label="Términos y condiciones"
+          onPress={() => Linking.openURL("https://app.youconnext.es/condiciones")}
+        />
+        <MenuRow
+          icon={ShieldCheck}
+          label="Política de privacidad"
+          isLast
+          onPress={() => Linking.openURL("https://app.youconnext.es/privacidad")}
+        />
+      </View>
 
-    {/* Sección: Actividad */}
-    <Text style={styles.menuSectionLabel}>Actividad</Text>
-    <View style={styles.menuItemsBlock}>
-      <MenuRow
-        icon={<Heart size={20} color={COLORS.error} strokeWidth={2} />}
-        iconBg={COLORS.errorSoft}
-        label="Favoritos"
-        onPress={() =>
-          Alert.alert(
-            "Favoritos",
-            "Tus viajes y conductores favoritos aparecerán aquí.",
-          )
-        }
-      />
-      <MenuRow
-        icon={<Star size={20} color={COLORS.warning} strokeWidth={2} />}
-        iconBg={COLORS.warningSoft}
-        label="Valoraciones"
-        onPress={() => navigation.navigate("Opiniones")}
-      />
-      <MenuRow
-        icon={<Zap size={20} color={COLORS.warning} strokeWidth={2} />}
-        iconBg={COLORS.warningSoft}
-        label="Mi Bono Energético"
-        onPress={() => onNavigate("bono-energetico")}
-      />
-      <MenuRow
-        icon={<Wallet size={20} color={COLORS.primary} strokeWidth={2} />}
-        iconBg={COLORS.primarySoft}
-        label="Monedero"
-        onPress={() => onNavigate("monedero")}
-      />
-    </View>
+      {/* Botón de Cerrar Sesión */}
+      <TouchableOpacity
+        style={styles.menuLogoutButton}
+        onPress={onLogout}
+        activeOpacity={0.8}
+      >
+        <LogOut size={18} color={COLORS.error} strokeWidth={2.4} />
+        <Text style={styles.menuLogoutText}>Cerrar sesión</Text>
+      </TouchableOpacity>
 
-    {/* Sección: Legal */}
-    <Text style={styles.menuSectionLabel}>Legal</Text>
-    <View style={styles.menuItemsBlock}>
-      <MenuRow
-        icon={<ScrollText size={20} color={COLORS.gray600} strokeWidth={2} />}
-        iconBg={COLORS.gray100}
-        label="Términos y Condiciones"
-        onPress={() => Linking.openURL("https://app.youconnext.es/condiciones")}
-      />
-      <MenuRow
-        icon={<ShieldCheck size={20} color={COLORS.gray600} strokeWidth={2} />}
-        iconBg={COLORS.gray100}
-        label="Política de Privacidad"
-        onPress={() => Linking.openURL("https://app.youconnext.es/privacidad")}
-      />
-    </View>
-
-    {/* Botón de Cerrar Sesión */}
-    <TouchableOpacity
-      style={styles.menuLogoutButton}
-      onPress={onLogout}
-      activeOpacity={0.7}
-    >
-      <LogOut size={18} color={COLORS.error} strokeWidth={2.5} />
-      <Text style={styles.menuLogoutText}>Cerrar sesión</Text>
-    </TouchableOpacity>
-
-    <View style={{ height: SPACING.xl }} />
-  </ScrollView>
-);
+      <View style={{ height: SPACING.xxl }} />
+    </ScrollView>
+  );
+};
 
 export default MainMenuSection;

@@ -4,6 +4,22 @@
 export { default as Button } from "./common/Button";
 export { default as GoogleIcon } from "./GoogleIcon";
 export { default as Skeleton } from "./common/Skeleton";
+export { default as GradientBackground } from "./common/GradientBackground";
+export { default as PressableScale } from "./common/PressableScale";
+export { default as AnimatedCardEntrance } from "./common/AnimatedCardEntrance";
+export { default as PulseDot } from "./common/PulseDot";
+export { default as PermissionDisclosureSheet } from "./common/PermissionDisclosureSheet";
+export { default as PermissionBlockedSheet } from "./common/PermissionBlockedSheet";
+
+// Home
+export { default as HomeHeader } from "./home/HomeHeader";
+export { default as QuickActions } from "./home/QuickActions";
+export { default as SectionHeader } from "./home/SectionHeader";
+export { default as EmptyState } from "./home/EmptyState";
+export { default as EventMiniCard } from "./home/EventMiniCard";
+export { default as TripMiniCard } from "./home/TripMiniCard";
+export { HeroTripCard, HeroEventCard } from "./home/HeroCards";
+export { HeroCardSkeleton, CarouselSkeleton } from "./home/HomeSkeletons";
 
 // Profile (Perfil de usuario)
 export { default as ProfileView } from "./profile/ProfileView";
@@ -31,3 +47,4 @@ export { default as EventDescription } from "./events/EventDescription";
 export { default as EventLocation } from "./events/EventLocation";
 export { default as EventLinks } from "./events/EventLinks";
 export { default as EventTripsSection } from "./events/EventTripsSection";
+export { default as EventAllTripsModal } from "./events/EventAllTripsModal";

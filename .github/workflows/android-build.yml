@@ -1,0 +1,55 @@
+name: Build Signed Android AAB
+
+on:
+    push:
+        branches:
+            - main
+
+jobs:
+    build-android:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: 📥 Clonar el repositorio
+              uses: actions/checkout@v4
+
+            - name: ⚙️ Configurar Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "18"
+                  cache: "npm"
+
+            - name: 📦 Instalar dependencias de React Native
+              run: npm install
+
+            - name: ☕ Configurar Java (JDK)
+              uses: actions/setup-java@v4
+              with:
+                  distribution: "zulu"
+                  java-version: "17"
+
+            - name: 🔐 Decodificar Keystore desde GitHub Secrets
+              env:
+                  KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+              # Esto crea el archivo temporalmente en la máquina virtual
+              run: |
+                  echo $KEYSTORE_BASE64 | base64 --decode > android/app/my-upload-key.keystore
+
+            - name: 🛠️ Dar permisos de ejecución a Gradle
+              run: chmod +x android/gradlew
+
+            - name: 🏗️ Compilar AAB (Modo Release Firmado)
+              run: |
+                  cd android
+                  ./gradlew bundleRelease \
+                    -PMYAPP_UPLOAD_STORE_FILE=my-upload-key.keystore \
+                    -PMYAPP_UPLOAD_STORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }} \
+                    -PMYAPP_UPLOAD_KEY_ALIAS=${{ secrets.KEY_ALIAS }} \
+                    -PMYAPP_UPLOAD_KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
+
+            - name: 📤 Subir el AAB a GitHub Artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: app-release-aab
+                  # Fíjate que la ruta cambia de apk/ a bundle/
+                  path: android/app/build/outputs/bundle/release/app-release.aab

@@ -1,5 +1,5 @@
 // YouConnext - LocationSelectSheet Component
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -37,32 +37,40 @@ import { useUser } from "../../context/UserContext";
 import { ubicacionTravelService } from "../../services/travels/ubicacionService";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
-const SHEET_HEIGHT = SCREEN_HEIGHT * 0.9;
+const SHEET_HEIGHT = SCREEN_HEIGHT * 0.88;
 
-const DEFAULT_SAVED_PLACES = [
-  { id: "casa", label: "Casa", iconName: "Home", address: "", isCustom: true },
-  {
-    id: "universidad",
-    label: "Universidad",
-    iconName: "BookOpen",
-    address: "",
-    isCustom: true,
+const TYPE_CONFIG = {
+  home: {
+    label: "Casa",
+    Icon: Home,
+    color: COLORS.primary,
+    bg: COLORS.primarySoft,
   },
-  {
-    id: "trabajo",
+  work: {
     label: "Trabajo",
-    iconName: "Briefcase",
-    address: "",
-    isCustom: true,
+    Icon: Briefcase,
+    color: COLORS.secondary,
+    bg: COLORS.secondarySoft,
   },
-  {
-    id: "gimnasio",
+  university: {
+    label: "Universidad",
+    Icon: BookOpen,
+    color: COLORS.accent,
+    bg: COLORS.accentSoft,
+  },
+  gym: {
     label: "Gimnasio",
-    iconName: "Dumbbell",
-    address: "",
-    isCustom: true,
+    Icon: Dumbbell,
+    color: COLORS.warning,
+    bg: COLORS.warningSoft,
   },
-];
+  other: {
+    label: "Otro",
+    Icon: MapPin,
+    color: COLORS.gray600,
+    bg: COLORS.gray100,
+  },
+};
 
 const LocationSelectSheet = ({
   visible,
@@ -74,49 +82,27 @@ const LocationSelectSheet = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [predictions, setPredictions] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [savedPlaces, setSavedPlaces] = useState(DEFAULT_SAVED_PLACES);
+  const [loadingSaved, setLoadingSaved] = useState(false);
+  const [savedPlaces, setSavedPlaces] = useState([]);
   const [recentPlaces, setRecentPlaces] = useState([]);
-  const [isAddingPlace, setIsAddingPlace] = useState(null); // Almacena el ID del slot que estamos editando
 
   const { getUbicacionActual } = useViaje();
   const { user } = useUser();
   const requestIdRef = useRef(0);
 
-  // Mapeo seguro de componentes de iconos de lucide-react-native
-  const IconMap = {
-    Home: Home,
-    BookOpen: BookOpen,
-    Briefcase: Briefcase,
-    Dumbbell: Dumbbell,
-  };
-
-  const IconNameMap = {
-    home: "Home",
-    work: "Briefcase",
-    university: "BookOpen",
-    gym: "Dumbbell",
-    other: "MapPin",
-  };
-
-  const SafeIconComp = ({ iconName, ...props }) => {
-    const Component = IconMap[iconName] || MapPin;
-    if (!Component) return <MapPin {...props} />;
-    return <Component {...props} />;
-  };
-
-  // Cargar lugares guardados y recientes desde AsyncStorage
   useEffect(() => {
     if (visible) {
       loadData();
-      Animated.timing(slideAnim, {
+      Animated.spring(slideAnim, {
         toValue: 0,
-        duration: 300,
         useNativeDriver: true,
+        bounciness: 3,
+        speed: 14,
       }).start();
     } else {
       Animated.timing(slideAnim, {
         toValue: SHEET_HEIGHT,
-        duration: 250,
+        duration: 200,
         useNativeDriver: true,
       }).start();
     }
@@ -124,36 +110,51 @@ const LocationSelectSheet = ({
 
   const loadData = async () => {
     try {
-      // Cargar ubicaciones guardadas del API
       if (user?.id) {
         try {
+          setLoadingSaved(true);
           const res = await ubicacionTravelService.obtenerUbicacionesPorUsuario(
             user.id,
           );
-          const apiLocations = res.data || res.ubicaciones || res || [];
-          if (Array.isArray(apiLocations) && apiLocations.length > 0) {
-            const mapped = apiLocations.map((loc) => ({
-              id: loc.id || loc.id_ubicacion,
-              label: loc.nombre || loc.tipo || "Otro",
-              iconName: IconNameMap[loc.tipo] || "MapPin",
-              address: loc.direccion || "",
-              coords: loc.latitud
-                ? {
-                    latitude: Number(loc.latitud),
-                    longitude: Number(loc.longitud),
-                  }
-                : null,
-              isCustom: false,
-              tipo: loc.tipo,
-            }));
+          const apiLocations = Array.isArray(res)
+            ? res
+            : res?.data || res?.ubicaciones || [];
+          if (Array.isArray(apiLocations)) {
+            const mapped = apiLocations
+              .filter((loc) => loc && (loc.address || loc.direccion || loc.display_name))
+              .map((loc) => {
+                const typeKey = (loc.type || loc.tipo || "other").toLowerCase();
+                const typeCfg = TYPE_CONFIG[typeKey] || TYPE_CONFIG.other;
+                const latVal = loc.lat ?? loc.latitud ?? loc.latitude;
+                const lngVal = loc.lng ?? loc.longitud ?? loc.longitude;
+                return {
+                  id: loc.id || loc.id_ubicacion || String(Math.random()),
+                  label: loc.display_name || loc.nombre || typeCfg.label,
+                  address: loc.address || loc.direccion || "",
+                  city: loc.city || loc.ciudad || "",
+                  type: typeKey,
+                  typeLabel: typeCfg.label,
+                  Icon: typeCfg.Icon,
+                  color: typeCfg.color,
+                  bg: typeCfg.bg,
+                  coords:
+                    latVal != null && lngVal != null
+                      ? {
+                          latitude: Number(latVal),
+                          longitude: Number(lngVal),
+                        }
+                      : null,
+                };
+              });
             setSavedPlaces(mapped);
           }
         } catch (e) {
           console.log("Error al cargar ubicaciones del API:", e);
+        } finally {
+          setLoadingSaved(false);
         }
       }
 
-      // Cargar recientes desde AsyncStorage
       const recents = await AsyncStorage.getItem("recent_places");
       if (recents) {
         setRecentPlaces(JSON.parse(recents));
@@ -166,17 +167,15 @@ const LocationSelectSheet = ({
   const handleClose = () => {
     Animated.timing(slideAnim, {
       toValue: SHEET_HEIGHT,
-      duration: 250,
+      duration: 200,
       useNativeDriver: true,
     }).start(() => {
       setSearchQuery("");
       setPredictions([]);
-      setIsAddingPlace(null);
       onClose();
     });
   };
 
-  // Buscar en Google Places
   useEffect(() => {
     const trimmed = searchQuery.trim();
     if (trimmed.length < 2) {
@@ -202,7 +201,6 @@ const LocationSelectSheet = ({
     return () => clearTimeout(handle);
   }, [searchQuery]);
 
-  // Manejar selección de una predicción de Google
   const handleSelectPrediction = async (prediction) => {
     try {
       setLoading(true);
@@ -214,39 +212,18 @@ const LocationSelectSheet = ({
         longitude: details.longitude,
       };
 
-      if (isAddingPlace) {
-        // Guardar la dirección en el slot correspondiente
-        const updated = savedPlaces.map((p) =>
-          p.id === isAddingPlace
-            ? {
-                ...p,
-                address: location.address,
-                coords: {
-                  latitude: location.latitude,
-                  longitude: location.longitude,
-                },
-              }
-            : p,
-        );
-        setSavedPlaces(updated);
-        await AsyncStorage.setItem("saved_places", JSON.stringify(updated));
-        setIsAddingPlace(null);
-        setSearchQuery("");
-      } else {
-        // Añadir a recientes
-        const updatedRecents = [
-          location,
-          ...recentPlaces.filter((p) => p.address !== location.address),
-        ].slice(0, 5);
-        setRecentPlaces(updatedRecents);
-        await AsyncStorage.setItem(
-          "recent_places",
-          JSON.stringify(updatedRecents),
-        );
+      const updatedRecents = [
+        location,
+        ...recentPlaces.filter((p) => p.address !== location.address),
+      ].slice(0, 5);
+      setRecentPlaces(updatedRecents);
+      await AsyncStorage.setItem(
+        "recent_places",
+        JSON.stringify(updatedRecents),
+      );
 
-        onSelect(location);
-        handleClose();
-      }
+      onSelect(location);
+      handleClose();
     } catch (e) {
       console.log("Error al obtener detalles del lugar:", e);
     } finally {
@@ -254,13 +231,11 @@ const LocationSelectSheet = ({
     }
   };
 
-  // Obtener Ubicación Actual
   const handleSelectCurrentLocation = async () => {
     try {
       setLoading(true);
       const location = await getUbicacionActual();
 
-      // Obtener dirección real mediante Reverse Geocoding
       const result = await reverseGeocode({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
@@ -275,33 +250,18 @@ const LocationSelectSheet = ({
     }
   };
 
-  // Seleccionar un lugar guardado
   const handleSelectSavedPlace = (place) => {
-    if (!place.address) {
-      // Activar modo "Agregar dirección"
-      setIsAddingPlace(place.id);
-      return;
-    }
+    if (!place.address) return;
     onSelect({
-      name: place.label,
+      name: place.label || place.address,
       address: place.address,
+      city: place.city,
       latitude: place.coords?.latitude,
       longitude: place.coords?.longitude,
     });
     handleClose();
   };
 
-  // Eliminar dirección de un slot guardado
-  const handleDeleteSavedAddress = async (id, e) => {
-    e.stopPropagation();
-    const updated = savedPlaces.map((p) =>
-      p.id === id ? { ...p, address: "" } : p,
-    );
-    setSavedPlaces(updated);
-    await AsyncStorage.setItem("saved_places", JSON.stringify(updated));
-  };
-
-  // Eliminar de recientes
   const handleDeleteRecent = async (address, e) => {
     e.stopPropagation();
     const updated = recentPlaces.filter((p) => p.address !== address);
@@ -315,29 +275,25 @@ const LocationSelectSheet = ({
     <View style={styles.absoluteContainer}>
       <View style={styles.overlay}>
         <TouchableOpacity
-          style={styles.backdrop}
+          style={StyleSheet.absoluteFillObject}
           onPress={handleClose}
           activeOpacity={1}
-        />
+        >
+          <View style={styles.backdrop} />
+        </TouchableOpacity>
+
         <Animated.View
           style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}
         >
-          {/* Handle bar */}
           <View style={styles.handleBar} />
 
-          {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>
-              {isAddingPlace
-                ? `Guardar dirección para ${savedPlaces.find((p) => p.id === isAddingPlace)?.label}`
-                : title}
-            </Text>
+            <Text style={styles.title}>{title}</Text>
             <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-              <X size={20} color={COLORS.gray600} strokeWidth={2.5} />
+              <X size={18} color={COLORS.gray600} strokeWidth={2.5} />
             </TouchableOpacity>
           </View>
 
-          {/* Buscador */}
           <View style={styles.searchContainer}>
             <View style={styles.searchBox}>
               <SearchIcon
@@ -348,11 +304,7 @@ const LocationSelectSheet = ({
               />
               <TextInput
                 style={styles.searchInput}
-                placeholder={
-                  isAddingPlace
-                    ? "Introduce la dirección..."
-                    : "Buscar dirección"
-                }
+                placeholder="Buscar dirección o ciudad..."
                 placeholderTextColor={COLORS.gray400}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -368,13 +320,11 @@ const LocationSelectSheet = ({
             </View>
           </View>
 
-          {/* Contenido / Listado */}
           <KeyboardAvoidingView
             behavior={Platform.OS === "ios" ? "padding" : undefined}
             style={styles.listContainer}
           >
             {searchQuery.trim().length >= 2 ? (
-              // Modo búsqueda (Predicciones)
               <FlatList
                 data={predictions}
                 keyExtractor={(item) => item.place_id}
@@ -384,10 +334,10 @@ const LocationSelectSheet = ({
                     style={styles.predictionItem}
                     onPress={() => handleSelectPrediction(item)}
                   >
-                    <View style={styles.iconContainerPurple}>
+                    <View style={styles.iconContainerBlue}>
                       <MapPin
                         size={18}
-                        color={COLORS.primary}
+                        color={COLORS.secondary}
                         strokeWidth={2.5}
                       />
                     </View>
@@ -405,71 +355,122 @@ const LocationSelectSheet = ({
                 )}
               />
             ) : (
-              // Modo lista por defecto (como en la foto del usuario)
               <ScrollView
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
               >
-                {/* 1. Ubicación Actual (solo si no estamos añadiendo dirección a un slot) */}
-                {!isAddingPlace && (
-                  <TouchableOpacity
-                    style={styles.rowItem}
-                    onPress={handleSelectCurrentLocation}
-                  >
-                    <View style={styles.iconContainerPink}>
-                      <Navigation
-                        size={18}
-                        color={COLORS.primary}
-                        strokeWidth={2.5}
-                      />
-                    </View>
-                    <View style={styles.textContainer}>
-                      <Text style={styles.rowTitle}>Ubicación actual</Text>
-                      <Text style={styles.rowSubtitle}>
-                        Mi ubicación GPS en tiempo real
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
+                {/* Opción de GPS / Ubicación actual */}
+                <TouchableOpacity
+                  style={styles.rowItem}
+                  onPress={handleSelectCurrentLocation}
+                >
+                  <View style={styles.iconContainerGreen}>
+                    <Navigation
+                      size={18}
+                      color={COLORS.primary}
+                      strokeWidth={2.5}
+                    />
+                  </View>
+                  <View style={styles.textContainer}>
+                    <Text style={styles.rowTitle}>Ubicación actual</Text>
+                    <Text style={styles.rowSubtitle}>
+                      Mi ubicación GPS en tiempo real
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* Ubicaciones guardadas del usuario */}
+                {savedPlaces.length > 0 && (
+                  <View style={styles.sectionContainer}>
+                    <Text style={styles.sectionHeaderTitle}>
+                      Ubicaciones guardadas
+                    </Text>
+                    {savedPlaces.map((place) => {
+                      const IconComp = place.Icon || MapPin;
+                      return (
+                        <TouchableOpacity
+                          key={place.id}
+                          style={styles.rowItem}
+                          onPress={() => handleSelectSavedPlace(place)}
+                          activeOpacity={0.7}
+                        >
+                          <View
+                            style={[
+                              styles.iconContainerSaved,
+                              { backgroundColor: place.bg || COLORS.primarySoft },
+                            ]}
+                          >
+                            <IconComp
+                              size={18}
+                              color={place.color || COLORS.primary}
+                              strokeWidth={2.5}
+                            />
+                          </View>
+                          <View style={styles.textContainer}>
+                            <View style={styles.savedTitleRow}>
+                              <Text style={styles.rowTitle}>{place.label}</Text>
+                              {place.typeLabel && (
+                                <View style={styles.typeBadge}>
+                                  <Text style={styles.typeBadgeText}>
+                                    {place.typeLabel}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                            <Text
+                              style={styles.rowSubtitle}
+                              numberOfLines={1}
+                            >
+                              {place.address}
+                              {place.city ? `, ${place.city}` : ""}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 )}
 
-                {/* 2. Ubicaciones Guardadas */}
-                {savedPlaces.map((place) => {
-                  return (
-                    <TouchableOpacity
-                      key={place.id}
-                      style={styles.rowItem}
-                      onPress={() => handleSelectSavedPlace(place)}
-                    >
-                      <View
-                        style={[
-                          styles.iconContainerPink,
-                          !place.address && styles.iconContainerGray,
-                        ]}
+                {loadingSaved && (
+                  <View style={styles.loadingSavedContainer}>
+                    <ActivityIndicator size="small" color={COLORS.primary} />
+                    <Text style={styles.loadingSavedText}>
+                      Cargando tus ubicaciones...
+                    </Text>
+                  </View>
+                )}
+
+                {/* Búsquedas recientes */}
+                {recentPlaces.length > 0 && (
+                  <View style={styles.sectionContainer}>
+                    <Text style={styles.sectionHeaderTitle}>Recientes</Text>
+                    {recentPlaces.map((place, index) => (
+                      <TouchableOpacity
+                        key={`recent-${index}`}
+                        style={styles.rowItem}
+                        onPress={() => {
+                          onSelect(place);
+                          handleClose();
+                        }}
                       >
-                        <SafeIconComp
-                          iconName={place.iconName}
-                          size={18}
-                          color={
-                            place.address ? COLORS.primary : COLORS.gray500
-                          }
-                          strokeWidth={2.5}
-                        />
-                      </View>
-                      <View style={styles.textContainer}>
-                        <Text style={styles.rowTitle}>{place.label}</Text>
-                        <Text
-                          style={[
-                            styles.rowSubtitle,
-                            !place.address && styles.addAddressText,
-                          ]}
-                        >
-                          {place.address || "Agregar dirección"}
-                        </Text>
-                      </View>
-                      {!!place.address && (
+                        <View style={styles.iconContainerRecent}>
+                          <Clock
+                            size={18}
+                            color={COLORS.gray600}
+                            strokeWidth={2.5}
+                          />
+                        </View>
+                        <View style={styles.textContainer}>
+                          <Text style={styles.rowTitle} numberOfLines={1}>
+                            {place.name}
+                          </Text>
+                          <Text style={styles.rowSubtitle} numberOfLines={1}>
+                            {place.address}
+                          </Text>
+                        </View>
                         <TouchableOpacity
                           style={styles.deleteButton}
-                          onPress={(e) => handleDeleteSavedAddress(place.id, e)}
+                          onPress={(e) => handleDeleteRecent(place.address, e)}
                         >
                           <X
                             size={16}
@@ -477,47 +478,10 @@ const LocationSelectSheet = ({
                             strokeWidth={2.5}
                           />
                         </TouchableOpacity>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-
-                {/* Divider si hay recientes */}
-                {recentPlaces.length > 0 && <View style={styles.divider} />}
-
-                {/* 3. Recientes */}
-                {recentPlaces.map((place, index) => (
-                  <TouchableOpacity
-                    key={`recent-${index}`}
-                    style={styles.rowItem}
-                    onPress={() => {
-                      onSelect(place);
-                      handleClose();
-                    }}
-                  >
-                    <View style={styles.iconContainerPink}>
-                      <Clock
-                        size={18}
-                        color={COLORS.primary}
-                        strokeWidth={2.5}
-                      />
-                    </View>
-                    <View style={styles.textContainer}>
-                      <Text style={styles.rowTitle} numberOfLines={1}>
-                        {place.name}
-                      </Text>
-                      <Text style={styles.rowSubtitle} numberOfLines={1}>
-                        {place.address}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.deleteButton}
-                      onPress={(e) => handleDeleteRecent(place.address, e)}
-                    >
-                      <X size={16} color={COLORS.gray400} strokeWidth={2.5} />
-                    </TouchableOpacity>
-                  </TouchableOpacity>
-                ))}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
               </ScrollView>
             )}
           </KeyboardAvoidingView>
@@ -542,8 +506,8 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(15, 23, 42, 0.55)",
   },
   sheet: {
     height: SHEET_HEIGHT,
@@ -555,7 +519,7 @@ const styles = StyleSheet.create({
     ...SHADOWS.large,
   },
   handleBar: {
-    width: 40,
+    width: 36,
     height: 4,
     borderRadius: 2,
     backgroundColor: COLORS.gray300,
@@ -571,8 +535,8 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: FONTS.lg,
-    fontWeight: "bold",
-    color: COLORS.gray800,
+    fontWeight: "800",
+    color: COLORS.gray900,
   },
   closeButton: {
     width: 32,
@@ -608,40 +572,81 @@ const styles = StyleSheet.create({
   listContainer: {
     flex: 1,
   },
+  sectionContainer: {
+    marginTop: SPACING.md,
+  },
+  sectionHeaderTitle: {
+    fontSize: FONTS.xs,
+    fontWeight: "700",
+    color: COLORS.gray400,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: SPACING.xs,
+  },
   rowItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.sm + 4,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray50,
+    borderBottomColor: COLORS.gray100,
   },
-  iconContainerPink: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#FCE7F3", // Rosa clarito como en la captura
+  iconContainerGreen: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.primarySoft,
     alignItems: "center",
     justifyContent: "center",
     marginRight: SPACING.md,
   },
-  iconContainerPurple: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#E0F2FE", // Azul clarito
+  iconContainerSaved: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
     marginRight: SPACING.md,
   },
-  iconContainerGray: {
+  iconContainerRecent: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: COLORS.gray100,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: SPACING.md,
+  },
+  iconContainerBlue: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.secondarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: SPACING.md,
   },
   textContainer: {
     flex: 1,
   },
+  savedTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.xs,
+  },
+  typeBadge: {
+    backgroundColor: COLORS.gray100,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: RADIUS.sm,
+  },
+  typeBadgeText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: COLORS.gray600,
+  },
   rowTitle: {
     fontSize: FONTS.md,
-    fontWeight: "bold",
+    fontWeight: "700",
     color: COLORS.gray800,
   },
   rowSubtitle: {
@@ -649,17 +654,18 @@ const styles = StyleSheet.create({
     color: COLORS.gray500,
     marginTop: 2,
   },
-  addAddressText: {
-    color: COLORS.primary,
-    fontWeight: "600",
-  },
   deleteButton: {
     padding: SPACING.sm,
   },
-  divider: {
-    height: 1,
-    backgroundColor: COLORS.gray100,
-    marginVertical: SPACING.sm,
+  loadingSavedContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    paddingVertical: SPACING.md,
+  },
+  loadingSavedText: {
+    fontSize: FONTS.xs,
+    color: COLORS.gray500,
   },
   predictionItem: {
     flexDirection: "row",
@@ -680,11 +686,6 @@ const styles = StyleSheet.create({
     fontSize: FONTS.xs,
     color: COLORS.gray500,
     marginTop: 2,
-  },
-  errorText: {
-    marginTop: SPACING.xs,
-    color: COLORS.error,
-    fontSize: FONTS.xs,
   },
 });
 
