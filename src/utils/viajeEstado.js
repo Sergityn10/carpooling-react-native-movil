@@ -70,7 +70,7 @@ export const getEstadoConfig = (estado) => {
   );
 };
 
-export const esEstadoEnCurso = (estado) => {
-  const e = (estado || "").toLowerCase();
+export const esEstadoEnCurso = (state) => {
+  const e = (state || "").toLowerCase();
   return e === "activo" || e === "en curso" || e === "en_curso";
 };
