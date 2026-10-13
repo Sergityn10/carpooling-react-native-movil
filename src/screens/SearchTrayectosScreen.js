@@ -1,4 +1,4 @@
-// YouConnext - SearchTrayectosScreen (Pro UI/UX Redesign)
+// YouConnext - SearchTrayectosScreen (Pro UI/UX Redesign con Mapa Interactivo)
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
@@ -23,6 +23,7 @@ import {
   X,
   Ticket,
   Users,
+  Map,
 } from "lucide-react-native";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../constants";
 import {
@@ -32,17 +33,20 @@ import {
   EmptyState,
   CarouselSkeleton,
   AnimatedCardEntrance,
+  MapaExploracionView,
 } from "../components";
 import { trayectoService } from "../services/travels/trayectoService";
 import { eventService } from "../services/eventService";
 
+const TAB_MAPA = "mapa";
 const TAB_TRAYECTOS = "trayectos";
 const TAB_EVENTOS = "eventos";
 
 const SearchTrayectosScreen = ({ navigation, route }) => {
   const initialParams = route.params?.searchParams || null;
+  const initialTab = route.params?.tab || (initialParams ? TAB_TRAYECTOS : TAB_MAPA);
 
-  const [activeTab, setActiveTab] = useState(TAB_TRAYECTOS);
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [searchParams, setSearchParams] = useState(initialParams);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -89,6 +93,7 @@ const SearchTrayectosScreen = ({ navigation, route }) => {
       const hasDest = !!initialParams.destination;
       if (hasOrigin || hasDest) {
         performSearch(initialParams);
+        setActiveTab(TAB_TRAYECTOS);
       }
     }
   }, [initialParams]);
@@ -96,6 +101,7 @@ const SearchTrayectosScreen = ({ navigation, route }) => {
   const handleSearch = (params) => {
     setSearchParams(params);
     performSearch(params);
+    setActiveTab(TAB_TRAYECTOS);
   };
 
   const handleViajePress = (viaje) => {
@@ -225,76 +231,109 @@ const SearchTrayectosScreen = ({ navigation, route }) => {
   };
 
   const routeSummaryText = () => {
-    if (!searchParams) return "Establece tu origen y destino";
+    if (!searchParams) return "Buscar por origen y destino...";
     const origin = searchParams.origin || "Cualquier origen";
     const dest = searchParams.destination || "Cualquier destino";
     return `${origin} → ${dest}`;
   };
 
+  const canGoBack = navigation.canGoBack();
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-          hitSlop={8}
-          activeOpacity={0.8}
-        >
-          <ArrowLeft size={20} color={COLORS.gray800} strokeWidth={2.5} />
-        </TouchableOpacity>
+      {/* Header con Barra de Búsqueda (en Trayectos y Eventos) */}
+      {activeTab !== TAB_MAPA && (
+        <View style={styles.header}>
+          {canGoBack && (
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+              hitSlop={8}
+              activeOpacity={0.8}
+            >
+              <ArrowLeft size={20} color={COLORS.gray800} strokeWidth={2.5} />
+            </TouchableOpacity>
+          )}
 
-        {activeTab === TAB_TRAYECTOS ? (
-          <TouchableOpacity
-            style={styles.searchBar}
-            onPress={() => setSheetVisible(true)}
-            activeOpacity={0.8}
-          >
-            <Search size={18} color={COLORS.primary} strokeWidth={2.5} />
-            <Text style={styles.searchBarText} numberOfLines={1}>
-              {routeSummaryText()}
-            </Text>
-            <View style={styles.filterChip}>
-              <SlidersHorizontal
-                size={15}
-                color={COLORS.primaryDark}
-                strokeWidth={2.5}
+          {activeTab === TAB_TRAYECTOS ? (
+            <TouchableOpacity
+              style={styles.searchBar}
+              onPress={() => setSheetVisible(true)}
+              activeOpacity={0.8}
+            >
+              <Search size={18} color={COLORS.primary} strokeWidth={2.5} />
+              <Text style={styles.searchBarText} numberOfLines={1}>
+                {routeSummaryText()}
+              </Text>
+              <View style={styles.filterChip}>
+                <SlidersHorizontal
+                  size={15}
+                  color={COLORS.primaryDark}
+                  strokeWidth={2.5}
+                />
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.searchBar}>
+              <Search size={18} color={COLORS.gray400} strokeWidth={2.5} />
+              <TextInput
+                style={styles.searchTextInput}
+                placeholder="Buscar por evento, concierto, festival..."
+                placeholderTextColor={COLORS.gray400}
+                value={eventSearch}
+                onChangeText={handleEventSearch}
+                returnKeyType="search"
+                onSubmitEditing={() => fetchEvents(eventSearch)}
               />
+              {eventSearch.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => {
+                    setEventSearch("");
+                    fetchEvents("");
+                  }}
+                  style={styles.clearButton}
+                  hitSlop={6}
+                >
+                  <X size={14} color={COLORS.gray500} strokeWidth={2.5} />
+                </TouchableOpacity>
+              )}
             </View>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.searchBar}>
-            <Search size={18} color={COLORS.gray400} strokeWidth={2.5} />
-            <TextInput
-              style={styles.searchTextInput}
-              placeholder="Buscar por evento, concierto, festival..."
-              placeholderTextColor={COLORS.gray400}
-              value={eventSearch}
-              onChangeText={handleEventSearch}
-              returnKeyType="search"
-              onSubmitEditing={() => fetchEvents(eventSearch)}
-            />
-            {eventSearch.length > 0 && (
-              <TouchableOpacity
-                onPress={() => {
-                  setEventSearch("");
-                  fetchEvents("");
-                }}
-                style={styles.clearButton}
-                hitSlop={6}
-              >
-                <X size={14} color={COLORS.gray500} strokeWidth={2.5} />
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-      </View>
+          )}
+        </View>
+      )}
 
-      {/* Segmented Control (Tabs) */}
-      <View style={styles.tabsWrapper}>
+      {/* Segmented Control (Tabs: Mapa | Trayectos | Eventos) */}
+      <View style={[styles.tabsWrapper, activeTab === TAB_MAPA && styles.tabsWrapperFloating]}>
         <View style={styles.tabsContainer}>
+          {/* Tab 1: Mapa */}
+          <TouchableOpacity
+            style={[
+              styles.tab,
+              activeTab === TAB_MAPA && styles.tabActiveMap,
+            ]}
+            onPress={() => setActiveTab(TAB_MAPA)}
+            activeOpacity={0.85}
+          >
+            <Map
+              size={15}
+              color={
+                activeTab === TAB_MAPA ? COLORS.white : COLORS.gray600
+              }
+              strokeWidth={2.5}
+            />
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === TAB_MAPA && styles.tabTextActiveLight,
+              ]}
+            >
+              Mapa
+            </Text>
+          </TouchableOpacity>
+
+          {/* Tab 2: Trayectos */}
           <TouchableOpacity
             style={[
               styles.tab,
@@ -306,7 +345,7 @@ const SearchTrayectosScreen = ({ navigation, route }) => {
             <Car
               size={15}
               color={
-                activeTab === TAB_TRAYECTOS ? COLORS.primary : COLORS.gray500
+                activeTab === TAB_TRAYECTOS ? COLORS.primary : COLORS.gray600
               }
               strokeWidth={2.5}
             />
@@ -320,15 +359,16 @@ const SearchTrayectosScreen = ({ navigation, route }) => {
             </Text>
           </TouchableOpacity>
 
+          {/* Tab 3: Eventos */}
           <TouchableOpacity
             style={[styles.tab, activeTab === TAB_EVENTOS && styles.tabActive]}
             onPress={() => setActiveTab(TAB_EVENTOS)}
             activeOpacity={0.85}
           >
-            <Calendar
+            <Ticket
               size={15}
               color={
-                activeTab === TAB_EVENTOS ? COLORS.secondary : COLORS.gray500
+                activeTab === TAB_EVENTOS ? COLORS.secondary : COLORS.gray600
               }
               strokeWidth={2.5}
             />
@@ -344,107 +384,118 @@ const SearchTrayectosScreen = ({ navigation, route }) => {
         </View>
       </View>
 
-      {/* Bar de resumen de búsqueda activa */}
-      {activeTab === TAB_TRAYECTOS && searchParams && (
-        <View style={styles.summaryBar}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.summaryChipsContent}
-          >
-            {searchParams.origin ? (
-              <View style={styles.summaryChip}>
-                <Navigation
-                  size={12}
-                  color={COLORS.primary}
-                  strokeWidth={2.5}
-                />
-                <Text style={styles.summaryChipText} numberOfLines={1}>
-                  {searchParams.origin}
-                </Text>
-              </View>
-            ) : null}
-
-            {searchParams.destination ? (
-              <View style={styles.summaryChip}>
-                <MapPin size={12} color={COLORS.error} strokeWidth={2.5} />
-                <Text style={styles.summaryChipText} numberOfLines={1}>
-                  {searchParams.destination}
-                </Text>
-              </View>
-            ) : null}
-
-            {searchParams.date ? (
-              <View style={styles.summaryChip}>
-                <Calendar
-                  size={12}
-                  color={COLORS.gray600}
-                  strokeWidth={2.5}
-                />
-                <Text style={styles.summaryChipText}>
-                  {searchParams.date}
-                </Text>
-              </View>
-            ) : null}
-
-            {searchParams.passengers > 1 ? (
-              <View style={styles.summaryChip}>
-                <Users size={12} color={COLORS.gray600} strokeWidth={2.5} />
-                <Text style={styles.summaryChipText}>
-                  {searchParams.passengers} plazas
-                </Text>
-              </View>
-            ) : null}
-          </ScrollView>
-
-          <TouchableOpacity
-            style={styles.editSearchBtn}
-            onPress={() => setSheetVisible(true)}
-            hitSlop={6}
-          >
-            <Text style={styles.editSearchText}>Editar</Text>
-          </TouchableOpacity>
+      {/* Contenido según la pestaña activa */}
+      {activeTab === TAB_MAPA ? (
+        <View style={styles.mapViewWrapper}>
+          <MapaExploracionView
+            style={styles.mapComponent}
+            onTripSelect={handleViajePress}
+          />
         </View>
-      )}
+      ) : activeTab === TAB_TRAYECTOS ? (
+        <View style={styles.listWrapper}>
+          {/* Bar de resumen de búsqueda activa */}
+          {searchParams && (searchParams.origin || searchParams.destination) && (
+            <View style={styles.summaryBar}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.summaryChipsContent}
+              >
+                {searchParams.origin ? (
+                  <View style={styles.summaryChip}>
+                    <Navigation
+                      size={12}
+                      color={COLORS.primary}
+                      strokeWidth={2.5}
+                    />
+                    <Text style={styles.summaryChipText} numberOfLines={1}>
+                      {searchParams.origin}
+                    </Text>
+                  </View>
+                ) : null}
 
-      {/* Lista de Trayectos o Eventos */}
-      {activeTab === TAB_TRAYECTOS ? (
-        <FlatList
-          data={results}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={renderTrayectoResult}
-          ListEmptyComponent={renderTrayectosEmpty}
-          ListHeaderComponent={
-            loading ? (
-              <View style={styles.skeletonContainer}>
-                <CarouselSkeleton withImage={false} />
-              </View>
-            ) : null
-          }
-          contentContainerStyle={
-            results.length === 0 ? styles.emptyListContent : styles.listContent
-          }
-          showsVerticalScrollIndicator={false}
-        />
+                {searchParams.destination ? (
+                  <View style={styles.summaryChip}>
+                    <MapPin size={12} color={COLORS.error} strokeWidth={2.5} />
+                    <Text style={styles.summaryChipText} numberOfLines={1}>
+                      {searchParams.destination}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {searchParams.date ? (
+                  <View style={styles.summaryChip}>
+                    <Calendar
+                      size={12}
+                      color={COLORS.gray600}
+                      strokeWidth={2.5}
+                    />
+                    <Text style={styles.summaryChipText}>
+                      {searchParams.date}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {searchParams.passengers > 1 ? (
+                  <View style={styles.summaryChip}>
+                    <Users size={12} color={COLORS.gray600} strokeWidth={2.5} />
+                    <Text style={styles.summaryChipText}>
+                      {searchParams.passengers} plazas
+                    </Text>
+                  </View>
+                ) : null}
+              </ScrollView>
+
+              <TouchableOpacity
+                style={styles.editSearchBtn}
+                onPress={() => setSheetVisible(true)}
+                hitSlop={6}
+              >
+                <Text style={styles.editSearchText}>Editar</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <FlatList
+            data={results}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={renderTrayectoResult}
+            ListEmptyComponent={renderTrayectosEmpty}
+            ListHeaderComponent={
+              loading ? (
+                <View style={styles.skeletonContainer}>
+                  <CarouselSkeleton withImage={false} />
+                </View>
+              ) : null
+            }
+            contentContainerStyle={
+              results.length === 0 ? styles.emptyListContent : styles.listContent
+            }
+            showsVerticalScrollIndicator={false}
+          />
+        </View>
       ) : (
-        <FlatList
-          data={events}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={renderEventResult}
-          ListEmptyComponent={renderEventosEmpty}
-          ListHeaderComponent={
-            loadingEvents ? (
-              <View style={styles.skeletonContainer}>
-                <CarouselSkeleton />
-              </View>
-            ) : null
-          }
-          contentContainerStyle={
-            events.length === 0 ? styles.emptyListContent : styles.listContent
-          }
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        />
+        <View style={styles.listWrapper}>
+          <FlatList
+            data={events}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={renderEventResult}
+            ListEmptyComponent={renderEventosEmpty}
+            ListHeaderComponent={
+              loadingEvents ? (
+                <View style={styles.skeletonContainer}>
+                  <CarouselSkeleton />
+                </View>
+              ) : null
+            }
+            contentContainerStyle={
+              events.length === 0 ? styles.emptyListContent : styles.listContent
+            }
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          />
+        </View>
       )}
 
       {/* Bottom Sheet de Búsqueda */}
@@ -467,7 +518,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm + 2,
+    paddingVertical: SPACING.sm,
     backgroundColor: COLORS.white,
     gap: SPACING.sm,
     ...SHADOWS.small,
@@ -482,7 +533,7 @@ const styles = StyleSheet.create({
   },
   searchBar: {
     flex: 1,
-    minHeight: 46,
+    minHeight: 44,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: COLORS.gray100,
@@ -493,40 +544,35 @@ const styles = StyleSheet.create({
   searchBarText: {
     flex: 1,
     fontSize: FONTS.sm,
-    lineHeight: 18,
     fontWeight: "700",
     color: COLORS.gray900,
   },
   searchTextInput: {
     flex: 1,
     fontSize: FONTS.sm,
-    lineHeight: 18,
-    fontWeight: "600",
     color: COLORS.gray900,
-    padding: 0,
+    paddingVertical: SPACING.xs,
   },
   filterChip: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    padding: SPACING.xs,
     backgroundColor: COLORS.primarySoft,
-    alignItems: "center",
-    justifyContent: "center",
+    borderRadius: RADIUS.sm,
   },
   clearButton: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: COLORS.gray200,
-    alignItems: "center",
-    justifyContent: "center",
+    padding: SPACING.xs,
   },
   tabsWrapper: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs + 2,
     backgroundColor: COLORS.white,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm + 2,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
+    borderBottomColor: COLORS.gray200,
+  },
+  tabsWrapperFloating: {
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+    ...SHADOWS.sm,
   },
   tabsContainer: {
     flexDirection: "row",
@@ -539,76 +585,91 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    minHeight: 38,
+    paddingVertical: SPACING.xs + 2,
     borderRadius: RADIUS.full,
+    gap: 5,
   },
   tabActive: {
     backgroundColor: COLORS.white,
-    ...SHADOWS.small,
+    ...SHADOWS.xs,
+  },
+  tabActiveMap: {
+    backgroundColor: COLORS.primary,
+    ...SHADOWS.xs,
   },
   tabText: {
-    fontSize: FONTS.sm,
-    lineHeight: 18,
+    fontSize: FONTS.xs + 1,
     fontWeight: "700",
-    color: COLORS.gray500,
+    color: COLORS.gray600,
   },
   tabTextActive: {
-    color: COLORS.primaryDark,
+    color: COLORS.primary,
+  },
+  tabTextActiveLight: {
+    color: COLORS.white,
   },
   tabTextActiveSecondary: {
-    color: COLORS.secondaryDark,
+    color: COLORS.secondary,
+  },
+  mapViewWrapper: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
+  },
+  mapComponent: {
+    flex: 1,
+  },
+  listWrapper: {
+    flex: 1,
   },
   summaryBar: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.white,
-    paddingHorizontal: SPACING.lg,
+    justifyContent: "space-between",
+    paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.white,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
+    borderBottomColor: COLORS.gray200,
     gap: SPACING.sm,
   },
   summaryChipsContent: {
     gap: SPACING.xs,
-    paddingRight: SPACING.sm,
   },
   summaryChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
     backgroundColor: COLORS.gray100,
-    borderRadius: RADIUS.full,
-    paddingHorizontal: SPACING.sm + 2,
-    paddingVertical: 4,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.sm,
+    gap: SPACING.xs,
   },
   summaryChipText: {
     fontSize: FONTS.xs,
-    lineHeight: 16,
-    fontWeight: "700",
-    color: COLORS.gray800,
-    maxWidth: 120,
+    fontWeight: FONTS.medium,
+    color: COLORS.gray700,
   },
   editSearchBtn: {
     paddingHorizontal: SPACING.sm,
-    paddingVertical: 4,
+    paddingVertical: SPACING.xs,
   },
   editSearchText: {
     fontSize: FONTS.xs,
-    fontWeight: "800",
+    fontWeight: FONTS.bold,
     color: COLORS.primary,
   },
   listContent: {
-    padding: SPACING.lg,
-    gap: SPACING.sm,
+    padding: SPACING.md,
+    gap: SPACING.md,
   },
   emptyListContent: {
     flexGrow: 1,
-    padding: SPACING.lg,
     justifyContent: "center",
+    padding: SPACING.lg,
   },
   skeletonContainer: {
-    paddingVertical: SPACING.md,
+    paddingTop: SPACING.sm,
   },
 });
 

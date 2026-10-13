@@ -203,3 +203,6 @@ export const VIAJE_ESTADO = {
   COMPLETADO: "completado",
   CANCELADO: "cancelado",
 };
+
+// Estilos de Mapa
+export { MAP_STYLE_YOUCONNEXT, MAP_STYLE_DARK, MAP_STYLE_DEFAULT } from "./mapStyles";

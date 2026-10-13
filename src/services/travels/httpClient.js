@@ -216,6 +216,15 @@ class TravelsHttpClient {
 
       return data;
     } catch (error) {
+      if (
+        error?.name === "AbortError" ||
+        error?.name === "CanceledError" ||
+        error?.message?.toLowerCase().includes("abort") ||
+        error?.message?.toLowerCase().includes("cancel")
+      ) {
+        // Petición cancelada intencionalmente por cambio de viewport
+        throw error;
+      }
       console.error("Travels API Error:", error);
       throw error;
     }

@@ -143,14 +143,17 @@ export function MapaExploracion() {
 
 ---
 
-## 3. Renderizado de Capas según `precision`
+## 3. Renderizado de Capas - Formato Unificado
 
-### 3.1 Componente `TripLayer` Adaptativo
+A partir de la v2.0, **todas las respuestas incluyen `encodedPolyline` y `puntosClave`** por defecto. El campo `geometry` (GeoJSON) solo se incluye si se solicita explícitamente con `?format=geojson` o `?format=both`.
+
+### 3.1 Componente `TripLayer` Unificado
 
 ```tsx
 // TripLayer.tsx
 import { Marker, Polyline, Popup } from 'react-leaflet';
 import L from 'leaflet';
+import polyline from '@mapbox/polyline'; // npm i @mapbox/polyline
 
 const carIcon = L.icon({
   iconUrl: '/icons/car-marker.svg',
@@ -159,24 +162,15 @@ const carIcon = L.icon({
 });
 
 export function TripLayer({ trip }) {
-  const { geometry, puntosClave, precio, plazasDisponibles, hora, conductor } = trip;
+  const { encodedPolyline, puntosClave, geometry, precio, plazasDisponibles, hora, conductor } = trip;
 
-  // Caso A: precision=bounds (solo origen/destino)
-  if (!geometry && puntosClave) {
-    return (
-      <>
-        <Marker position={[puntosClave.origen.lat, puntosClave.origen.lng]} icon={carIcon}>
-          <Popup>{trip.origen}</Popup>
-        </Marker>
-        <Marker position={[puntosClave.destino.lat, puntosClave.destino.lng]} icon={carIcon}>
-          <Popup>{trip.destino}</Popup>
-        </Marker>
-      </>
-    );
-  }
+  // Decodificar polilínea (máx 1ms, ~300 bytes)
+  const coordinates = trip.encodedPolyline 
+    ? polyline.decode(trip.encodedPolyline).map(([lat, lng]) => [lat, lng])
+    : geometry?.coordinates?.map(([lng, lat]) => [lat, lng]) ?? [];
 
-  // Caso B: precision=simplified o full (polilínea)
-  const coordinates = geometry?.coordinates?.map(([lng, lat]) => [lat, lng]) ?? [];
+  // Puntos clave para marcadores inmediatos (origen/destino)
+  const { origen, destino } = trip.puntosClave;
 
   return (
     <>
@@ -205,6 +199,41 @@ export function TripLayer({ trip }) {
   );
 }
 ```
+
+### 3.2 Decodificación de Polilíneas por Framework
+
+| Framework / Librería           | Código de decodificación                                              |
+| ------------------------------ | --------------------------------------------------------------------- |
+| **Leaflet + @mapbox/polyline** | `polyline.decode(encodedPolyline).map(([lat, lng]) => [lat, lng])`    |
+| **Google Maps JS API**         | `google.maps.geometry.encoding.decodePath(encodedPolyline)`           |
+| **Mapbox GL JS**               | `mapbox.Polyline.fromEncoded(encodedPolyline).getCoordinates()`       |
+| **OpenLayers**                 | `ol.format.Polyline().readGeometry(encodedPolyline).getCoordinates()` |
+| **Vanilla JS**                 | `@mapbox/polyline` o implementación nativa (~20 líneas)               |
+
+### 3.3 Estrategia de Carga Adaptativa
+
+```typescript
+// En el hook useMapViewport
+const precision = zoom < 10 ? 'bounds' : 'simplified';
+const format = zoom < 10 ? 'bounds' : 'both'; // encoded + geometry opcional
+
+const params = new URLSearchParams({
+  minLat: bounds.getSouth().toFixed(6),
+  maxLat: bounds.getNorth().toFixed(6),
+  minLng: bounds.getWest().toFixed(6),
+  maxLng: bounds.getEast().toFixed(6),
+  zoom: map.getZoom().toString(),
+  precision,
+  format,
+  limit: '50'
+});
+```
+
+| Zoom  | `precision`  | `format`  | Respuesta                                            |
+| ----- | ------------ | --------- | ---------------------------------------------------- |
+| 1-9   | `bounds`     | `bounds`  | Solo `puntosClave` (clustering)                      |
+| 10-14 | `simplified` | `encoded` | `encodedPolyline` + `puntosClave`                    |
+| 15+   | `full`       | `both`    | `encodedPolyline` + `geometry` (LineString completo) |
 
 ---
 

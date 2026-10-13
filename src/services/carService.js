@@ -1,19 +1,19 @@
 // YouConnext - Car Service
 import httpClient from "./httpClient";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import tokenStorage from "./tokenStorage";
 
 /**
- * Función auxiliar para asegurar que el token de acceso de AsyncStorage
+ * Función auxiliar para asegurar que el token de acceso
  * está configurado en el cliente HTTP antes de realizar la petición.
  */
 async function asegurarToken() {
   try {
-    const token = await AsyncStorage.getItem("@youconnext_token");
+    const token = await tokenStorage.getAuthToken();
     if (token) {
       httpClient.setToken(token);
     }
   } catch (error) {
-    console.warn("No se pudo recuperar el token de AsyncStorage:", error);
+    console.warn("No se pudo recuperar el token seguro:", error);
   }
 }
 

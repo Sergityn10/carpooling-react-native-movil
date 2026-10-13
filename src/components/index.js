@@ -20,6 +20,7 @@ export { default as EventMiniCard } from "./home/EventMiniCard";
 export { default as TripMiniCard } from "./home/TripMiniCard";
 export { HeroTripCard, HeroEventCard } from "./home/HeroCards";
 export { HeroCardSkeleton, CarouselSkeleton } from "./home/HomeSkeletons";
+export { default as ViewModeSwitcher } from "./home/ViewModeSwitcher";
 
 // Profile (Perfil de usuario)
 export { default as ProfileView } from "./profile/ProfileView";
@@ -36,6 +37,18 @@ export { default as TripMapPreview } from "./trips/TripMapPreview";
 
 // Tracking (Mapa en vivo)
 export { default as LiveTripMap } from "./tracking/LiveTripMap";
+
+// Map (Exploración de trayectos)
+export { default as MapaExploracionView } from "./map/MapaExploracionView";
+export { default as DriverMarker } from "./map/DriverMarker";
+export { default as DestinationMarker } from "./map/DestinationMarker";
+export { default as WaypointMarker } from "./map/WaypointMarker";
+export { default as ClusterMarker } from "./map/ClusterMarker";
+export { default as TripPolylineLayer } from "./map/TripPolylineLayer";
+export { default as TripPreviewSheet } from "./map/TripPreviewSheet";
+export { default as MapFilterBar } from "./map/MapFilterBar";
+export { default as MapDatePickerSheet } from "./map/MapDatePickerSheet";
+export { default as MapControls } from "./map/MapControls";
 
 // Events
 export { default as EventCard } from "./events/EventCard";

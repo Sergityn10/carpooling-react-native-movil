@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import tokenStorage from "../services/tokenStorage";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import httpClient from "../services/httpClient";
 import travelsHttpClient from "../services/travels/httpClient";
@@ -63,7 +64,7 @@ export const UserProvider = ({ children }) => {
     let unsubscribeTokenRefresh = null;
 
     const register = async () => {
-      const jwtToken = await AsyncStorage.getItem("@youconnext_token");
+      const jwtToken = await tokenStorage.getAuthToken();
       if (!jwtToken) return;
       await registerPushDevice(user.id, jwtToken);
       unsubscribeTokenRefresh = listenForTokenRefresh(user.id, jwtToken);
@@ -81,17 +82,15 @@ export const UserProvider = ({ children }) => {
   // Cargar usuario almacenado
   const loadUser = async () => {
     try {
-      const token = await AsyncStorage.getItem("@youconnext_token");
+      const token = await tokenStorage.getAuthToken();
 
       if (token) {
         httpClient.setToken(token);
         travelsHttpClient.setToken(token);
         notificationsHttpClient.setToken(token);
 
-        // Restaurar refresh token de AsyncStorage
-        const refreshTokenValue = await AsyncStorage.getItem(
-          "@youconnext_refresh_token",
-        );
+        // Restaurar refresh token de SecureStore
+        const refreshTokenValue = await tokenStorage.getRefreshToken();
         if (refreshTokenValue) {
           httpClient.setRefreshToken(refreshTokenValue);
         }
@@ -162,7 +161,7 @@ export const UserProvider = ({ children }) => {
       userCache.clear();
       await AsyncStorage.setItem("@youconnext_user", JSON.stringify(userData));
       if (token) {
-        await AsyncStorage.setItem("@youconnext_token", token);
+        await tokenStorage.setAuthToken(token);
         httpClient.setToken(token);
         travelsHttpClient.setToken(token);
         notificationsHttpClient.setToken(token);
@@ -178,8 +177,7 @@ export const UserProvider = ({ children }) => {
   // Limpiar sesión almacenada
   const clearStoredSession = async () => {
     await AsyncStorage.removeItem("@youconnext_user");
-    await AsyncStorage.removeItem("@youconnext_token");
-    await AsyncStorage.removeItem("@youconnext_refresh_token");
+    await tokenStorage.clearAllAuthTokens();
     httpClient.clearToken();
     travelsHttpClient.clearToken();
     notificationsHttpClient.clearToken();
@@ -283,7 +281,7 @@ export const UserProvider = ({ children }) => {
       }
       // Desregistrar token de notificaciones
       try {
-        const jwtToken = await AsyncStorage.getItem("@youconnext_token");
+        const jwtToken = await tokenStorage.getAuthToken();
         await unregisterPushDevice(jwtToken);
       } catch (e) {
         // Ignorar si falla; clearStoredSession limpia el token igualmente

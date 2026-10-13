@@ -1,5 +1,6 @@
 // YouConnext - Trayecto Service (api-travels)
 import httpClient from "./httpClient";
+import { parseTripDate } from "../dateUtils";
 
 // Obtener todos los trayectos — GET /api/trayecto (paginado)
 async function obtenerTrayectos({ page, limit } = {}) {
@@ -200,6 +201,116 @@ async function eliminarTrayecto(id) {
   });
 }
 
+// Obtener trayectos por viewport (mapa interactivo v2.0) — GET /api/trayecto/viewport
+async function obtenerTrayectosViewport(
+  { minLat, maxLat, minLng, maxLng, zoom, precision, format = "both", limit = 50, date, minSeats, maxPrice, eventoId } = {},
+  signal
+) {
+  const params = new URLSearchParams();
+  if (minLat != null) params.set("minLat", String(minLat));
+  if (maxLat != null) params.set("maxLat", String(maxLat));
+  if (minLng != null) params.set("minLng", String(minLng));
+  if (maxLng != null) params.set("maxLng", String(maxLng));
+  if (zoom != null) params.set("zoom", String(zoom));
+  params.set("precision", precision || (zoom < 10 ? "bounds" : zoom < 15 ? "simplified" : "full"));
+  params.set("format", format || "both");
+  if (limit) params.set("limit", String(limit));
+
+  // Duplicar parámetros fecha y plazas para compatibilidad total con la API v1 y v2
+  if (date) {
+    params.set("fecha", date);
+    params.set("date", date);
+  }
+  if (minSeats) {
+    params.set("plazas", String(minSeats));
+    params.set("minSeats", String(minSeats));
+  }
+  if (maxPrice) params.set("maxPrice", String(maxPrice));
+  if (eventoId) params.set("eventoId", eventoId);
+
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return httpClient.request(`/api/trayecto/viewport${query}`, { signal });
+}
+
+// Fallback local: filtrar trayectos disponibles por BBox (cuando el backend no tiene endpoint /viewport)
+async function obtenerTrayectosViewportLocal(
+  { minLat, maxLat, minLng, maxLng, zoom, precision, limit = 50, date, minSeats, maxPrice, eventoId } = {}
+) {
+  try {
+    const res = await obtenerTrayectos({ limit: 200 });
+    const allTrips = Array.isArray(res) ? res : res?.data || res?.trayectos || [];
+    const now = Date.now();
+
+    return allTrips
+      .filter((t) => {
+        const estado = (t.status || t.estado || "").toLowerCase();
+        const disponible = t.disponible ?? t.plazas ?? 0;
+        const tripDateObj = parseTripDate(t);
+        const tripTime = tripDateObj ? tripDateObj.getTime() : 0;
+        const hasCoords =
+          t.origen_lat != null &&
+          t.origen_lng != null &&
+          t.destino_lat != null &&
+          t.destino_lng != null;
+
+        return (
+          estado !== "cancelado" &&
+          estado !== "completado" &&
+          disponible > 0 &&
+          tripTime > now &&
+          hasCoords &&
+          t.origen_lat >= minLat &&
+          t.origen_lat <= maxLat &&
+          t.origen_lng >= minLng &&
+          t.origen_lng <= maxLng
+        );
+      })
+      .filter((t) => {
+        if (date && t.hora) {
+          const tripDateObj = parseTripDate(t);
+          if (!tripDateObj) return true;
+          const tripDateStr = tripDateObj.toISOString().split("T")[0];
+          return tripDateStr === date;
+        }
+        return true;
+      })
+      .filter((t) => {
+        if (minSeats && (t.disponible ?? t.plazas ?? 0) < minSeats) return false;
+        return true;
+      })
+      .filter((t) => {
+        if (maxPrice && t.precio > maxPrice) return false;
+        return true;
+      })
+      .filter((t) => {
+        if (eventoId && t.evento_id !== eventoId && t.eventoId !== eventoId) return false;
+        return true;
+      })
+      .slice(0, limit)
+      .map((t) => ({
+        ...t,
+        puntosClave: {
+          origen: { lat: Number(t.origen_lat), lng: Number(t.origen_lng) },
+          destino: { lat: Number(t.destino_lat), lng: Number(t.destino_lng) },
+        },
+        geometry:
+          t.geometry ||
+          (Array.isArray(t.tramos || t.Tramos) && (t.tramos || t.Tramos).length > 0
+            ? {
+                type: "LineString",
+                coordinates: (t.tramos || t.Tramos).flatMap((tr) => [
+                  [Number(tr.origen_lng || tr.start?.lng), Number(tr.origen_lat || tr.start?.lat)],
+                  [Number(tr.destino_lng || tr.end?.lng), Number(tr.destino_lat || tr.end?.lat)],
+                ]),
+              }
+            : undefined),
+      }));
+  } catch (err) {
+    console.warn("Fallback local viewport falló:", err.message);
+    return [];
+  }
+}
+
 export const trayectoService = {
   obtenerTrayectos,
   buscarTrayectos,
@@ -226,6 +337,8 @@ export const trayectoService = {
   crearTrayectoEvento,
   eliminarTrayecto,
   obtenerHistorialBusquedas,
+  obtenerTrayectosViewport,
+  obtenerTrayectosViewportLocal,
 };
 
 export default trayectoService;

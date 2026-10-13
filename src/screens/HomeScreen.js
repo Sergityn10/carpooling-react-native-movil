@@ -73,7 +73,7 @@ const HomeScreen = ({ navigation }) => {
   );
 
   const handleSearch = (params) => {
-    navigation.navigate("SearchTrayectos", { searchParams: params });
+    navigation.navigate("SearchTab", { searchParams: params });
   };
 
   const fetchProximosViajes = useCallback(async () => {
@@ -340,7 +340,7 @@ const HomeScreen = ({ navigation }) => {
           navigation.navigate("EventDetalle", { eventId: item.id, event: item })
         }
         onSearchTrip={() =>
-          navigation.navigate("SearchTrayectos", {
+          navigation.navigate("SearchTab", {
             searchParams: { destination: item.name },
           })
         }
@@ -421,7 +421,7 @@ const HomeScreen = ({ navigation }) => {
                 })
               }
               onSearchTrip={() =>
-                navigation.navigate("SearchTrayectos", {
+                navigation.navigate("SearchTab", {
                   searchParams: { destination: heroEvento.name },
                 })
               }

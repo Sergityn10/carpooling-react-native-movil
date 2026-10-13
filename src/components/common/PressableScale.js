@@ -1,5 +1,5 @@
 // YouConnext - PressableScale (feedback táctil suave con esquinas redondeadas y sombras limpias)
-import React, { useRef } from "react";
+import React, { useRef, useCallback } from "react";
 import { Animated, Pressable, StyleSheet } from "react-native";
 
 const PressableScale = ({
@@ -11,16 +11,21 @@ const PressableScale = ({
   accessibilityRole = "button",
   ...rest
 }) => {
-  const scale = useRef(new Animated.Value(1)).current;
+  const scaleRef = useRef(null);
+  if (!scaleRef.current) {
+    scaleRef.current = new Animated.Value(1);
+  }
 
-  const animateTo = (value) => {
-    Animated.spring(scale, {
-      toValue: value,
-      useNativeDriver: true,
-      speed: 40,
-      bounciness: 4,
-    }).start();
-  };
+  const animateTo = useCallback((value) => {
+    if (scaleRef.current) {
+      Animated.spring(scaleRef.current, {
+        toValue: value,
+        useNativeDriver: true,
+        speed: 40,
+        bounciness: 4,
+      }).start();
+    }
+  }, []);
 
   const flatStyle = StyleSheet.flatten(style) || {};
   const borderRadius = flatStyle.borderRadius;
@@ -35,7 +40,7 @@ const PressableScale = ({
       style={borderRadius ? { borderRadius } : undefined}
       {...rest}
     >
-      <Animated.View style={[style, { transform: [{ scale }] }]}>
+      <Animated.View style={[style, { transform: [{ scale: scaleRef.current }] }]}>
         {children}
       </Animated.View>
     </Pressable>

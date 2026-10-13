@@ -1,7 +1,7 @@
-// YouConnext - HTTP Client Base
 import { API_CONFIG } from "../constants";
 import { NativeModules, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import tokenStorage from "./tokenStorage";
 
 const getMetroHost = () => {
   const scriptURL = NativeModules?.SourceCode?.scriptURL;
@@ -130,7 +130,7 @@ class HttpClient {
 
         this.token = newToken;
         try {
-          await AsyncStorage.setItem("@youconnext_token", newToken);
+          await tokenStorage.setAuthToken(newToken);
         } catch {}
 
         // Capturar el nuevo refresh_token rotado de Set-Cookie
@@ -138,10 +138,7 @@ class HttpClient {
         if (newRefreshToken) {
           this.refreshTokenValue = newRefreshToken;
           try {
-            await AsyncStorage.setItem(
-              "@youconnext_refresh_token",
-              newRefreshToken,
-            );
+            await tokenStorage.setRefreshToken(newRefreshToken);
           } catch {}
         }
 
@@ -261,7 +258,7 @@ class HttpClient {
         if (rt) {
           this.refreshTokenValue = rt;
           try {
-            await AsyncStorage.setItem("@youconnext_refresh_token", rt);
+            await tokenStorage.setRefreshToken(rt);
           } catch {}
         }
       }
@@ -323,7 +320,7 @@ class HttpClient {
   async clearRefreshToken() {
     this.refreshTokenValue = null;
     try {
-      await AsyncStorage.removeItem("@youconnext_refresh_token");
+      await tokenStorage.removeRefreshToken();
     } catch {}
   }
 

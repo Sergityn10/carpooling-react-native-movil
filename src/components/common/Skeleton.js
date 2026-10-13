@@ -4,9 +4,15 @@ import { View, Animated, StyleSheet, Easing } from "react-native";
 import { COLORS } from "../../constants";
 
 const Skeleton = ({ width = "100%", height = 16, borderRadius = 6, style }) => {
-  const shimmerAnim = useRef(new Animated.Value(0)).current;
+  const shimmerAnimRef = useRef(null);
+  if (!shimmerAnimRef.current) {
+    shimmerAnimRef.current = new Animated.Value(0);
+  }
+
+  const shimmerAnim = shimmerAnimRef.current;
 
   useEffect(() => {
+    if (!shimmerAnim) return;
     const loop = Animated.loop(
       Animated.timing(shimmerAnim, {
         toValue: 1,
