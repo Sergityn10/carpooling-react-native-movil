@@ -39,13 +39,36 @@ jobs:
         run: |
           echo "$KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > android/app/my-upload-key.keystore
 
-      - name: 🔍 Validar Keystore de subida
+      - name: 🔍 Resolver y validar credenciales de firma
+        env:
+          INPUT_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          INPUT_STORE_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          INPUT_KEY_PASS: ${{ secrets.KEY_PASSWORD }}
         run: |
+          # 1. Resolver contraseñas (usa Secret si existe, o fallback del proyecto)
+          STORE_PASS="${INPUT_STORE_PASS:-6442ee0a1cd0d404f80cdd131ddb5432}"
+          KEY_PASS="${INPUT_KEY_PASS:-14f7f9e53e96ed8cbd8ca4f004d9860e}"
+
+          # 2. Resolver alias (usa Secret si existe, o extrae del keystore, o fallback)
+          ALIAS="${INPUT_KEY_ALIAS}"
+          if [ -z "$ALIAS" ]; then
+            DETECTED_ALIAS=$(keytool -list -keystore android/app/my-upload-key.keystore -storepass "$STORE_PASS" 2>/dev/null | grep -i "PrivateKeyEntry" | awk -F',' '{print $1}' | tr -d ' ' || true)
+            ALIAS="${DETECTED_ALIAS:-91076f9e80d6c9763a0f01949ee88006}"
+          fi
+
+          echo "Usando alias de firma: $ALIAS"
+
+          # 3. Validar con keytool que el keystore abre correctamente con ese alias
           keytool -list -v \
             -keystore android/app/my-upload-key.keystore \
-            -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
-            -alias "${{ secrets.KEY_ALIAS }}" \
-            -keypass "${{ secrets.KEY_PASSWORD }}"
+            -storepass "$STORE_PASS" \
+            -alias "$ALIAS" \
+            -keypass "$KEY_PASS"
+
+          # 4. Exportar variables para Gradle
+          echo "RESOLVED_KEY_ALIAS=$ALIAS" >> $GITHUB_ENV
+          echo "RESOLVED_KEYSTORE_PASSWORD=$STORE_PASS" >> $GITHUB_ENV
+          echo "RESOLVED_KEY_PASSWORD=$KEY_PASS" >> $GITHUB_ENV
 
       - name: 🛠️ Dar permisos de ejecución a Gradle
         run: chmod +x android/gradlew
@@ -55,9 +78,9 @@ jobs:
           cd android
           ./gradlew bundleRelease \
               -PMYAPP_UPLOAD_STORE_FILE=my-upload-key.keystore \
-              -PMYAPP_UPLOAD_STORE_PASSWORD="${{ secrets.KEYSTORE_PASSWORD }}" \
-              -PMYAPP_UPLOAD_KEY_ALIAS="${{ secrets.KEY_ALIAS }}" \
-              -PMYAPP_UPLOAD_KEY_PASSWORD="${{ secrets.KEY_PASSWORD }}"
+              -PMYAPP_UPLOAD_STORE_PASSWORD="$RESOLVED_KEYSTORE_PASSWORD" \
+              -PMYAPP_UPLOAD_KEY_ALIAS="$RESOLVED_KEY_ALIAS" \
+              -PMYAPP_UPLOAD_KEY_PASSWORD="$RESOLVED_KEY_PASSWORD"
 
       - name: 🔍 Verificar huella digital del AAB generado
         run: |
