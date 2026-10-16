@@ -48,6 +48,7 @@
     },
     "plugins": [
       "./plugins/withGoogleServicesFile",
+      "./plugins/withAndroidSigning",
       "@react-native-google-signin/google-signin",
       "@react-native-community/datetimepicker",
       [

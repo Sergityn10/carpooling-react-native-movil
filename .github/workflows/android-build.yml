@@ -24,10 +24,8 @@ jobs:
       - name: 📦 Instalar dependencias de React Native
         run: npm install
 
-      # ---> PASO NUEVO <---
       - name: 🏗️ Generar carpetas nativas (Expo Prebuild)
         run: npx expo prebuild --platform android
-      # ---------------------
 
       - name: ☕ Configurar Java (JDK)
         uses: actions/setup-java@v5
@@ -39,19 +37,32 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          echo $KEYSTORE_BASE64 | base64 --decode > android/app/my-upload-key.keystore
+          echo "$KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > android/app/my-upload-key.keystore
+
+      - name: 🔍 Validar Keystore de subida
+        run: |
+          keytool -list -v \
+            -keystore android/app/my-upload-key.keystore \
+            -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
+            -alias "${{ secrets.KEY_ALIAS }}" \
+            -keypass "${{ secrets.KEY_PASSWORD }}"
 
       - name: 🛠️ Dar permisos de ejecución a Gradle
         run: chmod +x android/gradlew
 
-      - name: 🏗️️ Compilar AAB (Modo Release Firmado)
+      - name: 🏗️ Compilar AAB (Modo Release Firmado)
         run: |
           cd android
           ./gradlew bundleRelease \
               -PMYAPP_UPLOAD_STORE_FILE=my-upload-key.keystore \
-              -PMYAPP_UPLOAD_STORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }} \
-              -PMYAPP_UPLOAD_KEY_ALIAS=${{ secrets.KEY_ALIAS }} \
-              -PMYAPP_UPLOAD_KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
+              -PMYAPP_UPLOAD_STORE_PASSWORD="${{ secrets.KEYSTORE_PASSWORD }}" \
+              -PMYAPP_UPLOAD_KEY_ALIAS="${{ secrets.KEY_ALIAS }}" \
+              -PMYAPP_UPLOAD_KEY_PASSWORD="${{ secrets.KEY_PASSWORD }}"
+
+      - name: 🔍 Verificar huella digital del AAB generado
+        run: |
+          echo "=== Huella digital del AAB compilado ==="
+          keytool -printcert -jarfile android/app/build/outputs/bundle/release/app-release.aab
 
       - name: 📤 Subir el AAB a GitHub Artifacts
         uses: actions/upload-artifact@v4
