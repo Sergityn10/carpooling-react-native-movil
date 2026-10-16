@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, Image, StyleSheet, Text } from "react-native";
+import { View, StyleSheet, Text, Platform, ActivityIndicator } from "react-native";
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import { Navigation2, Clock } from "lucide-react-native";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../../constants";
-import {
-  buildStaticMapUrl,
-  getDirectionsRoute,
-} from "../../services/googlePlaces";
+import { MAP_STYLE_YOUCONNEXT } from "../../constants/mapStyles";
+import { getDirectionsRoute } from "../../services/googlePlaces";
+import { decodePolyline } from "../../utils/mapGeoUtils";
 
 const formatDistance = (meters) => {
   if (!meters && meters !== 0) return null;
@@ -22,8 +22,8 @@ const formatDuration = (seconds) => {
   return m > 0 ? `${h} h ${m} min` : `${h} h`;
 };
 
-const TripMapPreview = ({ origin, destination, height = 160 }) => {
-  const [imageError, setImageError] = useState(false);
+const TripMapPreview = ({ origin, destination, height = 180 }) => {
+  const mapRef = useRef(null);
   const [encodedPolyline, setEncodedPolyline] = useState(null);
   const [routeError, setRouteError] = useState("");
   const [loadingRoute, setLoadingRoute] = useState(false);
@@ -39,10 +39,6 @@ const TripMapPreview = ({ origin, destination, height = 160 }) => {
     origin?.longitude != null &&
     destination?.latitude != null &&
     destination?.longitude != null;
-
-  useEffect(() => {
-    setImageError(false);
-  }, [origin, destination]);
 
   useEffect(() => {
     if (!hasBothPoints) {
@@ -75,33 +71,70 @@ const TripMapPreview = ({ origin, destination, height = 160 }) => {
     };
 
     run();
-  }, [hasBothPoints, origin, destination]);
+  }, [hasBothPoints, origin?.latitude, origin?.longitude, destination?.latitude, destination?.longitude]);
 
-  const url = useMemo(() => {
+  const routeCoords = useMemo(() => {
+    if (!encodedPolyline) return [];
     try {
-      if (!hasAnyPoint) return null;
-      return buildStaticMapUrl({
-        origin,
-        destination,
-        encodedPolyline,
-        width: 640,
-        height: 320,
-        scale: 2,
-      });
+      return decodePolyline(encodedPolyline) || [];
     } catch {
-      return null;
+      return [];
     }
-  }, [origin, destination, encodedPolyline, hasAnyPoint]);
+  }, [encodedPolyline]);
 
-  if (!url || imageError) {
+  const initialRegion = useMemo(() => {
+    const pt = origin || destination || { latitude: 40.4168, longitude: -3.7038 };
+    return {
+      latitude: pt.latitude || 40.4168,
+      longitude: pt.longitude || -3.7038,
+      latitudeDelta: 0.08,
+      longitudeDelta: 0.08,
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    if (hasBothPoints && routeCoords.length > 0) {
+      mapRef.current.fitToCoordinates(
+        [
+          { latitude: origin.latitude, longitude: origin.longitude },
+          { latitude: destination.latitude, longitude: destination.longitude },
+          ...routeCoords,
+        ],
+        {
+          edgePadding: { top: 35, right: 35, bottom: 35, left: 35 },
+          animated: true,
+        },
+      );
+    } else if (origin?.latitude != null && origin?.longitude != null) {
+      mapRef.current.animateToRegion(
+        {
+          latitude: origin.latitude,
+          longitude: origin.longitude,
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
+        },
+        400,
+      );
+    } else if (destination?.latitude != null && destination?.longitude != null) {
+      mapRef.current.animateToRegion(
+        {
+          latitude: destination.latitude,
+          longitude: destination.longitude,
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
+        },
+        400,
+      );
+    }
+  }, [hasBothPoints, origin?.latitude, origin?.longitude, destination?.latitude, destination?.longitude, routeCoords]);
+
+  if (!hasAnyPoint) {
     return (
       <View style={[styles.placeholder, { height }]}>
         <Text style={styles.placeholderText}>
-          {!hasAnyPoint
-            ? "Selecciona origen y/o destino para ver el mapa"
-            : routeError
-              ? routeError
-              : "No se pudo cargar el mapa (revisa API key / billing / Maps Static API / Directions API)"}
+          Selecciona origen y/o destino para ver el mapa de la ruta
         </Text>
       </View>
     );
@@ -109,17 +142,58 @@ const TripMapPreview = ({ origin, destination, height = 160 }) => {
 
   return (
     <View style={[styles.container, { height }]}>
-      <Image
-        source={{ uri: url }}
-        style={styles.image}
-        resizeMode="cover"
-        onError={() => setImageError(true)}
-      />
+      <MapView
+        ref={mapRef}
+        provider={PROVIDER_GOOGLE}
+        style={styles.map}
+        initialRegion={initialRegion}
+        customMapStyle={MAP_STYLE_YOUCONNEXT}
+        scrollEnabled={false}
+        zoomEnabled={false}
+        rotateEnabled={false}
+        pitchEnabled={false}
+        toolbarEnabled={false}
+        showsUserLocation={false}
+        showsMyLocationButton={false}
+        showsCompass={false}
+        liteMode={Platform.OS === "android"}
+      >
+        {routeCoords.length > 0 && (
+          <Polyline
+            coordinates={routeCoords}
+            strokeColor={COLORS.primary}
+            strokeWidth={4}
+          />
+        )}
+        {origin?.latitude != null && origin?.longitude != null && (
+          <Marker
+            coordinate={{
+              latitude: origin.latitude,
+              longitude: origin.longitude,
+            }}
+            pinColor="#10B981"
+            title="Origen"
+          />
+        )}
+        {destination?.latitude != null && destination?.longitude != null && (
+          <Marker
+            coordinate={{
+              latitude: destination.latitude,
+              longitude: destination.longitude,
+            }}
+            pinColor={COLORS.primary}
+            title="Destino"
+          />
+        )}
+      </MapView>
+
       {loadingRoute && (
         <View style={styles.routeLoadingPill}>
+          <ActivityIndicator size="small" color={COLORS.white} style={{ marginRight: 6 }} />
           <Text style={styles.routeLoadingText}>Calculando ruta…</Text>
         </View>
       )}
+
       {routeInfo && !loadingRoute && (
         <View style={styles.routeInfoBadge}>
           <View style={styles.routeInfoItem}>
@@ -146,12 +220,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderRadius: RADIUS.lg,
     overflow: "hidden",
+    position: "relative",
     ...SHADOWS.small,
   },
-  image: {
+  map: {
     width: "100%",
     height: "100%",
-    backgroundColor: COLORS.gray100,
   },
   placeholder: {
     backgroundColor: COLORS.gray100,
@@ -170,7 +244,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: SPACING.sm,
     alignSelf: "center",
-    backgroundColor: "rgba(0,0,0,0.6)",
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.7)",
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.xs,
     borderRadius: RADIUS.lg,
@@ -187,10 +263,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: SPACING.sm,
-    backgroundColor: "rgba(0,0,0,0.65)",
+    backgroundColor: "rgba(15, 23, 42, 0.8)",
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
+    paddingVertical: SPACING.xs + 2,
     borderRadius: RADIUS.full,
+    ...SHADOWS.md,
   },
   routeInfoItem: {
     flexDirection: "row",
@@ -200,12 +277,12 @@ const styles = StyleSheet.create({
   routeInfoText: {
     color: COLORS.white,
     fontSize: FONTS.xs,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   routeInfoDivider: {
     width: 1,
     height: 12,
-    backgroundColor: "rgba(255,255,255,0.3)",
+    backgroundColor: "rgba(255,255,255,0.4)",
   },
 });
 

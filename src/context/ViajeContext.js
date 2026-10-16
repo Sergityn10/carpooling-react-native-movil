@@ -12,6 +12,7 @@ import trayectoService from "../services/travels/trayectoService";
 import reservaService from "../services/travels/reservaService";
 import trackingSocketService from "../services/tracking/trackingSocketService";
 import { GPS_CONFIG, VIAJE_ESTADO } from "../constants";
+import { useUser } from "./UserContext";
 // BACKGROUND_LOCATION_TASK deshabilitado por directiva de no ubicación en segundo plano
 // import { BACKGROUND_LOCATION_TASK } from "../services/locationBackgroundTask";
 import { homeCache } from "../services/homeCache";

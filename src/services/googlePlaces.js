@@ -1,3 +1,5 @@
+import { Platform } from "react-native";
+
 const getApiKey = () => process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
 const assertApiKey = () => {
@@ -7,6 +9,59 @@ const assertApiKey = () => {
       "Falta EXPO_PUBLIC_GOOGLE_MAPS_API_KEY. Configúrala en .env y reinicia Metro.",
     );
   }
+};
+
+// Package name y huella SHA-1 de la app para que Google Maps acepte
+// la API Key con restricción de "Aplicaciones Android" en peticiones REST.
+const DEFAULT_ANDROID_PACKAGE = "app.youconnext";
+const DEFAULT_ANDROID_SHA1 = "5E8F16062EA3CD2C4A0D547876BAA6F38CABF625"; // android/app/debug.keystore
+const FALLBACK_ANDROID_SHA1 = "0AF0CF184D34AF71A3990DD65143214D0A3F08BD"; // ~/.android/debug.keystore
+
+export const getMobileHeaders = (useFallbackCert = false) => {
+  const headers = {};
+
+  if (Platform.OS === "android") {
+    const pkg =
+      process.env.EXPO_PUBLIC_ANDROID_PACKAGE || DEFAULT_ANDROID_PACKAGE;
+    const rawCert = useFallbackCert
+      ? FALLBACK_ANDROID_SHA1
+      : process.env.EXPO_PUBLIC_ANDROID_SHA1 || DEFAULT_ANDROID_SHA1;
+    const cert = rawCert ? rawCert.replace(/:/g, "").toUpperCase() : "";
+
+    if (pkg) headers["X-Android-Package"] = pkg;
+    if (cert) headers["X-Android-Cert"] = cert;
+  } else if (Platform.OS === "ios") {
+    const bundleId =
+      process.env.EXPO_PUBLIC_IOS_BUNDLE_ID || DEFAULT_ANDROID_PACKAGE;
+    if (bundleId) headers["X-Ios-Bundle-Identifier"] = bundleId;
+  }
+
+  return headers;
+};
+
+const fetchGoogleApi = async (url) => {
+  const primaryHeaders = getMobileHeaders(false);
+  let res = await fetch(url, { headers: primaryHeaders });
+  let data = await res.json();
+
+  // Si Google rechaza con REQUEST_DENIED en Android, reintentar con el certificado alternativo
+  if (
+    Platform.OS === "android" &&
+    data.status === "REQUEST_DENIED" &&
+    primaryHeaders["X-Android-Cert"] !== FALLBACK_ANDROID_SHA1
+  ) {
+    const fallbackHeaders = getMobileHeaders(true);
+    const resFallback = await fetch(url, { headers: fallbackHeaders });
+    const dataFallback = await resFallback.json();
+    if (
+      dataFallback.status === "OK" ||
+      dataFallback.status === "ZERO_RESULTS"
+    ) {
+      return { res: resFallback, data: dataFallback };
+    }
+  }
+
+  return { res, data };
 };
 
 // Optimizado usando URLSearchParams nativo de JavaScript
@@ -58,8 +113,7 @@ export const autocompletePlaces = async ({
     },
   );
 
-  const res = await fetch(url);
-  const data = await res.json();
+  const { res, data } = await fetchGoogleApi(url);
 
   if (!res.ok || (data.status !== "OK" && data.status !== "ZERO_RESULTS")) {
     throw new Error(
@@ -84,8 +138,7 @@ export const reverseGeocode = async ({
     language,
   });
 
-  const res = await fetch(url);
-  const data = await res.json();
+  const { res, data } = await fetchGoogleApi(url);
 
   if (!res.ok || data.status !== "OK") {
     throw new Error(
@@ -120,8 +173,7 @@ export const getPlaceDetails = async ({
     },
   );
 
-  const res = await fetch(url);
-  const data = await res.json();
+  const { res, data } = await fetchGoogleApi(url);
 
   if (!res.ok || data.status !== "OK") {
     throw new Error(
@@ -167,8 +219,7 @@ export const getDirectionsRoute = async ({
     mode,
   });
 
-  const res = await fetch(url);
-  const data = await res.json();
+  const { res, data } = await fetchGoogleApi(url);
 
   if (!res.ok || data.status !== "OK") {
     throw new Error(

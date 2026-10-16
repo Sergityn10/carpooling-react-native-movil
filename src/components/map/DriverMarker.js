@@ -6,122 +6,162 @@ import { View, Text, Image, StyleSheet, Animated } from "react-native";
 import { Marker } from "react-native-maps";
 import { User, Star, Users } from "lucide-react-native";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../../constants";
+import { getTripOriginCoords } from "../../utils/mapGeoUtils";
 
-const DriverMarker = React.memo(({ trip, coordinate, onPress, selected, zoom, theme = "light" }) => {
-  const {
-    id,
-    conductor,
-    precio,
-    plazasDisponibles,
-    disponible,
-    conductorRating,
-    img_perfil,
-  } = trip;
+const DriverMarker = React.memo(
+  ({
+    trip,
+    coordinate,
+    onPress,
+    selected,
+    zoom,
+    theme = "light",
+    siblingCount = 1,
+    siblingTrips = [],
+  }) => {
+    const {
+      id,
+      conductor,
+      precio,
+      plazasDisponibles,
+      disponible,
+      conductorRating,
+      img_perfil,
+    } = trip;
 
-  const [tracksViewChanges, setTracksViewChanges] = useState(true);
-  const scaleAnim = useRef(new Animated.Value(0.7)).current;
+    const [tracksViewChanges, setTracksViewChanges] = useState(true);
+    const scaleAnim = useRef(new Animated.Value(0.7)).current;
 
-  useEffect(() => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-      bounciness: 6,
-      speed: 14,
-    }).start();
+    useEffect(() => {
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        bounciness: 6,
+        speed: 14,
+      }).start();
 
-    // Permitir snapshot estable una vez montado el componente
-    const timer = setTimeout(() => {
-      setTracksViewChanges(false);
-    }, 700);
-    return () => clearTimeout(timer);
-  }, [trip.id, selected]);
+      // Permitir snapshot estable una vez montado el componente
+      const timer = setTimeout(() => {
+        setTracksViewChanges(false);
+      }, 700);
+      return () => clearTimeout(timer);
+    }, [trip.id, selected, siblingCount]);
 
-  const driverAvatar =
-    img_perfil ||
-    trip.conductor_img ||
-    (typeof conductor === "object" ? (conductor?.img_perfil || conductor?.avatar || conductor?.photo) : null);
+    const driverAvatar =
+      img_perfil ||
+      trip.conductor_img ||
+      (typeof conductor === "object"
+        ? conductor?.img_perfil || conductor?.avatar || conductor?.photo
+        : null);
 
-  const driverName =
-    (typeof conductor === "object" ? (conductor?.nombre || conductor?.name) : conductor) ||
-    trip.conductorNombre ||
-    "Conductor";
-  const rating = conductorRating || (typeof conductor === "object" ? conductor?.rating : null) || 4.9;
-  const seats = plazasDisponibles ?? disponible ?? 0;
-  const price = precio ?? 0;
-  const isSelected = selected === id;
-  const isDark = theme === "dark";
+    const driverName =
+      (typeof conductor === "object"
+        ? conductor?.nombre || conductor?.name
+        : conductor) ||
+      trip.conductorNombre ||
+      "Conductor";
+    const rating =
+      conductorRating ||
+      (typeof conductor === "object" ? conductor?.rating : null) ||
+      4.9;
+    const seats = plazasDisponibles ?? disponible ?? 0;
+    const price = precio ?? 0;
+    const isSelected = selected === id;
+    const isDark = theme === "dark";
 
-  const targetCoord =
-    coordinate ||
-    (trip.puntosClave?.origen
-      ? { latitude: trip.puntosClave.origen.lat, longitude: trip.puntosClave.origen.lng }
-      : trip.origen_lat != null && trip.origen_lng != null
-      ? { latitude: trip.origen_lat, longitude: trip.origen_lng }
-      : null);
+    const targetCoord = coordinate || getTripOriginCoords(trip);
 
-  if (!targetCoord) return null;
+    if (!targetCoord) return null;
 
-  return (
-    <Marker
-      coordinate={targetCoord}
-      onPress={() => onPress?.(trip)}
-      tracksViewChanges={tracksViewChanges || isSelected}
-      anchor={{ x: 0.5, y: 0.95 }}
-      zIndex={isSelected ? 999 : 10}
-    >
-      <Animated.View
-        style={[
-          styles.container,
-          { transform: [{ scale: isSelected ? 1.08 : scaleAnim }] },
-        ]}
+    return (
+      <Marker
+        coordinate={targetCoord}
+        onPress={() => onPress?.(trip, siblingTrips)}
+        tracksViewChanges={tracksViewChanges || isSelected}
+        anchor={{ x: 0.5, y: 1.0 }}
+        zIndex={isSelected ? 999 : siblingCount > 1 ? 25 : 10}
       >
-        {/* Pill Principal */}
-        <View
+        <Animated.View
           style={[
-            styles.pill,
-            isDark && styles.pillDark,
-            isSelected && styles.pillSelected,
+            styles.container,
+            { transform: [{ scale: isSelected ? 1.08 : scaleAnim }] },
           ]}
         >
-          {/* Avatar del conductor */}
-          <View style={styles.avatarWrapper}>
-            {driverAvatar ? (
-              <Image source={{ uri: driverAvatar }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatar, styles.avatarFallback]}>
-                <User size={13} color={COLORS.white} strokeWidth={2.5} />
+          {/* Efecto de tarjetas apiladas cuando hay múltiples conductores en el mismo origen */}
+          {siblingCount > 1 && (
+            <View
+              style={[
+                styles.stackUnderlay,
+                isDark && styles.stackUnderlayDark,
+              ]}
+            />
+          )}
+
+          {/* Pill Principal */}
+          <View
+            style={[
+              styles.pill,
+              isDark && styles.pillDark,
+              isSelected && styles.pillSelected,
+            ]}
+          >
+            {/* Avatar del conductor */}
+            <View style={styles.avatarWrapper}>
+              {driverAvatar ? (
+                <Image source={{ uri: driverAvatar }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatar, styles.avatarFallback]}>
+                  <User size={13} color={COLORS.white} strokeWidth={2.5} />
+                </View>
+              )}
+            </View>
+
+            {/* Precio destacado */}
+            <View style={styles.priceCol}>
+              <Text style={[styles.priceText, isDark && styles.textWhite]}>
+                {price}€
+              </Text>
+            </View>
+
+            {/* Badge de Plazas */}
+            {seats > 0 && (
+              <View
+                style={[
+                  styles.seatsBadge,
+                  isSelected && styles.seatsBadgeSelected,
+                ]}
+              >
+                <Users size={10} color={COLORS.white} strokeWidth={2.5} />
+                <Text style={styles.seatsText}>{seats}</Text>
+              </View>
+            )}
+
+            {/* Badge de Grupo (+N conductores en el mismo origen) */}
+            {siblingCount > 1 && (
+              <View
+                style={[
+                  styles.clusterBadge,
+                  isSelected && styles.clusterBadgeSelected,
+                ]}
+              >
+                <Text style={styles.clusterBadgeText}>+{siblingCount - 1}</Text>
               </View>
             )}
           </View>
 
-          {/* Precio destacado */}
-          <View style={styles.priceCol}>
-            <Text style={[styles.priceText, isDark && styles.textWhite]}>
-              {price}€
-            </Text>
-          </View>
-
-          {/* Badge de Plazas */}
-          {seats > 0 && (
-            <View style={[styles.seatsBadge, isSelected && styles.seatsBadgeSelected]}>
-              <Users size={10} color={COLORS.white} strokeWidth={2.5} />
-              <Text style={styles.seatsText}>{seats}</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Flecha inferior del Pin */}
-        <View
-          style={[
-            styles.pinArrow,
-            isDark && styles.pinArrowDark,
-            isSelected && styles.pinArrowSelected,
-          ]}
-        />
-      </Animated.View>
-    </Marker>
-  );
-});
+          {/* Flecha inferior del Pin */}
+          <View
+            style={[
+              styles.pinArrow,
+              isDark && styles.pinArrowDark,
+              isSelected && styles.pinArrowSelected,
+            ]}
+          />
+        </Animated.View>
+      </Marker>
+    );
+  },
+);
 
 DriverMarker.displayName = "DriverMarker";
 
@@ -217,6 +257,41 @@ const styles = StyleSheet.create({
   },
   pinArrowSelected: {
     borderTopColor: COLORS.primary,
+  },
+  stackUnderlay: {
+    position: "absolute",
+    top: -3,
+    left: 4,
+    right: -4,
+    height: 34,
+    backgroundColor: "#E2E8F0",
+    borderRadius: RADIUS.full,
+    zIndex: -1,
+    opacity: 0.85,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+  },
+  stackUnderlayDark: {
+    backgroundColor: "#334155",
+    borderColor: "#475569",
+  },
+  clusterBadge: {
+    backgroundColor: COLORS.secondary,
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: RADIUS.full,
+    marginLeft: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  clusterBadgeSelected: {
+    backgroundColor: COLORS.primary,
+  },
+  clusterBadgeText: {
+    fontSize: 9.5,
+    fontWeight: "700",
+    color: COLORS.white,
+    fontFamily: FONTS.bold,
   },
 });
 

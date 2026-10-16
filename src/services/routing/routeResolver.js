@@ -1,7 +1,7 @@
 // YouConnext - Route Resolver Service
 // Resuelve la trayectoria real por carretera de los trayectos (API backend o Google Directions) con caché en memoria
 
-import { decodePolyline, getTripOriginCoords, getTripDestinationCoords, areRouteCoordinatesValid } from "../../utils/mapGeoUtils";
+import { decodePolyline, getTripOriginCoords, getTripDestinationCoords, areRouteCoordinatesValid, parseGeometryCoordinates } from "../../utils/mapGeoUtils";
 import { trayectoService } from "../travels/trayectoService";
 import { getDirectionsRoute } from "../googlePlaces";
 
@@ -56,11 +56,9 @@ export async function resolveTripRoute(trip) {
   const destination = getTripDestinationCoords(trip);
 
   // 2. Comprobar si el objeto ya contiene la geometría directa
-  // Prioridad 1: geometry.coordinates (GeoJSON LineString nativo, sin compresión con pérdida)
+  // Prioridad 1: geometry.coordinates (GeoJSON LineString nativo con autodetección de orden)
   if (trip.geometry?.coordinates && Array.isArray(trip.geometry.coordinates) && trip.geometry.coordinates.length >= 2) {
-    const coords = trip.geometry.coordinates
-      .map(([lng, lat]) => ({ latitude: Number(lat), longitude: Number(lng) }))
-      .filter((pt) => !isNaN(pt.latitude) && !isNaN(pt.longitude));
+    const coords = parseGeometryCoordinates(trip.geometry.coordinates);
     if (coords.length >= 2 && areRouteCoordinatesValid(coords, origin)) {
       if (tripId) routeCache.set(tripId, coords);
       return coords;
@@ -116,9 +114,7 @@ export async function resolveTripRoute(trip) {
           }
 
           if (data?.geometry?.coordinates && Array.isArray(data.geometry.coordinates) && data.geometry.coordinates.length >= 2) {
-            const coords = data.geometry.coordinates
-              .map(([lng, lat]) => ({ latitude: Number(lat), longitude: Number(lng) }))
-              .filter((pt) => !isNaN(pt.latitude) && !isNaN(pt.longitude));
+            const coords = parseGeometryCoordinates(data.geometry.coordinates);
             if (coords.length >= 2) {
               routeCache.set(tripId, coords);
               return coords;

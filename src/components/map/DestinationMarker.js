@@ -44,7 +44,7 @@ const DestinationMarker = React.memo(({ trip, coordinate, onPress, selected, the
       coordinate={destCoords}
       onPress={() => onPress?.(trip)}
       tracksViewChanges={tracksViewChanges || isSelected}
-      anchor={{ x: 0.5, y: 0.95 }}
+      anchor={{ x: 0.5, y: 1.0 }}
       zIndex={isSelected ? 998 : 12}
     >
       <Animated.View

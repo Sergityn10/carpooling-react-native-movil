@@ -10,6 +10,7 @@ import {
   Dimensions,
   Keyboard,
   ScrollView,
+  Platform,
 } from "react-native";
 import {
   MapPin,
@@ -47,10 +48,16 @@ const PlaceAutocompleteInput = ({
   showCurrentLocation = false,
   onUseCurrentLocation = null,
   onFocus = null,
+  onBlur = null,
+  containerStyle = null,
+  inputStyle = null,
+  zIndex = undefined,
+  iconColor = COLORS.gray400,
 }) => {
   const [predictions, setPredictions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [dropUp, setDropUp] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -138,12 +145,34 @@ const PlaceAutocompleteInput = ({
   };
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        {
+          zIndex: open ? 9999 : zIndex != null ? zIndex : 1,
+          elevation:
+            Platform.OS === "android"
+              ? open
+                ? 9999
+                : zIndex != null
+                ? zIndex
+                : 1
+              : undefined,
+        },
+        containerStyle,
+      ]}
+    >
       {!!label && <Text style={styles.label}>{label}</Text>}
 
-      <View style={styles.inputRow}>
+      <View
+        style={[
+          styles.inputRow,
+          (isFocused || open) && styles.inputRowFocused,
+          disabled && styles.inputRowDisabled,
+        ]}
+      >
         <View style={styles.inputIconWrapper}>
-          <MapPin size={18} color={COLORS.gray400} strokeWidth={2.5} />
+          <MapPin size={18} color={iconColor} strokeWidth={2.5} />
         </View>
         <TextInput
           ref={inputRef}
@@ -154,11 +183,16 @@ const PlaceAutocompleteInput = ({
           }}
           placeholder={placeholder}
           placeholderTextColor={COLORS.gray400}
-          style={[styles.input, disabled && styles.inputDisabled]}
+          style={[styles.input, disabled && styles.inputDisabled, inputStyle]}
           editable={!disabled}
           onFocus={() => {
+            setIsFocused(true);
             setOpen(true);
             onFocus?.();
+          }}
+          onBlur={() => {
+            setIsFocused(false);
+            onBlur?.();
           }}
         />
         {loading && (
@@ -173,6 +207,7 @@ const PlaceAutocompleteInput = ({
               onChangeText?.("");
               onSelectPlace?.(null);
               setPredictions([]);
+              setOpen(false);
             }}
             activeOpacity={0.7}
           >
@@ -334,12 +369,11 @@ const PlaceAutocompleteInput = ({
 const styles = StyleSheet.create({
   container: {
     marginBottom: SPACING.md,
-    zIndex: 9999,
-    elevation: 9999,
+    position: "relative",
   },
   label: {
     fontSize: FONTS.sm,
-    color: COLORS.gray600,
+    color: COLORS.gray700,
     marginBottom: SPACING.xs,
     fontWeight: "600",
   },
@@ -350,24 +384,31 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderWidth: 1.5,
     borderColor: COLORS.gray200,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     paddingHorizontal: SPACING.md,
     ...SHADOWS.small,
-    shadowOpacity: 0,
-    elevation: 0,
+  },
+  inputRowFocused: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.white,
+    ...SHADOWS.md,
+  },
+  inputRowDisabled: {
+    backgroundColor: COLORS.gray100,
+    borderColor: COLORS.gray200,
   },
   inputIconWrapper: {
     marginRight: SPACING.xs,
   },
   input: {
     flex: 1,
-    paddingVertical: SPACING.md,
+    paddingVertical: Platform.select({ ios: SPACING.md, android: SPACING.sm + 4 }),
     fontSize: FONTS.md,
-    color: COLORS.gray700,
+    color: COLORS.gray800,
+    fontWeight: "500",
   },
   inputDisabled: {
-    backgroundColor: COLORS.gray100,
-    color: COLORS.gray500,
+    color: COLORS.gray400,
   },
   loadingIcon: {
     justifyContent: "center",
@@ -382,18 +423,18 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: COLORS.white,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: COLORS.gray200,
-    borderRadius: RADIUS.md,
-    maxHeight: 320,
+    borderRadius: RADIUS.lg,
+    maxHeight: 280,
     overflow: "hidden",
-    zIndex: 10000,
-    elevation: 10000,
-    ...SHADOWS.medium,
+    zIndex: 10001,
+    elevation: 10001,
+    ...SHADOWS.large,
   },
   dropdownDown: {
     top: "100%",
-    marginTop: SPACING.xs,
+    marginTop: 6,
   },
   dropdownUp: {
     bottom: "100%",

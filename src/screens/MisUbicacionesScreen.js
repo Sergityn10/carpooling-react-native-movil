@@ -14,7 +14,7 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import MapView from "react-native-maps";
+import MapView, { PROVIDER_GOOGLE } from "react-native-maps";
 import {
   ChevronLeft,
   MapPin,
@@ -595,6 +595,7 @@ const MisUbicacionesScreen = ({ navigation }) => {
           <View style={styles.pickerFullScreen}>
             <MapView
               ref={mapRef}
+              provider={PROVIDER_GOOGLE}
               style={StyleSheet.absoluteFillObject}
               initialRegion={mapRegion || DEFAULT_REGION}
               onRegionChangeComplete={handleMapRegionChangeComplete}

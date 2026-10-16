@@ -3,7 +3,7 @@
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { View, StyleSheet, Text, Platform } from "react-native";
-import MapView, { Marker } from "react-native-maps";
+import MapView, { Marker, Geojson, PROVIDER_GOOGLE } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import { Compass } from "lucide-react-native";
@@ -17,11 +17,12 @@ import {
   extractTripRouteCoordinates,
   extractTripWaypoints,
   disperseOverlappingCoordinates,
+  groupTripsByProximity,
   calculateBoundsFromCoordinates,
   pointInBoundingBox,
 } from "../../utils/mapGeoUtils";
 import { resolveTripRoute, getCachedRoute } from "../../services/routing/routeResolver";
-import { useMapViewport } from "../../hooks/useMapViewport";
+import { useMapViewport, useMapRoutesCache } from "../../hooks";
 import DriverMarker from "./DriverMarker";
 import DestinationMarker from "./DestinationMarker";
 import WaypointMarker from "./WaypointMarker";
@@ -55,6 +56,7 @@ const MapaExploracionView = ({
 
   const [selectedTripId, setSelectedTripId] = useState(null);
   const [selectedTripRoute, setSelectedTripRoute] = useState(null); // Array de { latitude, longitude } resuelto
+  const [selectedTripSiblings, setSelectedTripSiblings] = useState([]); // Array de viajes en el mismo punto de origen
   const [activeFilters, setActiveFilters] = useState({});
   const [selectedDate, setSelectedDate] = useState(null); // 'YYYY-MM-DD' o null
   const [datePickerVisible, setDatePickerVisible] = useState(false);
@@ -86,6 +88,9 @@ const MapaExploracionView = ({
     handleRegionChangeComplete,
     refresh,
   } = useMapViewport(initialRegion, combinedFilters);
+
+  // Layer 2: Caché en memoria de geometrías de polilíneas
+  const { getRoutesFeatureCollection, getRouteForTrip } = useMapRoutesCache();
 
   const selectedTripData = selectedTrip;
 
@@ -322,6 +327,7 @@ const MapaExploracionView = ({
     if (selectedTripId) {
       setSelectedTripId(null);
       setSelectedTripRoute(null);
+      setSelectedTripSiblings([]);
       clearSelection();
       setShowPreview(false);
     }
@@ -331,26 +337,38 @@ const MapaExploracionView = ({
     setShowPreview(false);
     setSelectedTripId(null);
     setSelectedTripRoute(null);
+    setSelectedTripSiblings([]);
     clearSelection();
   }, [clearSelection]);
 
   const handleTripPress = useCallback(
-    (trip) => {
+    (trip, siblingTrips = null) => {
+      if (!trip) return;
       if (selectedTripId === trip.id) {
         setSelectedTripId(null);
         setSelectedTripRoute(null);
+        setSelectedTripSiblings([]);
         clearSelection();
         setShowPreview(false);
       } else {
         setSelectedTripId(trip.id);
+        if (siblingTrips && Array.isArray(siblingTrips) && siblingTrips.length > 0) {
+          setSelectedTripSiblings(siblingTrips);
+        } else {
+          setSelectedTripSiblings([trip]);
+        }
         selectTrip(trip);
         setShowPreview(true);
 
-        // Comprobar si ya está resuelta en caché
+        // Layer 2: Comprobar primero en caché en memoria o persistente antes de pedir ruta remota
+        const memoryRoute = getRouteForTrip(trip);
         const cached = getCachedRoute(trip.id);
         if (cached && cached.length >= 2) {
           setSelectedTripRoute(cached);
           fitTripToScreen(trip, cached);
+        } else if (memoryRoute && memoryRoute.length >= 2) {
+          setSelectedTripRoute(memoryRoute);
+          fitTripToScreen(trip, memoryRoute);
         } else {
           // Resolver la trayectoria real por carretera en segundo plano
           // Solo hacer fit una vez cuando la ruta esté lista
@@ -371,7 +389,7 @@ const MapaExploracionView = ({
         }
       }
     },
-    [selectedTripId, selectTrip, clearSelection, fitTripToScreen]
+    [selectedTripId, selectTrip, clearSelection, fitTripToScreen, getRouteForTrip]
   );
 
   // 8. Filtros
@@ -428,14 +446,43 @@ const MapaExploracionView = ({
     return extractTripWaypoints(selectedTripData);
   }, [selectedTripData]);
 
+  // Agrupación micro-local de viajes que comparten origen o destino (< 35 metros)
+  const originGroups = useMemo(() => {
+    return groupTripsByProximity(singleTrips, "origin", 0.035);
+  }, [singleTrips]);
+
+  const destinationGroups = useMemo(() => {
+    return groupTripsByProximity(singleTrips, "destination", 0.035);
+  }, [singleTrips]);
+
   // Des-superposición de marcadores: calcula offset radial adaptable al zoom para orígenes/destinos solapados
   const dispersedOrigins = useMemo(() => {
-    return disperseOverlappingCoordinates(singleTrips, "origin", 0.08, zoomLevel);
+    return disperseOverlappingCoordinates(singleTrips, "origin", 0.035, zoomLevel);
   }, [singleTrips, zoomLevel]);
 
   const dispersedDestinations = useMemo(() => {
-    return disperseOverlappingCoordinates(singleTrips, "destination", 0.08, zoomLevel);
+    return disperseOverlappingCoordinates(singleTrips, "destination", 0.035, zoomLevel);
   }, [singleTrips, zoomLevel]);
+
+  // Layer 4: FeatureCollection GeoJSON agrupada para renderizado vectorial en una sola llamada GPU (60 FPS)
+  const routesGeoJson = useMemo(() => {
+    return getRoutesFeatureCollection(singleTrips, selectedTripId, {
+      isDark: mapTheme === "dark",
+      isDimmed: !!selectedTripId,
+    });
+  }, [singleTrips, selectedTripId, mapTheme, getRoutesFeatureCollection]);
+
+  const handleGeojsonPress = useCallback(
+    (event) => {
+      const tripId = event?.feature?.id || event?.feature?.properties?.id;
+      if (!tripId) return;
+      const clickedTrip = singleTrips.find((t) => String(t.id) === String(tripId));
+      if (clickedTrip) {
+        handleTripPress(clickedTrip);
+      }
+    },
+    [singleTrips, handleTripPress]
+  );
 
   const currentMapStyle = mapTheme === "dark" ? MAP_STYLE_DARK : MAP_STYLE_YOUCONNEXT;
 
@@ -444,6 +491,7 @@ const MapaExploracionView = ({
       {/* Mapa Base a pantalla completa */}
       <MapView
         ref={mapRef}
+        provider={PROVIDER_GOOGLE}
         style={styles.map}
         initialRegion={initialRegion}
         onRegionChange={(r) => {
@@ -469,33 +517,44 @@ const MapaExploracionView = ({
         maxZoomLevel={19}
         minZoomLevel={3}
       >
-        {/* Capa de Polilíneas de Trayectos (Rutas completas con Halo y Carreteras) */}
-        {singleTrips.map((trip, index) => {
-          // Calcular índice de color basado en hash del origen+destino para consistencia
-          const origin = trip.puntosClave?.origen ?? { lat: trip.origen_lat, lng: trip.origen_lng };
-          const dest = trip.puntosClave?.destino ?? { lat: trip.destino_lat, lng: trip.destino_lng };
-          const routeKey = `${Math.round((origin.lat || 0) * 100)},${Math.round((origin.lng || 0) * 100)}-${Math.round((dest.lat || 0) * 100)},${Math.round((dest.lng || 0) * 100)}`;
-          const colorIndex = routeKey.split("").reduce((a, c) => a + c.charCodeAt(0), 0) % 6;
+        {/* Layer 4: Renderizado Agrupado por Capas (LineLayer GeoJSON en un único draw-call a 60 FPS) */}
+        {routesGeoJson.features.length > 0 && (
+          <Geojson
+            key={`geojson-routes-${mapTheme}-${selectedTripId ? "dimmed" : "normal"}`}
+            geojson={routesGeoJson}
+            strokeColor={
+              selectedTripId
+                ? mapTheme === "dark"
+                  ? "rgba(71, 85, 105, 0.45)"
+                  : "rgba(148, 163, 184, 0.45)"
+                : mapTheme === "dark"
+                  ? "#6366F1"
+                  : "#0EA5E9"
+            }
+            strokeWidth={selectedTripId ? 2 : 3.2}
+            lineCap="round"
+            lineJoin="round"
+            zIndex={4}
+            tappable={true}
+            onPress={handleGeojsonPress}
+          />
+        )}
 
-          // offsetIndex: 0 para el primer viaje de un corredor, 1, 2, etc. para los siguientes
-          // Para simplificar, usamos el índice del array filtrado por corredor similar
-          const offsetIndex = index % 3; // Máximo 3 paralelos
-
-          return (
-            <TripPolylineLayer
-              key={`polyline-${trip.id}`}
-              trip={trip}
-              customCoordinates={selectedTripId === trip.id ? selectedTripRoute : undefined}
-              selected={selectedTripId === trip.id}
-              hasActiveSelection={!!selectedTripId}
-              zoom={zoomLevel}
-              theme={mapTheme}
-              onPress={() => handleTripPress(trip)}
-              colorIndex={colorIndex}
-              offsetIndex={selectedTripId === trip.id ? 0 : offsetIndex}
-            />
-          );
-        })}
+        {/* Trayecto seleccionado: Renderizado individual con doble halo resplandeciente */}
+        {selectedTripData && (
+          <TripPolylineLayer
+            key={`polyline-selected-${selectedTripData.id}`}
+            trip={selectedTripData}
+            customCoordinates={selectedTripRoute || undefined}
+            selected={true}
+            hasActiveSelection={true}
+            zoom={zoomLevel}
+            theme={mapTheme}
+            onPress={() => handleTripPress(selectedTripData)}
+            colorIndex={0}
+            offsetIndex={0}
+          />
+        )}
 
         {/* Clústeres en zooms lejanos */}
         {clusters.map((cluster) => (
@@ -518,7 +577,7 @@ const MapaExploracionView = ({
           />
         ))}
 
-        {/* Marcadores de Destino (Llegada) - Siempre diferenciados y des-superpuestos */}
+        {/* Marcadores de Destino (Llegada) - Siempre diferenciados y con coordenadas exactas */}
         {singleTrips.map((trip) => {
           // Mostrar destino si el viaje está seleccionado o en zoom adecuado
           const shouldShowDestination =
@@ -529,7 +588,11 @@ const MapaExploracionView = ({
             <DestinationMarker
               key={`dest-${trip.id}`}
               trip={trip}
-              coordinate={dispersedDestinations.get(String(trip.id))}
+              coordinate={
+                selectedTripId === trip.id
+                  ? getTripDestinationCoords(trip)
+                  : dispersedDestinations.get(String(trip.id)) || getTripDestinationCoords(trip)
+              }
               onPress={handleTripPress}
               selected={selectedTripId}
               theme={mapTheme}
@@ -546,18 +609,27 @@ const MapaExploracionView = ({
           />
         ))}
 
-        {/* Marcadores de Origen / Conductor - Des-superpuestos radialmente */}
-        {singleTrips.map((trip) => (
-          <DriverMarker
-            key={`driver-${trip.id}`}
-            trip={trip}
-            coordinate={dispersedOrigins.get(String(trip.id))}
-            onPress={handleTripPress}
-            selected={selectedTripId}
-            zoom={zoomLevel}
-            theme={mapTheme}
-          />
-        ))}
+        {/* Marcadores de Origen / Conductor - Con coordenadas exactas, ancla calibrada y micro-agrupación */}
+        {singleTrips.map((trip) => {
+          const siblings = originGroups.get(String(trip.id)) || [trip];
+          return (
+            <DriverMarker
+              key={`driver-${trip.id}`}
+              trip={trip}
+              coordinate={
+                selectedTripId === trip.id
+                  ? getTripOriginCoords(trip)
+                  : dispersedOrigins.get(String(trip.id)) || getTripOriginCoords(trip)
+              }
+              onPress={(t, s) => handleTripPress(t, s || siblings)}
+              selected={selectedTripId}
+              zoom={zoomLevel}
+              theme={mapTheme}
+              siblingCount={siblings.length}
+              siblingTrips={siblings}
+            />
+          );
+        })}
       </MapView>
 
       {/* Barra Flotante de Filtros con Selector de Días */}
@@ -602,6 +674,8 @@ const MapaExploracionView = ({
       {/* Tarjeta Flotante de Detalle (Floating Island) */}
       <TripPreviewSheet
         trip={selectedTripData}
+        siblingTrips={selectedTripSiblings}
+        onSelectSibling={(sibling) => handleTripPress(sibling, selectedTripSiblings)}
         visible={showPreview && !!selectedTripData}
         onClose={handleClosePreview}
         onViewDetail={() => onTripSelect?.(selectedTripData)}

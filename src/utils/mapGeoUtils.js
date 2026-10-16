@@ -191,25 +191,80 @@ export function coordinatesToLatLngArray(coordinates) {
 }
 
 /**
- * Obtiene las coordenadas del punto de origen de un trayecto
+ * Obtiene las coordenadas del punto de origen de un trayecto de forma robusta
  */
 export function getTripOriginCoords(trip) {
   if (!trip) return null;
-  const lat = trip.puntosClave?.origen?.lat ?? trip.origen_lat ?? trip.origen?.lat;
-  const lng = trip.puntosClave?.origen?.lng ?? trip.origen_lng ?? trip.origen?.lng;
+  const lat =
+    trip.puntosClave?.origen?.lat ??
+    trip.origen_lat ??
+    trip.origen?.lat ??
+    trip.origenLat ??
+    trip.origin_lat ??
+    trip.originLat ??
+    (typeof trip.origen === "object" ? trip.origen?.latitude : null);
+  const lng =
+    trip.puntosClave?.origen?.lng ??
+    trip.origen_lng ??
+    trip.origen?.lng ??
+    trip.origenLng ??
+    trip.origin_lng ??
+    trip.originLng ??
+    (typeof trip.origen === "object" ? trip.origen?.longitude : null);
   if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) return null;
   return { latitude: Number(lat), longitude: Number(lng) };
 }
 
 /**
- * Obtiene las coordenadas del punto de destino de un trayecto
+ * Obtiene las coordenadas del punto de destino de un trayecto de forma robusta
  */
 export function getTripDestinationCoords(trip) {
   if (!trip) return null;
-  const lat = trip.puntosClave?.destino?.lat ?? trip.destino_lat ?? trip.destino?.lat;
-  const lng = trip.puntosClave?.destino?.lng ?? trip.destino_lng ?? trip.destino?.lng;
+  const lat =
+    trip.puntosClave?.destino?.lat ??
+    trip.destino_lat ??
+    trip.destino?.lat ??
+    trip.destinoLat ??
+    trip.destination_lat ??
+    trip.destinationLat ??
+    (typeof trip.destino === "object" ? trip.destino?.latitude : null);
+  const lng =
+    trip.puntosClave?.destino?.lng ??
+    trip.destino_lng ??
+    trip.destino?.lng ??
+    trip.destinoLng ??
+    trip.destination_lng ??
+    trip.destinationLng ??
+    (typeof trip.destino === "object" ? trip.destino?.longitude : null);
   if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) return null;
   return { latitude: Number(lat), longitude: Number(lng) };
+}
+
+/**
+ * Parsea coordenadas de GeoJSON geometry ([lng, lat] o [lat, lng]) a [{ latitude, longitude }]
+ * detectando automáticamente el orden para evitar inversiones de latitud y longitud.
+ */
+export function parseGeometryCoordinates(rawCoordinates) {
+  if (!Array.isArray(rawCoordinates) || rawCoordinates.length < 2) return [];
+
+  return rawCoordinates
+    .map((pt) => {
+      if (!Array.isArray(pt) || pt.length < 2) return null;
+      const a = Number(pt[0]);
+      const b = Number(pt[1]);
+      if (isNaN(a) || isNaN(b)) return null;
+
+      // Detección automática en España / Europa:
+      // Latitud: ~25° a ~65° N
+      // Longitud: ~-25° a ~45° (en España -10° a +5°)
+      if (Math.abs(a) >= 25 && Math.abs(a) <= 65 && Math.abs(b) < 25) {
+        // Viene como [lat, lng]
+        return { latitude: a, longitude: b };
+      }
+      // Estándar GeoJSON [lng, lat]
+      return { latitude: b, longitude: a };
+    })
+    .filter((pt) => pt && !isNaN(pt.latitude) && !isNaN(pt.longitude));
 }
 
 /**
@@ -223,10 +278,11 @@ export function areRouteCoordinatesValid(coords, origin = null) {
   const isNearZero = coords.every((p) => Math.abs(p.latitude) < 0.5 && Math.abs(p.longitude) < 0.5);
   if (isNearZero) return false;
 
-  // Si se dispone de origen, el punto inicial no debe distar más de 80km
+  // Si se dispone de origen, al menos un extremo debe estar a menos de 80km
   if (origin && typeof origin.latitude === "number" && typeof origin.longitude === "number") {
-    const dist = calculateDistance(origin.latitude, origin.longitude, coords[0].latitude, coords[0].longitude);
-    if (dist > 80) return false;
+    const distStart = calculateDistance(origin.latitude, origin.longitude, coords[0].latitude, coords[0].longitude);
+    const distEnd = calculateDistance(origin.latitude, origin.longitude, coords[coords.length - 1].latitude, coords[coords.length - 1].longitude);
+    if (distStart > 80 && distEnd > 80) return false;
   }
 
   return true;
@@ -247,19 +303,18 @@ export function extractTripRouteCoordinates(trip) {
     }
   }
 
-  // 1. Prioridad: geometry (GeoJSON LineString [lng, lat]) - Precisión nativa sin errores de codificación
+  // 1. Prioridad: geometry (GeoJSON LineString con autodetección [lng, lat] vs [lat, lng])
   if (trip.geometry?.coordinates && Array.isArray(trip.geometry.coordinates) && trip.geometry.coordinates.length >= 2) {
-    const coords = trip.geometry.coordinates
-      .map(([lng, lat]) => ({ latitude: Number(lat), longitude: Number(lng) }))
-      .filter((pt) => !isNaN(pt.latitude) && !isNaN(pt.longitude));
+    const coords = parseGeometryCoordinates(trip.geometry.coordinates);
     if (coords.length >= 2 && areRouteCoordinatesValid(coords, origin)) {
       return coords;
     }
   }
 
   // 2. Prioridad: encodedPolyline (Google Encoded Polyline v2.0) - Solo si decodifica a puntos válidos
-  if (trip.encodedPolyline && typeof trip.encodedPolyline === "string") {
-    const decoded = decodePolyline(trip.encodedPolyline);
+  const poly = trip.encodedPolyline || trip.encoded_polyline || trip.polyline;
+  if (poly && typeof poly === "string") {
+    const decoded = decodePolyline(poly);
     if (decoded.length >= 2 && areRouteCoordinatesValid(decoded, origin)) {
       return decoded;
     }
@@ -367,40 +422,88 @@ export function expandBounds(bbox, factor = 0.1) {
 }
 
 /**
- * Desplaza sutilmente marcadores cuyas coordenadas sean idénticas o estén a menos de thresholdKm
- * Distribuye los marcadores en un arco radial para que no se tapen entre sí
+ * Agrupa viajes cuyas coordenadas estén a menos de thresholdKm (por defecto 35m).
+ * Permite identificar viajes que comparten origen o destino para poder seleccionarlos
+ * cómodamente mediante switcher/carrusel sin que se tapen los marcadores.
  * @param {Array<Object>} trips - Array de viajes
- * @param {'origin' | 'destination'} pointType - Si se dispersan orígenes o destinos
- * @param {number} thresholdKm - Distancia mínima para considerar que se solapan (default 0.07 km = 70m)
- * @param {number} [zoom] - Nivel de zoom actual (1-20) para ajustar radio de dispersión dinámicamente
- * @returns {Map<string, { latitude: number, longitude: number }>} Map de tripId -> coordenadas ajustadas
+ * @param {'origin' | 'destination'} pointType - Si se agrupan por origen o por destino
+ * @param {number} thresholdKm - Distancia mínima para considerar mismo grupo (default 0.035 km = 35m)
+ * @returns {Map<string, Array<Object>>} Map de tripId -> array de viajes que comparten este punto
  */
-export function disperseOverlappingCoordinates(trips, pointType = "origin", thresholdKm = 0.07, zoom = 13) {
-  const coordMap = new Map();
-  if (!Array.isArray(trips) || trips.length === 0) return coordMap;
+export function groupTripsByProximity(trips, pointType = "origin", thresholdKm = 0.035) {
+  const groupMap = new Map();
+  if (!Array.isArray(trips) || trips.length === 0) return groupMap;
 
-  // Calcular radio de dispersión dinámico según zoom
-  // Zoom bajo (alejado) = radio menor, Zoom alto (cerca) = radio mayor
-  // A ~200-250m en zoom 13-14, ~400m en zoom 15+
-  let radiusDeg;
-  if (zoom >= 16) radiusDeg = 0.0036;    // ~400m
-  else if (zoom >= 14) radiusDeg = 0.0022; // ~250m
-  else if (zoom >= 12) radiusDeg = 0.0018; // ~200m
-  else radiusDeg = 0.001;                  // ~110m
-
-  // Extraer puntos válidos
   const points = [];
   trips.forEach((trip) => {
     const coords =
       pointType === "origin"
         ? getTripOriginCoords(trip)
         : getTripDestinationCoords(trip);
-    if (coords && trip.id) {
+    if (coords && trip.id != null) {
+      points.push({ tripId: String(trip.id), coords, trip });
+    }
+  });
+
+  const visited = new Set();
+  for (let i = 0; i < points.length; i++) {
+    if (visited.has(points[i].tripId)) continue;
+
+    const cluster = [points[i].trip];
+    const clusterIds = [points[i].tripId];
+    visited.add(points[i].tripId);
+
+    for (let j = i + 1; j < points.length; j++) {
+      if (visited.has(points[j].tripId)) continue;
+
+      const dist = calculateDistance(
+        points[i].coords.latitude,
+        points[i].coords.longitude,
+        points[j].coords.latitude,
+        points[j].coords.longitude
+      );
+
+      if (dist <= thresholdKm) {
+        cluster.push(points[j].trip);
+        clusterIds.push(points[j].tripId);
+        visited.add(points[j].tripId);
+      }
+    }
+
+    clusterIds.forEach((id) => {
+      groupMap.set(id, cluster);
+    });
+  }
+
+  return groupMap;
+}
+
+/**
+ * Desplaza sutilmente marcadores cuyas coordenadas sean idénticas o estén a menos de thresholdKm
+ * Distribuye los marcadores en un sutil abanico adaptativo al zoom para que todos sigan siendo interactivos.
+ * @param {Array<Object>} trips - Array de viajes
+ * @param {'origin' | 'destination'} pointType - Si se procesan orígenes o destinos
+ * @param {number} thresholdKm - Distancia mínima para considerar que se solapan (default 0.035 km = 35m)
+ * @param {number} [zoom] - Nivel de zoom actual (1-20)
+ * @returns {Map<string, { latitude: number, longitude: number }>} Map de tripId -> coordenadas
+ */
+export function disperseOverlappingCoordinates(trips, pointType = "origin", thresholdKm = 0.035, zoom = 13) {
+  const coordMap = new Map();
+  if (!Array.isArray(trips) || trips.length === 0) return coordMap;
+
+  // Extraer puntos válidos con sus coordenadas reales
+  const points = [];
+  trips.forEach((trip) => {
+    const coords =
+      pointType === "origin"
+        ? getTripOriginCoords(trip)
+        : getTripDestinationCoords(trip);
+    if (coords && trip.id != null) {
       points.push({ tripId: String(trip.id), coords });
     }
   });
 
-  // Agrupar puntos cercanos
+  // Agrupar puntos que coincidan a menos de thresholdKm
   const clusters = [];
   const visited = new Set();
 
@@ -428,7 +531,14 @@ export function disperseOverlappingCoordinates(trips, pointType = "origin", thre
     clusters.push(group);
   }
 
-  // Dispersar puntos que pertenezcan a grupos de 2 o más
+  // Radio adaptativo por zoom para mantener las pastillas separadas unos 25-30 píxeles en pantalla
+  // sin descolocarlas geográficamente:
+  let radiusDeg;
+  if (zoom >= 16) radiusDeg = 0.00018;      // ~20m en zoom muy cercano (nivel de calle)
+  else if (zoom >= 14) radiusDeg = 0.00028; // ~30m en zoom de barrio
+  else if (zoom >= 12) radiusDeg = 0.00045; // ~50m en zoom urbano
+  else radiusDeg = 0.00070;                 // ~75m en zoom regional
+
   clusters.forEach((group) => {
     if (group.length === 1) {
       coordMap.set(group[0].tripId, group[0].coords);
@@ -436,9 +546,13 @@ export function disperseOverlappingCoordinates(trips, pointType = "origin", thre
     }
 
     const count = group.length;
-
     group.forEach((item, index) => {
-      // Ángulo distribuido equitativamente alrededor del centroide
+      // El primero siempre se sitúa en la coordenada 100% exacta
+      if (index === 0) {
+        coordMap.set(item.tripId, item.coords);
+        return;
+      }
+      // Distribución en abanico semicircular
       const angle = (2 * Math.PI * index) / count;
       const dLat = radiusDeg * Math.cos(angle);
       const cosLat = Math.cos((item.coords.latitude * Math.PI) / 180) || 1;
@@ -463,11 +577,6 @@ export function disperseOverlappingCoordinates(trips, pointType = "origin", thre
 export function calculateParallelOffset(coordinates, offsetMeters) {
   if (!coordinates || coordinates.length < 2 || offsetMeters === 0) return coordinates;
 
-  // Convertir metros a grados (aproximado)
-  // 1 grado de latitud ≈ 111,320 metros
-  // 1 grado de longitud ≈ 111,320 * cos(lat) metros
-  const offsetDegLat = offsetMeters / 111320;
-
   const result = [];
   for (let i = 0; i < coordinates.length; i++) {
     const curr = coordinates[i];
@@ -486,12 +595,13 @@ export function calculateParallelOffset(coordinates, offsetMeters) {
       const perpBearing = bearing + 90;
       result.push(destinationPoint(curr, perpBearing, offsetMeters));
     } else {
-      // Punto intermedio: promedio de direcciones
+      // Punto intermedio: promedio angular correcto que maneja el cruce por el Norte (0°/360°)
       prev = coordinates[i - 1];
       next = coordinates[i + 1];
       const bearing1 = calculateBearing(prev, curr);
       const bearing2 = calculateBearing(curr, next);
-      const avgBearing = (bearing1 + bearing2) / 2;
+      const diff = ((bearing2 - bearing1 + 180) % 360) - 180;
+      const avgBearing = (bearing1 + diff / 2 + 360) % 360;
       const perpBearing = avgBearing + 90;
       result.push(destinationPoint(curr, perpBearing, offsetMeters));
     }

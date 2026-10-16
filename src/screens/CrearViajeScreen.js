@@ -30,8 +30,10 @@ import {
   Navigation as NavIcon,
   ArrowRight,
   ArrowLeft,
+  ArrowUpDown,
   CheckCircle,
   Gift,
+  Sparkles,
 } from "lucide-react-native";
 import { useUser } from "../context/UserContext";
 import { useViaje } from "../context/ViajeContext";
@@ -44,6 +46,21 @@ import { ubicacionTravelService } from "../services/travels/ubicacionService";
 import { homeCache } from "../services/homeCache";
 import { localToUtcApi, parseTripDate } from "../services/dateUtils";
 import { paymentService } from "../services/paymentService";
+
+const isSameDay = (d1, d2) => {
+  if (!d1 || !d2) return false;
+  return (
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate()
+  );
+};
+
+const getTomorrow = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d;
+};
 
 const PRICE_PER_KM = parseFloat(
   process.env.EXPO_PUBLIC_RECOMMENDED_PRICE_PER_KM || "0.06",
@@ -236,6 +253,17 @@ const CrearViajeScreen = ({ navigation, route }) => {
   const [destinoPlace, setDestinoPlace] = useState(evento ? eventoPlace : null);
   const [rutaInfo, setRutaInfo] = useState(null);
   const [calculandoRuta, setCalculandoRuta] = useState(false);
+  const [activeAutocompleteField, setActiveAutocompleteField] = useState(null); // 'origen' | 'destino' | null
+
+  const handleSwapOrigenDestino = () => {
+    if (evento) return;
+    const prevPlace = origenPlace;
+    const prevTexto = origenTexto;
+    setOrigenPlace(destinoPlace);
+    setOrigenTexto(destinoTexto);
+    setDestinoPlace(prevPlace);
+    setDestinoTexto(prevTexto);
+  };
 
   // Step 3: Vehiculo
   const [vehiculos, setVehiculos] = useState([]);
@@ -693,35 +721,53 @@ const CrearViajeScreen = ({ navigation, route }) => {
           ];
     return (
       <View style={styles.stepIndicator}>
-        {stepLabels.map((s, index) => (
-          <React.Fragment key={s.step}>
-            <View style={styles.stepItem}>
-              <View
-                style={[styles.stepDot, step >= s.step && styles.stepDotActive]}
-              >
-                {step > s.step && (
-                  <CheckCircle size={12} color={COLORS.white} strokeWidth={3} />
-                )}
+        {stepLabels.map((s, index) => {
+          const isCompleted = step > s.step;
+          const isCurrent = step === s.step;
+          return (
+            <React.Fragment key={s.step}>
+              <View style={styles.stepItem}>
+                <View
+                  style={[
+                    styles.stepDot,
+                    step >= s.step && styles.stepDotActive,
+                    isCurrent && styles.stepDotCurrent,
+                  ]}
+                >
+                  {isCompleted ? (
+                    <CheckCircle size={14} color={COLORS.white} strokeWidth={2.8} />
+                  ) : (
+                    <Text
+                      style={[
+                        styles.stepDotNumber,
+                        step >= s.step && styles.stepDotNumberActive,
+                      ]}
+                    >
+                      {index + 1}
+                    </Text>
+                  )}
+                </View>
+                <Text
+                  style={[
+                    styles.stepLabel,
+                    step >= s.step && styles.stepLabelActive,
+                    isCurrent && styles.stepLabelCurrent,
+                  ]}
+                >
+                  {s.label}
+                </Text>
               </View>
-              <Text
-                style={[
-                  styles.stepLabel,
-                  step >= s.step && styles.stepLabelActive,
-                ]}
-              >
-                {s.label}
-              </Text>
-            </View>
-            {index < stepLabels.length - 1 && (
-              <View
-                style={[
-                  styles.stepConnector,
-                  step > s.step && styles.stepConnectorActive,
-                ]}
-              />
-            )}
-          </React.Fragment>
-        ))}
+              {index < stepLabels.length - 1 && (
+                <View
+                  style={[
+                    styles.stepConnector,
+                    step > s.step && styles.stepConnectorActive,
+                  ]}
+                />
+              )}
+            </React.Fragment>
+          );
+        })}
       </View>
     );
   };
@@ -733,12 +779,54 @@ const CrearViajeScreen = ({ navigation, route }) => {
       contentContainerStyle={styles.stepContent}
     >
       <View style={styles.stepHeader}>
-        <Calendar size={32} color={COLORS.primary} strokeWidth={2} />
+        <View style={styles.stepHeaderIconCircle}>
+          <Calendar size={24} color={COLORS.primary} strokeWidth={2.5} />
+        </View>
         <Text style={styles.stepTitle}>¿Cuándo salimos?</Text>
         <Text style={styles.stepSubtitle}>
-          Selecciona la fecha y hora de salida
+          Selecciona la fecha y hora de salida de tu viaje
         </Text>
       </View>
+
+      {/* Accesos rápidos de fecha */}
+      {!evento && (
+        <View style={styles.dateShortcutsRow}>
+          <TouchableOpacity
+            style={[
+              styles.dateShortcutChip,
+              isSameDay(fecha, new Date()) && styles.dateShortcutChipActive,
+            ]}
+            onPress={() => setFecha(new Date())}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.dateShortcutText,
+                isSameDay(fecha, new Date()) && styles.dateShortcutTextActive,
+              ]}
+            >
+              Hoy
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.dateShortcutChip,
+              isSameDay(fecha, getTomorrow()) && styles.dateShortcutChipActive,
+            ]}
+            onPress={() => setFecha(getTomorrow())}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.dateShortcutText,
+                isSameDay(fecha, getTomorrow()) && styles.dateShortcutTextActive,
+              ]}
+            >
+              Mañana
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <TouchableOpacity
         style={styles.dateCard}
@@ -746,10 +834,10 @@ const CrearViajeScreen = ({ navigation, route }) => {
         activeOpacity={0.7}
       >
         <View style={styles.dateCardIcon}>
-          <Calendar size={24} color={COLORS.primary} strokeWidth={2} />
+          <Calendar size={22} color={COLORS.primary} strokeWidth={2.4} />
         </View>
         <View style={styles.dateCardContent}>
-          <Text style={styles.dateCardLabel}>Fecha</Text>
+          <Text style={styles.dateCardLabel}>Fecha del viaje</Text>
           <Text style={styles.dateCardValue}>{formatDate(fecha)}</Text>
         </View>
         <ChevronRight size={20} color={COLORS.gray400} strokeWidth={2} />
@@ -760,8 +848,8 @@ const CrearViajeScreen = ({ navigation, route }) => {
         onPress={() => setShowTimePicker(true)}
         activeOpacity={0.7}
       >
-        <View style={styles.dateCardIcon}>
-          <Clock size={24} color={COLORS.primary} strokeWidth={2} />
+        <View style={[styles.dateCardIcon, { backgroundColor: "rgba(14, 165, 233, 0.12)" }]}>
+          <Clock size={22} color={COLORS.secondary} strokeWidth={2.4} />
         </View>
         <View style={styles.dateCardContent}>
           <Text style={styles.dateCardLabel}>Hora de salida</Text>
@@ -806,14 +894,16 @@ const CrearViajeScreen = ({ navigation, route }) => {
       keyboardShouldPersistTaps="handled"
     >
       <View style={styles.stepHeader}>
-        <MapPin size={32} color={COLORS.primary} strokeWidth={2} />
+        <View style={styles.stepHeaderIconCircle}>
+          <MapPin size={24} color={COLORS.primary} strokeWidth={2.5} />
+        </View>
         <Text style={styles.stepTitle}>Origen y destino</Text>
         <Text style={styles.stepSubtitle}>
           {evento
             ? direccionEvento === "ida"
               ? "Selecciona desde dónde saldrás hacia el evento"
               : "Selecciona a dónde volverás desde el evento"
-            : "Selecciona desde dónde y hacia dónde vas"}
+            : "Selecciona el punto de recogida y de llegada"}
         </Text>
       </View>
 
@@ -866,141 +956,222 @@ const CrearViajeScreen = ({ navigation, route }) => {
         </View>
       )}
 
-      <View style={styles.mapPreviewContainer}>
+      {/* Vista previa del Mapa con Badge Flotante de Distancia y Tiempo */}
+      <View style={styles.mapPreviewCard}>
         <TripMapPreview
           origin={origenPlace}
           destination={destinoPlace}
-          height={200}
+          height={185}
         />
-      </View>
-
-      {rutaInfo && (
-        <View style={styles.rutaInfoCard}>
-          <View style={styles.rutaInfoItem}>
-            <NavIcon size={16} color={COLORS.primary} strokeWidth={2} />
-            <Text style={styles.rutaInfoText}>
-              {(rutaInfo.distanceMeters / 1000).toFixed(1)} km
-            </Text>
-          </View>
-          <View style={styles.rutaInfoItem}>
-            <Clock size={16} color={COLORS.primary} strokeWidth={2} />
-            <Text style={styles.rutaInfoText}>
-              {Math.ceil(rutaInfo.durationSeconds / 60)} min
-            </Text>
-          </View>
-        </View>
-      )}
-
-      {evento && direccionEvento === "vuelta" ? (
-        <View style={styles.eventDestinoCard}>
-          <View style={styles.eventDestinoIcon}>
-            <MapPin size={20} color={COLORS.primary} strokeWidth={2.5} />
-          </View>
-          <View style={styles.eventDestinoContent}>
-            <Text style={styles.eventDestinoLabel}>Origen (Evento)</Text>
-            <Text style={styles.eventDestinoValue} numberOfLines={2}>
-              {evento.name}
-            </Text>
-          </View>
-        </View>
-      ) : (
-        <PlaceAutocompleteInput
-          label="Origen"
-          placeholder="Tu ubicación"
-          value={origenTexto}
-          onChangeText={(v) => {
-            setOrigenTexto(v);
-            if (!v.trim()) setOrigenPlace(null);
-          }}
-          biasLocation={ubicacionActual}
-          onSelectPlace={(p) => {
-            setOrigenPlace(p);
-            setOrigenTexto(p?.address || p?.name || "");
-          }}
-          components="country:es"
-          savedLocations={savedLocations}
-          showCurrentLocation={true}
-          onUseCurrentLocation={async () => {
-            if (!ubicacionActual) return;
-            let nombre = "Mi ubicación";
-            let direccion;
-            try {
-              const reversed = await Location.reverseGeocodeAsync({
-                latitude: ubicacionActual.latitude,
-                longitude: ubicacionActual.longitude,
-              });
-              const first = reversed?.[0];
-              if (first) {
-                const parts = [
-                  first.street,
-                  first.streetNumber,
-                  first.city,
-                ].filter(Boolean);
-                direccion = parts.join(" ");
-                if (first.name) nombre = first.name;
-              }
-            } catch {}
-            const userPlace = {
-              latitude: ubicacionActual.latitude,
-              longitude: ubicacionActual.longitude,
-              name: nombre,
-              address: direccion || nombre,
-            };
-            setOrigenPlace(userPlace);
-            setOrigenTexto(direccion || nombre);
-          }}
-        />
-      )}
-
-      {evento ? (
-        direccionEvento === "ida" ? (
-          <View style={styles.eventDestinoCard}>
-            <View style={styles.eventDestinoIcon}>
-              <MapPin size={20} color={COLORS.primary} strokeWidth={2.5} />
+        {rutaInfo && (
+          <View style={styles.floatingRouteBadge}>
+            <View style={styles.floatingRouteItem}>
+              <NavIcon size={13} color={COLORS.primary} strokeWidth={2.5} />
+              <Text style={styles.floatingRouteText}>
+                {(rutaInfo.distanceMeters / 1000).toFixed(1)} km
+              </Text>
             </View>
-            <View style={styles.eventDestinoContent}>
-              <Text style={styles.eventDestinoLabel}>Destino (Evento)</Text>
-              <Text style={styles.eventDestinoValue} numberOfLines={2}>
-                {evento.name}
+            <View style={styles.floatingRouteDivider} />
+            <View style={styles.floatingRouteItem}>
+              <Clock size={13} color={COLORS.secondary} strokeWidth={2.5} />
+              <Text style={styles.floatingRouteText}>
+                {Math.ceil(rutaInfo.durationSeconds / 60)} min
               </Text>
             </View>
           </View>
-        ) : (
-          <PlaceAutocompleteInput
-            label="Destino"
-            placeholder="¿A dónde vuelves?"
-            value={destinoTexto}
-            onChangeText={(v) => {
-              setDestinoTexto(v);
-              if (!v.trim()) setDestinoPlace(null);
-            }}
-            biasLocation={ubicacionActual}
-            onSelectPlace={(p) => {
-              setDestinoPlace(p);
-              setDestinoTexto(p?.address || p?.name || "");
-            }}
-            components="country:es"
-            savedLocations={savedLocations}
-          />
-        )
-      ) : (
-        <PlaceAutocompleteInput
-          label="Destino"
-          placeholder="¿A dónde vas?"
-          value={destinoTexto}
-          onChangeText={(v) => {
-            setDestinoTexto(v);
-            if (!v.trim()) setDestinoPlace(null);
-          }}
-          biasLocation={ubicacionActual}
-          onSelectPlace={(p) => {
-            setDestinoPlace(p);
-            setDestinoTexto(p?.address || p?.name || "");
-          }}
-          components="country:es"
-          savedLocations={savedLocations}
-        />
-      )}
+        )}
+      </View>
+
+      {/* Contenedor de Inputs con zIndex dinámico para que el autocompletado NUNCA se oculte debajo */}
+      <View style={styles.routeInputsContainer}>
+        {/* Input Origen */}
+        <View
+          style={[
+            styles.autocompleteWrapper,
+            {
+              zIndex: activeAutocompleteField === "origen" ? 9999 : 30,
+              elevation:
+                Platform.OS === "android"
+                  ? activeAutocompleteField === "origen"
+                    ? 9999
+                    : 30
+                  : undefined,
+            },
+          ]}
+        >
+          {evento && direccionEvento === "vuelta" ? (
+            <View style={styles.eventDestinoCard}>
+              <View style={[styles.eventDestinoIcon, { backgroundColor: "#ECFDF5" }]}>
+                <MapPin size={20} color="#10B981" strokeWidth={2.5} />
+              </View>
+              <View style={styles.eventDestinoContent}>
+                <Text style={styles.eventDestinoLabel}>Origen (Evento)</Text>
+                <Text style={styles.eventDestinoValue} numberOfLines={2}>
+                  {evento.name}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <PlaceAutocompleteInput
+              label="Punto de origen"
+              placeholder="¿Desde dónde sales?"
+              value={origenTexto}
+              iconColor="#10B981"
+              zIndex={activeAutocompleteField === "origen" ? 9999 : 30}
+              onChangeText={(v) => {
+                setOrigenTexto(v);
+                if (!v.trim()) setOrigenPlace(null);
+              }}
+              biasLocation={ubicacionActual}
+              onSelectPlace={(p) => {
+                setOrigenPlace(p);
+                setOrigenTexto(p?.address || p?.name || "");
+                setActiveAutocompleteField(null);
+              }}
+              onFocus={() => setActiveAutocompleteField("origen")}
+              onBlur={() => {
+                setTimeout(() => {
+                  setActiveAutocompleteField((curr) => (curr === "origen" ? null : curr));
+                }, 200);
+              }}
+              components="country:es"
+              savedLocations={savedLocations}
+              showCurrentLocation={true}
+              onUseCurrentLocation={async () => {
+                if (!ubicacionActual) return;
+                let nombre = "Mi ubicación";
+                let direccion;
+                try {
+                  const reversed = await Location.reverseGeocodeAsync({
+                    latitude: ubicacionActual.latitude,
+                    longitude: ubicacionActual.longitude,
+                  });
+                  const first = reversed?.[0];
+                  if (first) {
+                    const parts = [
+                      first.street,
+                      first.streetNumber,
+                      first.city,
+                    ].filter(Boolean);
+                    direccion = parts.join(" ");
+                    if (first.name) nombre = first.name;
+                  }
+                } catch {}
+                const userPlace = {
+                  latitude: ubicacionActual.latitude,
+                  longitude: ubicacionActual.longitude,
+                  name: nombre,
+                  address: direccion || nombre,
+                };
+                setOrigenPlace(userPlace);
+                setOrigenTexto(direccion || nombre);
+                setActiveAutocompleteField(null);
+              }}
+            />
+          )}
+        </View>
+
+        {/* Botón Central de Intercambio (Origen <-> Destino) */}
+        {!evento && (
+          <View style={styles.swapRow}>
+            <View style={styles.swapLine} />
+            <TouchableOpacity
+              style={styles.swapCircleBtn}
+              onPress={handleSwapOrigenDestino}
+              activeOpacity={0.7}
+              hitSlop={8}
+              accessibilityLabel="Intercambiar origen y destino"
+            >
+              <ArrowUpDown size={15} color={COLORS.primary} strokeWidth={2.4} />
+            </TouchableOpacity>
+            <View style={styles.swapLine} />
+          </View>
+        )}
+
+        {/* Input Destino */}
+        <View
+          style={[
+            styles.autocompleteWrapper,
+            {
+              zIndex: activeAutocompleteField === "destino" ? 9999 : 10,
+              elevation:
+                Platform.OS === "android"
+                  ? activeAutocompleteField === "destino"
+                    ? 9999
+                    : 10
+                  : undefined,
+            },
+          ]}
+        >
+          {evento ? (
+            direccionEvento === "ida" ? (
+              <View style={styles.eventDestinoCard}>
+                <View style={styles.eventDestinoIcon}>
+                  <MapPin size={20} color={COLORS.primary} strokeWidth={2.5} />
+                </View>
+                <View style={styles.eventDestinoContent}>
+                  <Text style={styles.eventDestinoLabel}>Destino (Evento)</Text>
+                  <Text style={styles.eventDestinoValue} numberOfLines={2}>
+                    {evento.name}
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <PlaceAutocompleteInput
+                label="Punto de llegada"
+                placeholder="¿A dónde vuelves?"
+                value={destinoTexto}
+                iconColor={COLORS.primary}
+                zIndex={activeAutocompleteField === "destino" ? 9999 : 10}
+                onChangeText={(v) => {
+                  setDestinoTexto(v);
+                  if (!v.trim()) setDestinoPlace(null);
+                }}
+                biasLocation={ubicacionActual}
+                onSelectPlace={(p) => {
+                  setDestinoPlace(p);
+                  setDestinoTexto(p?.address || p?.name || "");
+                  setActiveAutocompleteField(null);
+                }}
+                onFocus={() => setActiveAutocompleteField("destino")}
+                onBlur={() => {
+                  setTimeout(() => {
+                    setActiveAutocompleteField((curr) => (curr === "destino" ? null : curr));
+                  }, 200);
+                }}
+                components="country:es"
+                savedLocations={savedLocations}
+              />
+            )
+          ) : (
+            <PlaceAutocompleteInput
+              label="Punto de llegada"
+              placeholder="¿A dónde vas?"
+              value={destinoTexto}
+              iconColor={COLORS.primary}
+              zIndex={activeAutocompleteField === "destino" ? 9999 : 10}
+              onChangeText={(v) => {
+                setDestinoTexto(v);
+                if (!v.trim()) setDestinoPlace(null);
+              }}
+              biasLocation={ubicacionActual}
+              onSelectPlace={(p) => {
+                setDestinoPlace(p);
+                setDestinoTexto(p?.address || p?.name || "");
+                setActiveAutocompleteField(null);
+              }}
+              onFocus={() => setActiveAutocompleteField("destino")}
+              onBlur={() => {
+                setTimeout(() => {
+                  setActiveAutocompleteField((curr) => (curr === "destino" ? null : curr));
+                }, 200);
+              }}
+              components="country:es"
+              savedLocations={savedLocations}
+            />
+          )}
+        </View>
+      </View>
     </ScrollView>
   );
 
@@ -1011,7 +1182,9 @@ const CrearViajeScreen = ({ navigation, route }) => {
       contentContainerStyle={styles.stepContent}
     >
       <View style={styles.stepHeader}>
-        <Car size={32} color={COLORS.primary} strokeWidth={2} />
+        <View style={styles.stepHeaderIconCircle}>
+          <Car size={26} color={COLORS.primary} strokeWidth={2.4} />
+        </View>
         <Text style={styles.stepTitle}>Elige tu vehículo</Text>
         <Text style={styles.stepSubtitle}>
           Selecciona el coche con el que harás este viaje
@@ -1079,12 +1252,16 @@ const CrearViajeScreen = ({ navigation, route }) => {
                   <Text style={styles.vehiculoName}>
                     {coche.marca} {coche.modelo}
                   </Text>
-                  <Text style={styles.vehiculoMatricula}>
-                    {matriculaFormateada}
-                  </Text>
-                  <Text style={styles.vehiculoDetails}>
-                    {coche.color || "—"} · {coche.num_plazas || "?"} plazas
-                  </Text>
+                  <View style={styles.matriculaRow}>
+                    <View style={styles.matriculaBadge}>
+                      <Text style={styles.matriculaBadgeText}>
+                        {matriculaFormateada}
+                      </Text>
+                    </View>
+                    <Text style={styles.vehiculoDetails}>
+                      {coche.color || "—"} · {coche.num_plazas || "?"} plazas
+                    </Text>
+                  </View>
                 </View>
                 {isSelected && (
                   <View style={styles.vehiculoCheck}>
@@ -1111,7 +1288,9 @@ const CrearViajeScreen = ({ navigation, route }) => {
       keyboardShouldPersistTaps="handled"
     >
       <View style={styles.stepHeader}>
-        <Euro size={32} color={COLORS.primary} strokeWidth={2} />
+        <View style={styles.stepHeaderIconCircle}>
+          <Euro size={26} color={COLORS.primary} strokeWidth={2.4} />
+        </View>
         <Text style={styles.stepTitle}>Tu precio por pasajero</Text>
         <Text style={styles.stepSubtitle}>
           Define cuánto quieres recibir por pasajero y cuántas plazas ofreces
@@ -1126,12 +1305,24 @@ const CrearViajeScreen = ({ navigation, route }) => {
               {(rutaInfo.distanceMeters / 1000).toFixed(1)} km
             </Text>
           </View>
+          <View style={styles.rutaResumenDivider} />
           <View style={styles.rutaResumenRow}>
             <Text style={styles.rutaResumenLabel}>Duración</Text>
             <Text style={styles.rutaResumenValue}>
               {Math.ceil(rutaInfo.durationSeconds / 60)} min
             </Text>
           </View>
+          {recommendedPrice > 0 && (
+            <>
+              <View style={styles.rutaResumenDivider} />
+              <View style={styles.rutaResumenRow}>
+                <Text style={styles.rutaResumenLabel}>Sugerido</Text>
+                <Text style={[styles.rutaResumenValue, { color: COLORS.primary }]}>
+                  {recommendedPrice.toFixed(2)}€
+                </Text>
+              </View>
+            </>
+          )}
         </View>
       )}
 
@@ -1159,20 +1350,27 @@ const CrearViajeScreen = ({ navigation, route }) => {
             activeOpacity={0.8}
           >
             <View style={styles.priceOptionLeft}>
-              <Euro
-                size={20}
-                color={!viajeGratis ? COLORS.primary : COLORS.gray400}
-                strokeWidth={2}
-              />
-              <View>
-                <Text style={styles.priceOptionTitle}>Precio</Text>
+              <View
+                style={[
+                  styles.priceOptionIconCircle,
+                  !viajeGratis && styles.priceOptionIconCircleActive,
+                ]}
+              >
+                <Euro
+                  size={18}
+                  color={!viajeGratis ? COLORS.white : COLORS.gray500}
+                  strokeWidth={2.4}
+                />
+              </View>
+              <View style={styles.priceOptionTextWrapper}>
+                <Text style={styles.priceOptionTitle}>Precio por plaza</Text>
                 <Text style={styles.priceOptionSub}>
-                  Define tu precio por pasajero según la distancia
+                  Recibe aportaciones de los pasajeros por la distancia
                 </Text>
               </View>
             </View>
             {!viajeGratis && (
-              <CheckCircle size={20} color={COLORS.primary} strokeWidth={2.5} />
+              <CheckCircle size={22} color={COLORS.primary} strokeWidth={2.5} />
             )}
           </TouchableOpacity>
           <TouchableOpacity
@@ -1184,28 +1382,56 @@ const CrearViajeScreen = ({ navigation, route }) => {
             activeOpacity={0.8}
           >
             <View style={styles.priceOptionLeft}>
-              <Gift
-                size={20}
-                color={viajeGratis ? COLORS.primary : COLORS.gray400}
-                strokeWidth={2}
-              />
-              <View>
+              <View
+                style={[
+                  styles.priceOptionIconCircle,
+                  viajeGratis && styles.priceOptionIconCircleActive,
+                ]}
+              >
+                <Gift
+                  size={18}
+                  color={viajeGratis ? COLORS.white : COLORS.gray500}
+                  strokeWidth={2.4}
+                />
+              </View>
+              <View style={styles.priceOptionTextWrapper}>
                 <Text style={styles.priceOptionTitle}>Viaje gratis</Text>
                 <Text style={styles.priceOptionSub}>
-                  Los pasajeros no pagan por este trayecto
+                  Comparte el viaje sin coste para los pasajeros
                 </Text>
               </View>
             </View>
             {viajeGratis && (
-              <CheckCircle size={20} color={COLORS.primary} strokeWidth={2.5} />
+              <CheckCircle size={22} color={COLORS.primary} strokeWidth={2.5} />
             )}
           </TouchableOpacity>
 
           {!viajeGratis && (
             <View style={styles.priceInputContainer}>
-              <Text style={styles.inputLabel}>Tu precio por pasajero (€)</Text>
+              <View style={styles.priceInputHeaderRow}>
+                <Text style={styles.inputLabel}>Tu precio por pasajero</Text>
+                {recommendedPrice > 0 &&
+                  parseFloat(precio) !== recommendedPrice && (
+                    <TouchableOpacity
+                      onPress={() =>
+                        setPrecio(String(recommendedPrice.toFixed(2)))
+                      }
+                      style={styles.recommendedChip}
+                      activeOpacity={0.7}
+                    >
+                      <Sparkles
+                        size={12}
+                        color={COLORS.primary}
+                        strokeWidth={2.5}
+                      />
+                      <Text style={styles.recommendedChipText}>
+                        Sugerido: {recommendedPrice.toFixed(2)}€
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+              </View>
               <View style={styles.priceInputRow}>
-                <Euro size={20} color={COLORS.gray400} strokeWidth={2} />
+                <Text style={styles.priceCurrencySymbol}>€</Text>
                 <TextInput
                   style={styles.priceInput}
                   value={precio}
@@ -1247,6 +1473,7 @@ const CrearViajeScreen = ({ navigation, route }) => {
                   parseInt(plazas) === n && styles.plazaButtonActive,
                 ]}
                 onPress={() => setPlazas(String(n))}
+                activeOpacity={0.7}
               >
                 <Text
                   style={[
@@ -1395,7 +1622,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     backgroundColor: COLORS.white,
-    ...SHADOWS.small,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
   },
   backButton: {
     width: 40,
@@ -1403,6 +1631,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: COLORS.gray50,
   },
   backButtonPlaceholder: {
     width: 40,
@@ -1418,37 +1647,62 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.lg,
-    gap: SPACING.xs,
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
   },
   stepItem: {
     alignItems: "center",
-    gap: SPACING.xs,
+    gap: 6,
+    width: 58,
   },
   stepDot: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: COLORS.gray200,
+    backgroundColor: COLORS.gray100,
+    borderWidth: 1.5,
+    borderColor: COLORS.gray300,
     alignItems: "center",
     justifyContent: "center",
   },
   stepDotActive: {
     backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  stepDotCurrent: {
+    borderWidth: 2.5,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary,
+    ...SHADOWS.small,
+  },
+  stepDotNumber: {
+    fontSize: FONTS.xs,
+    fontWeight: "700",
+    color: COLORS.gray500,
+  },
+  stepDotNumberActive: {
+    color: COLORS.white,
   },
   stepLabel: {
-    fontSize: FONTS.xs,
+    fontSize: 11,
     color: COLORS.gray400,
     fontWeight: "500",
+    textAlign: "center",
   },
   stepLabelActive: {
-    color: COLORS.gray800,
+    color: COLORS.gray700,
     fontWeight: "600",
+  },
+  stepLabelCurrent: {
+    color: COLORS.primary,
+    fontWeight: "700",
   },
   stepConnector: {
     flex: 1,
     height: 2,
     backgroundColor: COLORS.gray200,
-    marginBottom: SPACING.xxl,
+    marginBottom: 20,
   },
   stepConnectorActive: {
     backgroundColor: COLORS.primary,
@@ -1465,20 +1719,58 @@ const styles = StyleSheet.create({
   },
   stepHeader: {
     alignItems: "center",
-    marginBottom: SPACING.xl,
+    marginBottom: SPACING.lg,
     marginTop: SPACING.md,
+  },
+  stepHeaderIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: SPACING.xs,
   },
   stepTitle: {
     fontSize: FONTS.xl,
     fontWeight: "bold",
     color: COLORS.gray800,
-    marginTop: SPACING.sm,
+    marginTop: SPACING.xs,
+    textAlign: "center",
   },
   stepSubtitle: {
     fontSize: FONTS.sm,
     color: COLORS.gray500,
-    marginTop: SPACING.xs,
+    marginTop: 4,
     textAlign: "center",
+    paddingHorizontal: SPACING.md,
+    lineHeight: 18,
+  },
+  dateShortcutsRow: {
+    flexDirection: "row",
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  dateShortcutChip: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs + 2,
+    borderRadius: RADIUS.full,
+    borderWidth: 1.5,
+    borderColor: COLORS.gray200,
+    backgroundColor: COLORS.white,
+  },
+  dateShortcutChipActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primarySoft,
+  },
+  dateShortcutText: {
+    fontSize: FONTS.xs,
+    fontWeight: "600",
+    color: COLORS.gray600,
+  },
+  dateShortcutTextActive: {
+    color: COLORS.primary,
+    fontWeight: "700",
   },
   dateCard: {
     flexDirection: "row",
@@ -1487,12 +1779,14 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     padding: SPACING.md,
     marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
     ...SHADOWS.small,
   },
   dateCardIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     backgroundColor: COLORS.primarySoft,
     alignItems: "center",
     justifyContent: "center",
@@ -1513,46 +1807,103 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textTransform: "capitalize",
   },
-  mapPreviewContainer: {
+  mapPreviewCard: {
+    borderRadius: RADIUS.lg,
+    overflow: "hidden",
+    backgroundColor: COLORS.white,
     marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    position: "relative",
+    ...SHADOWS.small,
   },
-  rutaInfoCard: {
-    flexDirection: "row",
-    backgroundColor: COLORS.primarySoft,
-    borderRadius: RADIUS.md,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
-    gap: SPACING.lg,
-  },
-  rutaInfoItem: {
+  floatingRouteBadge: {
+    position: "absolute",
+    bottom: SPACING.sm,
+    alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
-    gap: SPACING.xs,
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.full,
+    gap: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    ...SHADOWS.md,
   },
-  rutaInfoText: {
-    fontSize: FONTS.sm,
-    color: COLORS.primaryDark,
-    fontWeight: "600",
+  floatingRouteItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  floatingRouteDivider: {
+    width: 1,
+    height: 12,
+    backgroundColor: COLORS.gray300,
+  },
+  floatingRouteText: {
+    fontSize: FONTS.xs,
+    fontWeight: "700",
+    color: COLORS.gray800,
+  },
+  routeInputsContainer: {
+    position: "relative",
+    zIndex: 9999,
+  },
+  autocompleteWrapper: {
+    position: "relative",
+  },
+  swapRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 4,
+    paddingHorizontal: SPACING.sm,
+  },
+  swapLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.gray200,
+  },
+  swapCircleBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: COLORS.white,
+    borderWidth: 1.5,
+    borderColor: COLORS.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: SPACING.sm,
+    ...SHADOWS.small,
   },
   rutaResumenCard: {
     flexDirection: "row",
     backgroundColor: COLORS.white,
     borderRadius: RADIUS.lg,
     padding: SPACING.md,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    alignItems: "center",
     ...SHADOWS.small,
   },
   rutaResumenRow: {
     flex: 1,
     alignItems: "center",
   },
+  rutaResumenDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: COLORS.gray200,
+  },
   rutaResumenLabel: {
     fontSize: FONTS.xs,
     color: COLORS.gray500,
-    marginBottom: SPACING.xs,
+    marginBottom: 2,
   },
   rutaResumenValue: {
-    fontSize: FONTS.lg,
+    fontSize: FONTS.md,
     fontWeight: "bold",
     color: COLORS.gray800,
   },
@@ -1561,38 +1912,15 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     padding: SPACING.md,
     marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
     ...SHADOWS.small,
   },
   inputLabel: {
     fontSize: FONTS.sm,
-    color: COLORS.gray600,
+    color: COLORS.gray700,
     fontWeight: "600",
     marginBottom: SPACING.sm,
-  },
-  priceInputContainer: {
-    marginTop: SPACING.md,
-  },
-  priceInputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: COLORS.gray200,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    gap: SPACING.sm,
-  },
-  priceInput: {
-    flex: 1,
-    fontSize: FONTS.xxl,
-    fontWeight: "bold",
-    color: COLORS.gray800,
-    padding: 0,
-  },
-  priceHintText: {
-    fontSize: FONTS.xs,
-    color: COLORS.gray500,
-    marginTop: SPACING.xs,
   },
   monederoWarningRow: {
     flexDirection: "row",
@@ -1616,10 +1944,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     borderWidth: 1.5,
     borderColor: COLORS.gray200,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.md,
     marginBottom: SPACING.sm,
+    backgroundColor: COLORS.white,
   },
   priceOptionActive: {
     borderColor: COLORS.primary,
@@ -1629,6 +1958,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: SPACING.sm,
+    flex: 1,
+  },
+  priceOptionIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.gray100,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  priceOptionIconCircleActive: {
+    backgroundColor: COLORS.primary,
+  },
+  priceOptionTextWrapper: {
     flex: 1,
   },
   priceOptionTitle: {
@@ -1641,13 +1984,67 @@ const styles = StyleSheet.create({
     color: COLORS.gray500,
     marginTop: 2,
   },
+  priceInputContainer: {
+    marginTop: SPACING.md,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray100,
+  },
+  priceInputHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: SPACING.xs,
+  },
+  recommendedChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: COLORS.primarySoft,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+  },
+  recommendedChipText: {
+    fontSize: FONTS.xs,
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+  priceInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: COLORS.gray200,
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    gap: SPACING.sm,
+    backgroundColor: COLORS.white,
+  },
+  priceCurrencySymbol: {
+    fontSize: FONTS.xl,
+    fontWeight: "bold",
+    color: COLORS.primary,
+  },
+  priceInput: {
+    flex: 1,
+    fontSize: FONTS.xxl,
+    fontWeight: "bold",
+    color: COLORS.gray800,
+    padding: 0,
+  },
+  priceHintText: {
+    fontSize: FONTS.xs,
+    color: COLORS.gray500,
+    marginTop: SPACING.xs,
+  },
   plazasRow: {
     flexDirection: "row",
     gap: SPACING.xs,
   },
   plazaButton: {
     flex: 1,
-    height: 44,
+    height: 46,
     borderRadius: RADIUS.md,
     borderWidth: 1.5,
     borderColor: COLORS.gray200,
@@ -1657,21 +2054,23 @@ const styles = StyleSheet.create({
   },
   plazaButtonActive: {
     borderColor: COLORS.primary,
-    backgroundColor: COLORS.primarySoft,
+    backgroundColor: COLORS.primary,
   },
   plazaButtonText: {
     fontSize: FONTS.md,
     fontWeight: "bold",
-    color: COLORS.gray500,
+    color: COLORS.gray600,
   },
   plazaButtonTextActive: {
-    color: COLORS.primary,
+    color: COLORS.white,
   },
   resumenCard: {
     backgroundColor: COLORS.white,
     borderRadius: RADIUS.lg,
     padding: SPACING.md,
     marginBottom: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
     ...SHADOWS.small,
   },
   resumenHeader: {
@@ -1695,7 +2094,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: COLORS.primary,
+    backgroundColor: "#10B981",
   },
   resumenRouteLine: {
     width: 2,
@@ -1736,6 +2135,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     backgroundColor: COLORS.white,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray100,
     ...SHADOWS.small,
   },
   footerButton: {
@@ -1777,7 +2178,9 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.md,
-    marginTop: SPACING.md,
+    marginTop: SPACING.xs,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
     ...SHADOWS.small,
   },
   eventDestinoIcon: {
@@ -1814,6 +2217,7 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     borderWidth: 2,
     borderColor: COLORS.gray200,
+    ...SHADOWS.small,
   },
   vehiculoCardActive: {
     borderColor: COLORS.primary,
@@ -1839,6 +2243,26 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: COLORS.gray800,
   },
+  matriculaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    marginTop: 4,
+  },
+  matriculaBadge: {
+    backgroundColor: COLORS.gray100,
+    paddingHorizontal: SPACING.xs + 2,
+    paddingVertical: 2,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+  },
+  matriculaBadgeText: {
+    fontSize: FONTS.xs,
+    color: COLORS.gray800,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+  },
   vehiculoMatricula: {
     fontSize: FONTS.sm,
     color: COLORS.gray500,
@@ -1847,8 +2271,7 @@ const styles = StyleSheet.create({
   },
   vehiculoDetails: {
     fontSize: FONTS.xs,
-    color: COLORS.gray400,
-    marginTop: 2,
+    color: COLORS.gray500,
   },
   vehiculoCheck: {
     marginLeft: SPACING.sm,

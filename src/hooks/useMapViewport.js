@@ -7,7 +7,7 @@ import { mapViewportCache, getCachedOrFetch } from "../utils/mapCache";
 import { enrichTripsWithDriverProfiles } from "../utils/enrichTripDrivers";
 import { trayectoService } from "../services/travels/trayectoService";
 
-const DEBOUNCE_MS = 350;
+const DEBOUNCE_MS = 300;
 const DEFAULT_LIMIT = 50;
 
 const isAbortError = (err) => {
@@ -244,21 +244,18 @@ export function useMapViewport(initialRegion, filters = {}) {
     }
   }, [filtersKey, initialRegion, fetchViewport]);
 
-  const handleRegionChange = useCallback(
-    (region) => {
-      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-
-      debounceTimerRef.current = setTimeout(() => {
-        fetchViewport(region);
-      }, DEBOUNCE_MS);
-    },
-    [fetchViewport]
-  );
+  const handleRegionChange = useCallback(() => {
+    // Mientras el usuario desplaza o hace zoom, cancelar cualquier petición pendiente
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+  }, []);
 
   const handleRegionChangeComplete = useCallback(
     (region) => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-      fetchViewport(region);
+      // Debounce de 300ms (en rango 250ms - 350ms) para esperar a que termine el gesto
+      debounceTimerRef.current = setTimeout(() => {
+        fetchViewport(region);
+      }, DEBOUNCE_MS);
     },
     [fetchViewport]
   );

@@ -44,7 +44,7 @@ import {
   Sparkles,
 } from "lucide-react-native";
 import * as Location from "expo-location";
-import MapView, { Marker } from "react-native-maps";
+import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../constants";
 import { eventService } from "../services/eventService";
 import { trayectoService } from "../services/travels/trayectoService";
@@ -617,6 +617,7 @@ const EventDetailScreen = ({ route, navigation }) => {
       {/* Mapa interactivo de fondo */}
       <MapView
         ref={mapRef}
+        provider={PROVIDER_GOOGLE}
         style={styles.map}
         initialRegion={mapRegion}
         showsUserLocation

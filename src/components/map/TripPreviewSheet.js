@@ -10,6 +10,7 @@ import {
   Animated,
   PanResponder,
   TouchableOpacity,
+  ScrollView,
 } from "react-native";
 import {
   Clock,
@@ -37,6 +38,8 @@ const SHEET_DISMISS_THRESHOLD = 80;
 const TripPreviewSheet = ({
   trip,
   visible = true,
+  siblingTrips = [],
+  onSelectSibling,
   onClose,
   onViewDetail,
   onChat,
@@ -193,6 +196,85 @@ const TripPreviewSheet = ({
             <X size={16} color={isDark ? COLORS.white : COLORS.gray500} strokeWidth={2.4} />
           </TouchableOpacity>
         </View>
+
+        {/* Selector de conductores cuando coinciden varios en el mismo punto de origen */}
+        {siblingTrips && siblingTrips.length > 1 && (
+          <View style={[styles.siblingsContainer, isDark && styles.siblingsContainerDark]}>
+            <View style={styles.siblingsHeaderRow}>
+              <View style={styles.siblingsTitleBadge}>
+                <MapPin size={11} color={COLORS.primary} strokeWidth={2.5} />
+                <Text style={[styles.siblingsTitleText, isDark && styles.textWhite]}>
+                  {siblingTrips.length} viajes desde esta ubicación
+                </Text>
+              </View>
+              <Text style={styles.siblingsHintText}>Toca para ver otro</Text>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.siblingsScrollList}
+            >
+              {siblingTrips.map((sTrip) => {
+                const isCurrent = String(sTrip.id) === String(trip.id);
+                const sConductor = sTrip.conductor;
+                const sDriverName =
+                  (typeof sConductor === "object" ? sConductor?.nombre || sConductor?.name : sConductor) ||
+                  sTrip.conductorNombre ||
+                  sTrip.conductor_nombre ||
+                  "Conductor";
+                const sFirstName = sDriverName.split(" ")[0];
+                const sAvatar =
+                  sTrip.img_perfil ||
+                  sTrip.conductor_img ||
+                  (typeof sConductor === "object" ? sConductor?.img_perfil || sConductor?.avatar || sConductor?.photo : null);
+                const sPrice = sTrip.precio ?? 0;
+                const sTime = formatTripTime(sTrip);
+
+                return (
+                  <TouchableOpacity
+                    key={`sibling-chip-${sTrip.id}`}
+                    style={[
+                      styles.siblingChip,
+                      isDark && styles.siblingChipDark,
+                      isCurrent && styles.siblingChipActive,
+                    ]}
+                    onPress={() => onSelectSibling?.(sTrip)}
+                    activeOpacity={0.75}
+                  >
+                    {sAvatar ? (
+                      <Image source={{ uri: sAvatar }} style={styles.siblingAvatar} />
+                    ) : (
+                      <View style={[styles.siblingAvatar, styles.siblingAvatarFallback]}>
+                        <User size={11} color={COLORS.white} strokeWidth={2.2} />
+                      </View>
+                    )}
+                    <View style={styles.siblingCol}>
+                      <Text
+                        style={[
+                          styles.siblingName,
+                          isDark && styles.textWhite,
+                          isCurrent && styles.siblingNameActive,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {sFirstName}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.siblingMeta,
+                          isCurrent && styles.siblingMetaActive,
+                        ]}
+                      >
+                        {sTime} · {sPrice}€
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Fila 2: Perfil del conductor y datos del vehículo */}
         <View style={styles.driverSection}>
@@ -711,6 +793,95 @@ const styles = StyleSheet.create({
   },
   textWhite: {
     color: COLORS.white,
+  },
+  siblingsContainer: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: RADIUS.lg,
+    paddingVertical: 8,
+    paddingHorizontal: SPACING.sm,
+    marginBottom: SPACING.sm,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  siblingsContainerDark: {
+    backgroundColor: "#1E293B",
+    borderColor: "#334155",
+  },
+  siblingsHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  siblingsTitleBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  siblingsTitleText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: COLORS.gray700,
+    fontFamily: FONTS.bold,
+  },
+  siblingsHintText: {
+    fontSize: 10,
+    color: COLORS.gray400,
+  },
+  siblingsScrollList: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingBottom: 2,
+  },
+  siblingChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.white,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: RADIUS.full,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    gap: 6,
+  },
+  siblingChipDark: {
+    backgroundColor: "#0F172A",
+    borderColor: "#334155",
+  },
+  siblingChipActive: {
+    backgroundColor: "rgba(14, 165, 233, 0.08)",
+    borderColor: COLORS.primary,
+  },
+  siblingAvatar: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+  },
+  siblingAvatarFallback: {
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  siblingCol: {
+    justifyContent: "center",
+  },
+  siblingName: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: COLORS.gray800,
+    fontFamily: FONTS.bold,
+  },
+  siblingNameActive: {
+    color: COLORS.primary,
+  },
+  siblingMeta: {
+    fontSize: 10,
+    color: COLORS.gray500,
+  },
+  siblingMetaActive: {
+    color: COLORS.secondary,
+    fontWeight: "600",
   },
 });
 

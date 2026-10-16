@@ -3,7 +3,7 @@
 // (Marker.Animated + AnimatedRegion) para que no "salte" entre updates.
 import React, { useEffect, useMemo, useRef } from "react";
 import { View, Text, StyleSheet, Image } from "react-native";
-import MapView, { Marker, AnimatedRegion } from "react-native-maps";
+import MapView, { Marker, AnimatedRegion, PROVIDER_GOOGLE } from "react-native-maps";
 import { Car, MapPin, Flag } from "lucide-react-native";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../../constants";
 
@@ -83,7 +83,12 @@ const LiveTripMap = ({
 
   return (
     <View style={[styles.container, fullBleed && styles.fullBleed, { height }]}>
-      <MapView ref={mapRef} style={styles.map} initialRegion={initialRegion}>
+      <MapView
+        ref={mapRef}
+        provider={PROVIDER_GOOGLE}
+        style={styles.map}
+        initialRegion={initialRegion}
+      >
         {origin && (
           <Marker coordinate={origin} title={origin.name || "Origen"}>
             <MapPin size={28} color={COLORS.primary} fill={COLORS.white} />
