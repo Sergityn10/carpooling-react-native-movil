@@ -53,9 +53,9 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow YouConnext to use your location to track trips.",
-          "isAndroidBackgroundLocationEnabled": true,
-          "isIosBackgroundLocationEnabled": true
+          "locationWhenInUsePermission": "Permite a YouConnext acceder a tu ubicación mientras usas la app para encontrar viajes y eventos cercanos.",
+          "isAndroidBackgroundLocationEnabled": false,
+          "isIosBackgroundLocationEnabled": false
         }
       ],
       [

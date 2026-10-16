@@ -12,8 +12,8 @@ import trayectoService from "../services/travels/trayectoService";
 import reservaService from "../services/travels/reservaService";
 import trackingSocketService from "../services/tracking/trackingSocketService";
 import { GPS_CONFIG, VIAJE_ESTADO } from "../constants";
-import { useUser } from "./UserContext";
-import { BACKGROUND_LOCATION_TASK } from "../services/locationBackgroundTask";
+// BACKGROUND_LOCATION_TASK deshabilitado por directiva de no ubicación en segundo plano
+// import { BACKGROUND_LOCATION_TASK } from "../services/locationBackgroundTask";
 import { homeCache } from "../services/homeCache";
 
 const ViajeContext = createContext();
@@ -224,10 +224,10 @@ export const ViajeProvider = ({ children }) => {
     }
   };
 
-  // Iniciar tracking GPS (background + foreground)
+  // Iniciar tracking GPS (primer plano únicamente)
   const iniciarTracking = async () => {
     try {
-      // Comprobar permisos de foreground
+      // Comprobar permisos de primer plano (foreground)
       let fgStatus = "denied";
       try {
         const fgCheck = await Location.getForegroundPermissionsAsync();
@@ -246,15 +246,6 @@ export const ViajeProvider = ({ children }) => {
         return;
       }
 
-      // Comprobar permisos de background
-      let bgStatus = "denied";
-      try {
-        const bgCheck = await Location.getBackgroundPermissionsAsync();
-        bgStatus = bgCheck.status;
-      } catch {
-        // ignore
-      }
-
       let servicesEnabled = await Location.hasServicesEnabledAsync();
       if (!servicesEnabled) {
         try {
@@ -267,26 +258,7 @@ export const ViajeProvider = ({ children }) => {
 
       setTrackingActivo(true);
 
-      // Iniciar background location updates si está concedido
-      if (bgStatus === "granted") {
-        try {
-          await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
-            accuracy: Location.Accuracy.High,
-            timeInterval: GPS_CONFIG.SAVE_INTERVAL,
-            distanceInterval: GPS_CONFIG.MIN_DISTANCE,
-            deferredUpdatesInterval: GPS_CONFIG.SAVE_INTERVAL,
-            showsBackgroundLocationIndicator: true,
-            foregroundService: {
-              notificationTitle: "YouConnext",
-              notificationBody: "Trackeando tu viaje en curso...",
-            },
-          });
-        } catch (err) {
-          console.warn("No se pudo iniciar background location task:", err);
-        }
-      }
-
-      // También suscribirse a foreground para UI en tiempo real
+      // Suscribirse a ubicación en primer plano para UI y microservicio en tiempo real
       locationSubscription.current = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.High,
@@ -309,16 +281,6 @@ export const ViajeProvider = ({ children }) => {
     if (locationSubscription.current) {
       locationSubscription.current.remove();
       locationSubscription.current = null;
-    }
-    try {
-      const isRunning = await Location.hasStartedLocationUpdatesAsync(
-        BACKGROUND_LOCATION_TASK,
-      );
-      if (isRunning) {
-        await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
-      }
-    } catch (e) {
-      console.warn("Error al detener background tracking:", e.message);
     }
     setTrackingActivo(false);
   };

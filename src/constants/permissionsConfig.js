@@ -3,7 +3,7 @@
 
 export const PERMISSION_TYPES = {
   LOCATION_FOREGROUND: "LOCATION_FOREGROUND",
-  LOCATION_BACKGROUND: "LOCATION_BACKGROUND",
+  // LOCATION_BACKGROUND: "LOCATION_BACKGROUND", // Deshabilitado: sin ubicación en segundo plano
   CAMERA: "CAMERA",
   MEDIA_LIBRARY: "MEDIA_LIBRARY",
   NOTIFICATIONS: "NOTIFICATIONS",
@@ -62,8 +62,10 @@ export const PERMISSIONS_CONFIG = {
       "El permiso de ubicación está desactivado en los ajustes de tu teléfono. Puedes activarlo manualmente para disfrutar de búsqueda automática.",
   },
 
+  /*
+  // Deshabilitado: Eliminado para cumplir directivas de Google Play / App Store (sin ubicación en segundo plano)
   [PERMISSION_TYPES.LOCATION_BACKGROUND]: {
-    id: PERMISSION_TYPES.LOCATION_BACKGROUND,
+    id: "LOCATION_BACKGROUND",
     name: "Ubicación en segundo plano",
     shortName: "Ubicación en segundo plano",
     icon: "Radio",
@@ -108,6 +110,7 @@ export const PERMISSIONS_CONFIG = {
     settingsMessage:
       "Para habilitar el tracking automático en segundo plano, selecciona 'Permitir todo el tiempo' en los ajustes de ubicación de tu dispositivo.",
   },
+  */
 
   [PERMISSION_TYPES.CAMERA]: {
     id: PERMISSION_TYPES.CAMERA,

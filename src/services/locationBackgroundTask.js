@@ -1,12 +1,13 @@
 // YouConnext - Background Location Task
-// Debe importarse a nivel top-level (en App.js) para que la tarea se registre
-import * as TaskManager from "expo-task-manager";
-import * as Location from "expo-location";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { trayectoService } from "./travels/trayectoService";
+// Deshabilitado: Eliminado el tracking en segundo plano para cumplir con las directivas de Google Play / App Store.
+// import * as TaskManager from "expo-task-manager";
+// import * as Location from "expo-location";
+// import AsyncStorage from "@react-native-async-storage/async-storage";
+// import { trayectoService } from "./travels/trayectoService";
 
 export const BACKGROUND_LOCATION_TASK = "background-location-task";
 
+/*
 TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
   if (error) {
     console.error("[BG Location] Error:", error.message);
@@ -58,3 +59,4 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
     }
   }
 });
+*/

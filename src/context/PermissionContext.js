@@ -78,6 +78,8 @@ export const PermissionProvider = ({ children }) => {
             status: res.status,
           };
         }
+        /*
+        // Deshabilitado: sin permisos de segundo plano
         case PERMISSION_TYPES.LOCATION_BACKGROUND: {
           const res = await Location.getBackgroundPermissionsAsync();
           return {
@@ -86,6 +88,7 @@ export const PermissionProvider = ({ children }) => {
             status: res.status,
           };
         }
+        */
         case PERMISSION_TYPES.CAMERA: {
           const res = await Camera.getCameraPermissionsAsync();
           return {
@@ -127,8 +130,11 @@ export const PermissionProvider = ({ children }) => {
       switch (type) {
         case PERMISSION_TYPES.LOCATION_FOREGROUND:
           return await Location.requestForegroundPermissionsAsync();
+        /*
+        // Deshabilitado: sin permisos de segundo plano
         case PERMISSION_TYPES.LOCATION_BACKGROUND:
           return await Location.requestBackgroundPermissionsAsync();
+        */
         case PERMISSION_TYPES.CAMERA:
           return await Camera.requestCameraPermissionsAsync();
         case PERMISSION_TYPES.MEDIA_LIBRARY:
@@ -158,9 +164,7 @@ export const PermissionProvider = ({ children }) => {
       const sysStatus = await getSystemPermissionStatus(type);
 
       // Los permisos de ubicación siempre muestran el popup por requisito explícito
-      const isLocationType =
-        type === PERMISSION_TYPES.LOCATION_FOREGROUND ||
-        type === PERMISSION_TYPES.LOCATION_BACKGROUND;
+      const isLocationType = type === PERMISSION_TYPES.LOCATION_FOREGROUND;
 
       const shouldAlwaysShow = alwaysShowDisclosure || isLocationType;
 
@@ -299,37 +303,14 @@ export const PermissionProvider = ({ children }) => {
   );
 
   /**
-   * Flujo de Ubicación en 2 Pasos (Requerimiento Google Play Android 11+)
+   * Flujo de Ubicación (Sólo Primer Plano - Deshabilitado segundo plano)
    */
   const requestBackgroundLocationWithDisclosure = useCallback(
     async (options = {}) => {
-      // Paso 1: Ubicación en primer plano
-      const fgResult = await requestPermissionWithDisclosure(
+      return await requestPermissionWithDisclosure(
         PERMISSION_TYPES.LOCATION_FOREGROUND,
         options,
       );
-
-      if (!fgResult.granted) {
-        return {
-          granted: false,
-          status: fgResult.status,
-          step: "foreground",
-          isFallback: true,
-        };
-      }
-
-      // Paso 2: Ubicación en segundo plano con aviso específico
-      const bgResult = await requestPermissionWithDisclosure(
-        PERMISSION_TYPES.LOCATION_BACKGROUND,
-        { ...options, forcePrompt: true },
-      );
-
-      return {
-        granted: bgResult.granted,
-        status: bgResult.status,
-        step: "background",
-        isFallback: !bgResult.granted,
-      };
     },
     [requestPermissionWithDisclosure],
   );

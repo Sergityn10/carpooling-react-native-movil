@@ -8,7 +8,8 @@ import { OnboardingProvider } from "./src/context/OnboardingContext";
 import { ViajeProvider } from "./src/context/ViajeContext";
 import AppNavigator from "./src/navigation/AppNavigator";
 import { COLORS } from "./src/constants";
-import "./src/services/locationBackgroundTask";
+// Deshabilitado: Eliminado el registro de tarea de ubicación en segundo plano
+// import "./src/services/locationBackgroundTask";
 
 export default function App() {
   return (

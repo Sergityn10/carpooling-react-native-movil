@@ -16,12 +16,15 @@ const DEFAULT_STATE = {
     declinedCount: 0,
     acknowledgedAt: null,
   },
+  /*
+  // Deshabilitado: sin ubicación en segundo plano
   [PERMISSION_TYPES.LOCATION_BACKGROUND]: {
     status: PERMISSION_CHOICE_STATUS.NOT_DETERMINED,
     updatedAt: null,
     declinedCount: 0,
     acknowledgedAt: null,
   },
+  */
   [PERMISSION_TYPES.CAMERA]: {
     status: PERMISSION_CHOICE_STATUS.NOT_DETERMINED,
     updatedAt: null,
