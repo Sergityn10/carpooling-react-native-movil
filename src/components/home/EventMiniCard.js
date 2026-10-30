@@ -1,37 +1,22 @@
-// YouConnext - EventMiniCard (carrusel de eventos en la Home)
+// YouConnext - EventMiniCard (Guía de Estilo v2, Pág. 5 y 7)
+// Categoría en ámbar, cabecera negra si no hay foto, contador de viajes/plazas
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
-import { Ticket, Building2, CheckCircle2, MapPin } from "lucide-react-native";
-import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../../constants";
-import GradientBackground from "../common/GradientBackground";
+import { View, Text, StyleSheet, Image } from "react-native";
+import { MapPin, Calendar } from "lucide-react-native";
+import { COLORS, SPACING, RADIUS, FONTS, BRAND, SHADOWS } from "../../constants";
 import PressableScale from "../common/PressableScale";
-import { MINI_CARD_WIDTH } from "./HomeSkeletons";
+import Chip from "../common/Chip";
 
 const MONTHS = [
-  "ENE",
-  "FEB",
-  "MAR",
-  "ABR",
-  "MAY",
-  "JUN",
-  "JUL",
-  "AGO",
-  "SEP",
-  "OCT",
-  "NOV",
-  "DIC",
+  "ene", "feb", "mar", "abr", "may", "jun",
+  "jul", "ago", "sep", "oct", "nov", "dic",
 ];
 
-const getDateChip = (startDate) => {
-  if (!startDate) return null;
-  const date = new Date(startDate);
-  if (isNaN(date.getTime())) return null;
-  return { day: date.getDate(), month: MONTHS[date.getMonth()] };
-};
-
-const formatDistance = (km) => {
-  if (km == null) return null;
-  return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
+const formatEventDate = (startDate) => {
+  if (!startDate) return "";
+  const d = new Date(startDate);
+  if (isNaN(d.getTime())) return "";
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
 };
 
 const EventMiniCard = ({
@@ -42,96 +27,84 @@ const EventMiniCard = ({
   onOfferSeats,
 }) => {
   const hasImage = event.image && event.image.length > 100;
-  const dateChip = getDateChip(event.start_date);
-  const distance = formatDistance(event.distance_km);
-  const companyName = event.company?.name;
+  const category = (event.category || event.tipo || "Evento").toUpperCase();
+  const dateStr = formatEventDate(event.start_date || event.fecha);
+  const locationStr = event.location || event.lugar || event.recinto || "Recinto principal";
+  const tripsCount = event.total_viajes ?? event.viajes_count ?? (tieneViaje ? 1 : 0);
+  const seatsCount = event.total_plazas ?? event.plazas_count ?? (tripsCount * 3);
+
+  const hasTrips = tripsCount > 0;
+  const isFewSeats = hasTrips && seatsCount <= 3;
 
   return (
     <PressableScale
-      style={styles.shell}
+      style={styles.card}
       onPress={onPress}
+      scaleTo={0.97}
       accessibilityLabel={`Evento ${event.name}`}
     >
-      <View style={styles.inner}>
-        <View style={styles.media}>
-          {hasImage ? (
-            <Image
-              source={{
-                uri: event.image.startsWith("data:")
-                  ? event.image
-                  : `data:image/jpeg;base64,${event.image}`,
-              }}
-              style={styles.image}
-            />
-          ) : (
-            <View style={styles.placeholder}>
-              <GradientBackground
-                colors={[COLORS.secondarySoft, COLORS.primarySoft]}
-              />
-              <Ticket size={32} color={COLORS.secondary} strokeWidth={1.6} />
-            </View>
-          )}
-          <GradientBackground
-            colors={["#000000", "#000000"]}
-            opacities={[0, 0.55]}
-            start={{ x: 0, y: 0.35 }}
-            end={{ x: 0, y: 1 }}
+      {/* Cabecera: Foto real o cabecera negra estructurada (Pág. 5) */}
+      <View style={styles.mediaContainer}>
+        {hasImage ? (
+          <Image
+            source={{
+              uri: event.image.startsWith("data:")
+                ? event.image
+                : `data:image/jpeg;base64,${event.image}`,
+            }}
+            style={styles.image}
+            resizeMode="cover"
           />
+        ) : (
+          <View style={styles.blackHeader}>
+            <Text style={styles.recintoText} numberOfLines={1}>
+              {locationStr}
+            </Text>
+          </View>
+        )}
 
-          {dateChip ? (
-            <View style={styles.dateChip}>
-              <Text style={styles.dateDay}>{dateChip.day}</Text>
-              <Text style={styles.dateMonth}>{dateChip.month}</Text>
-            </View>
-          ) : null}
-
-          {distance ? (
-            <View style={styles.distanceChip}>
-              <MapPin size={11} color={COLORS.white} strokeWidth={2.5} />
-              <Text style={styles.distanceText}>{distance}</Text>
-            </View>
-          ) : null}
-
-          {companyName ? (
-            <View style={styles.companyRow}>
-              <Building2 size={12} color={COLORS.white} strokeWidth={2.5} />
-              <Text style={styles.companyText} numberOfLines={1}>
-                {companyName}
-              </Text>
-            </View>
-          ) : null}
+        {/* Badge de categoría oficial en ámbar (Pág. 5 y 7) */}
+        <View style={styles.badgeTopLeft}>
+          <View style={styles.amberCategoryBadge}>
+            <Text style={styles.amberCategoryText}>{category}</Text>
+          </View>
         </View>
 
-        <View style={styles.body}>
-          <Text style={styles.title} numberOfLines={2}>
-            {event.name}
-          </Text>
+        {/* Indicador de urgencia si quedan pocas plazas */}
+        {isFewSeats && (
+          <View style={styles.badgeTopRight}>
+            <Chip label="quedan pocas" variant="amber" size="small" />
+          </View>
+        )}
+      </View>
 
-          {tieneViaje ? (
-            <View style={styles.readyBadge}>
-              <CheckCircle2 size={14} color={COLORS.primary} strokeWidth={2.5} />
-              <Text style={styles.readyText}>Viaje listo</Text>
-            </View>
+      {/* Cuerpo de la tarjeta */}
+      <View style={styles.body}>
+        <Text style={styles.title} numberOfLines={1}>
+          {event.name}
+        </Text>
+
+        <View style={styles.metaRow}>
+          <Text style={styles.metaText} numberOfLines={1}>
+            {locationStr} {dateStr ? `· ${dateStr}` : ""}
+          </Text>
+        </View>
+
+        {/* Fila de impacto: viajes/plazas o llamada a publicar el primero */}
+        <View style={styles.bottomRow}>
+          {hasTrips ? (
+            <Text style={styles.tripsStats}>
+              {tripsCount} {tripsCount === 1 ? "viaje" : "viajes"} · {seatsCount} {seatsCount === 1 ? "plaza" : "plazas"}
+            </Text>
           ) : (
-            <View style={styles.ctaRow}>
-              <TouchableOpacity
-                style={styles.ctaSoft}
-                onPress={onSearchTrip}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-              >
-                <Text style={styles.ctaSoftText}>Buscar viaje</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.ctaSolid}
-                onPress={onOfferSeats}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-              >
-                <Text style={styles.ctaSolidText}>Ofrecer</Text>
-              </TouchableOpacity>
-            </View>
+            <PressableScale onPress={onOfferSeats} scaleTo={0.96}>
+              <Text style={styles.firstTripPrompt}>
+                Sé el primero en publicar viaje →
+              </Text>
+            </PressableScale>
           )}
+
+          <Text style={styles.viewTripsLink}>Ver</Text>
         </View>
       </View>
     </PressableScale>
@@ -139,145 +112,106 @@ const EventMiniCard = ({
 };
 
 const styles = StyleSheet.create({
-  shell: {
-    width: MINI_CARD_WIDTH,
-    borderRadius: RADIUS.xl,
+  card: {
+    width: 250,
     backgroundColor: COLORS.white,
-    ...SHADOWS.card,
-  },
-  inner: {
-    borderRadius: RADIUS.xl,
+    borderRadius: RADIUS.card, // 16px
+    marginRight: SPACING.cardGap, // 12px
+    borderWidth: 1,
+    borderColor: COLORS.border,
     overflow: "hidden",
+    ...SHADOWS.card, // 0 2 8 al 8%
   },
-  media: {
-    height: 136,
-    backgroundColor: COLORS.gray100,
+  mediaContainer: {
+    height: 105,
+    backgroundColor: BRAND.black,
+    position: "relative",
   },
   image: {
     width: "100%",
     height: "100%",
   },
-  placeholder: {
-    flex: 1,
-    alignItems: "center",
+  blackHeader: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: BRAND.black,
     justifyContent: "center",
+    paddingHorizontal: 14,
+    paddingTop: 24,
   },
-  dateChip: {
-    position: "absolute",
-    top: SPACING.sm + 2,
-    left: SPACING.sm + 2,
-    minWidth: 44,
-    paddingVertical: 4,
-    paddingHorizontal: SPACING.xs,
-    borderRadius: 12,
-    backgroundColor: COLORS.white,
-    alignItems: "center",
-  },
-  dateDay: {
-    fontSize: FONTS.lg,
-    lineHeight: 20,
-    fontWeight: "800",
-    color: COLORS.gray900,
-  },
-  dateMonth: {
-    fontSize: 10,
-    lineHeight: 12,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    color: COLORS.primary,
-  },
-  distanceChip: {
-    position: "absolute",
-    top: SPACING.sm + 2,
-    right: SPACING.sm + 2,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 4,
-    borderRadius: RADIUS.full,
-    backgroundColor: "rgba(15,23,42,0.55)",
-  },
-  distanceText: {
-    fontSize: 11,
-    lineHeight: 14,
+  recintoText: {
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+    fontSize: 13,
     fontWeight: "700",
-    color: COLORS.white,
+    color: "#A7B2AE",
   },
-  companyRow: {
+  badgeTopLeft: {
     position: "absolute",
-    left: SPACING.sm + 2,
-    right: SPACING.sm + 2,
-    bottom: SPACING.sm,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
+    top: 10,
+    left: 10,
   },
-  companyText: {
-    flexShrink: 1,
-    fontSize: FONTS.xs,
-    lineHeight: 16,
-    fontWeight: "600",
-    color: COLORS.white,
+  amberCategoryBadge: {
+    backgroundColor: BRAND.accent, // #F2A33C
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  amberCategoryText: {
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+    fontSize: 10,
+    fontWeight: "800",
+    color: BRAND.black,
+    letterSpacing: 0.5,
+  },
+  badgeTopRight: {
+    position: "absolute",
+    top: 10,
+    right: 10,
   },
   body: {
-    padding: SPACING.md,
-    gap: SPACING.sm + 2,
+    padding: SPACING.cardPadding, // 16px
   },
   title: {
-    fontSize: FONTS.md,
-    lineHeight: 21,
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+    fontSize: 15, // Sora 600 / 15
+    lineHeight: 20,
     fontWeight: "700",
-    color: COLORS.gray900,
-    minHeight: 42,
+    color: BRAND.black,
+    marginBottom: 4,
   },
-  readyBadge: {
+  metaRow: {
+    marginBottom: 10,
+  },
+  metaText: {
+    fontFamily: FONTS.typography?.fonts?.body || "Inter",
+    fontSize: 12,
+    color: COLORS.gray600,
+  },
+  bottomRow: {
     flexDirection: "row",
     alignItems: "center",
-    alignSelf: "flex-start",
-    gap: 5,
-    minHeight: 36,
-    paddingHorizontal: SPACING.md,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.primarySoft,
+    justifyContent: "space-between",
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#EEF5F0",
   },
-  readyText: {
-    fontSize: FONTS.xs,
-    lineHeight: 16,
-    fontWeight: "800",
-    color: COLORS.primaryDark,
+  tripsStats: {
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+    fontSize: 12,
+    fontWeight: "700",
+    color: BRAND.greenOnLight, // #0B7A3B
   },
-  ctaRow: {
-    flexDirection: "row",
-    gap: SPACING.sm,
+  firstTripPrompt: {
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+    fontSize: 12,
+    fontWeight: "700",
+    color: BRAND.greenOnLight,
   },
-  ctaSoft: {
-    flex: 1,
-    minHeight: 36,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.gray100,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  ctaSoftText: {
-    fontSize: FONTS.xs,
-    lineHeight: 16,
-    fontWeight: "800",
-    color: COLORS.gray800,
-  },
-  ctaSolid: {
-    flex: 1,
-    minHeight: 36,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  ctaSolidText: {
-    fontSize: FONTS.xs,
-    lineHeight: 16,
-    fontWeight: "800",
-    color: COLORS.white,
+  viewTripsLink: {
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+    fontSize: 12,
+    fontWeight: "700",
+    color: BRAND.black,
   },
 });
 

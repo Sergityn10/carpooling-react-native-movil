@@ -1,8 +1,9 @@
-// YouConnext - SectionHeader
+// YouConnext - SectionHeader (Guía de Estilo v2)
+// Sección Sora 700 · 18/24, Inter para subtítulo y acento verde táctil
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { ChevronRight } from "lucide-react-native";
-import { COLORS, SPACING, FONTS } from "../../constants";
+import { COLORS, SPACING, FONTS, BRAND } from "../../constants";
 
 const SectionHeader = ({ title, subtitle, actionLabel, onActionPress }) => (
   <View style={styles.container}>
@@ -19,7 +20,7 @@ const SectionHeader = ({ title, subtitle, actionLabel, onActionPress }) => (
         accessibilityRole="button"
       >
         <Text style={styles.actionText}>{actionLabel}</Text>
-        <ChevronRight size={16} color={COLORS.primary} strokeWidth={2.5} />
+        <ChevronRight size={15} color={BRAND.greenOnLight} strokeWidth={2.4} />
       </TouchableOpacity>
     ) : null}
   </View>
@@ -30,36 +31,38 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-end",
     justifyContent: "space-between",
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm + 4,
   },
   textCol: {
     flex: 1,
     paddingRight: SPACING.md,
   },
   title: {
-    fontSize: FONTS.xl,
-    lineHeight: 26,
-    fontWeight: "800",
-    letterSpacing: -0.4,
-    color: COLORS.gray900,
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+    fontSize: 18, // Sora 700 · 18/24
+    lineHeight: 24,
+    fontWeight: "700",
+    color: BRAND.black,
+    letterSpacing: -0.3,
   },
   subtitle: {
-    fontSize: FONTS.sm,
-    lineHeight: 20,
-    color: COLORS.gray500,
+    fontFamily: FONTS.typography?.fonts?.body || "Inter",
+    fontSize: 13,
+    lineHeight: 18,
+    color: COLORS.gray600,
     marginTop: 2,
   },
   action: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 2,
+    gap: 3,
     paddingBottom: 2,
   },
   actionText: {
-    fontSize: FONTS.sm,
-    lineHeight: 20,
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+    fontSize: 13,
     fontWeight: "700",
-    color: COLORS.primary,
+    color: BRAND.greenOnLight,
   },
 });
 

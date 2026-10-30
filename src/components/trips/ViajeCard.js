@@ -1,5 +1,5 @@
 // YouConnext - ViajeCard Component
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
 import { Clock, CheckCircle2, XCircle, Play, Users } from "lucide-react-native";
 import {
@@ -11,6 +11,12 @@ import {
   VIAJE_ESTADO,
 } from "../../constants";
 import { formatTripDate, formatTripTime } from "../../services/dateUtils";
+import {
+  getTripDriverName,
+  getTripDriverAvatar,
+  getTripDriverId,
+} from "../../utils";
+import userCache from "../../services/messages/userCache";
 
 const ViajeCard = ({ viaje, onPress, onUnirse, esConductor }) => {
   const estado = viaje.status || viaje.estado;
@@ -64,10 +70,33 @@ const ViajeCard = ({ viaje, onPress, onUnirse, esConductor }) => {
 
   const formatDate = (viaje) => formatTripDate(viaje);
 
-  const conductorNombre =
-    typeof viaje.conductor === "string"
-      ? viaje.conductor
-      : `Conductor #${viaje.conductor || "?"}`;
+  const [driverName, setDriverName] = useState(() => getTripDriverName(viaje, "Conductor"));
+  const [driverAvatar, setDriverAvatar] = useState(() => getTripDriverAvatar(viaje));
+
+  useEffect(() => {
+    const currentName = getTripDriverName(viaje, "Conductor");
+    const currentAvatar = getTripDriverAvatar(viaje);
+    setDriverName(currentName);
+    setDriverAvatar(currentAvatar);
+
+    if (currentName === "Conductor" || !currentAvatar) {
+      const dId = getTripDriverId(viaje);
+      if (dId) {
+        userCache
+          .resolve(dId)
+          .then((user) => {
+            if (user) {
+              const fullName = `${user.name || user.nombre || ""}${user.surname ? " " + user.surname : ""}`.trim();
+              if (fullName) setDriverName(fullName);
+              if (user.img_perfil && !currentAvatar) setDriverAvatar(user.img_perfil);
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, [viaje]);
+
+  const conductorNombre = driverName;
 
   const plazasLibres = viaje.disponible;
   const plazasTotal = viaje.plazas;
@@ -135,9 +164,9 @@ const ViajeCard = ({ viaje, onPress, onUnirse, esConductor }) => {
         )}
         <View style={{ flex: 1 }} />
         <View style={styles.conductorChip}>
-          {viaje.conductor_img ? (
+          {driverAvatar || viaje.conductor_img ? (
             <Image
-              source={{ uri: viaje.conductor_img }}
+              source={{ uri: driverAvatar || viaje.conductor_img }}
               style={styles.conductorAvatar}
             />
           ) : (

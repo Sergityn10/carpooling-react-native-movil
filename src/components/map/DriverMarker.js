@@ -7,6 +7,7 @@ import { Marker } from "react-native-maps";
 import { User, Star, Users } from "lucide-react-native";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../../constants";
 import { getTripOriginCoords } from "../../utils/mapGeoUtils";
+import { getTripDriverName, getTripDriverAvatar } from "../../utils";
 
 const DriverMarker = React.memo(
   ({
@@ -47,19 +48,8 @@ const DriverMarker = React.memo(
       return () => clearTimeout(timer);
     }, [trip.id, selected, siblingCount]);
 
-    const driverAvatar =
-      img_perfil ||
-      trip.conductor_img ||
-      (typeof conductor === "object"
-        ? conductor?.img_perfil || conductor?.avatar || conductor?.photo
-        : null);
-
-    const driverName =
-      (typeof conductor === "object"
-        ? conductor?.nombre || conductor?.name
-        : conductor) ||
-      trip.conductorNombre ||
-      "Conductor";
+    const driverAvatar = getTripDriverAvatar(trip);
+    const driverName = getTripDriverName(trip, "Conductor");
     const rating =
       conductorRating ||
       (typeof conductor === "object" ? conductor?.rating : null) ||

@@ -176,7 +176,13 @@ const MainMenuSection = ({
       {/* Tarjeta Destacada del Monedero con Degradado de Marca */}
       <PressableScale
         style={styles.walletHeroCard}
-        onPress={() => onNavigate("monedero")}
+        onPress={() => {
+          if (navigation?.navigate) {
+            navigation.navigate("Wallet");
+          } else {
+            onNavigate("monedero");
+          }
+        }}
         scaleTo={0.98}
       >
         <View style={styles.walletHeroInner}>
@@ -304,6 +310,17 @@ const MainMenuSection = ({
       {/* Sección: Actividad y Finanzas */}
       <Text style={styles.menuSectionLabel}>Actividad y Finanzas</Text>
       <View style={styles.menuItemsBlock}>
+        <MenuRow
+          icon={Wallet}
+          label="Mi Monedero y movimientos"
+          onPress={() => {
+            if (navigation?.navigate) {
+              navigation.navigate("Wallet");
+            } else {
+              onNavigate("monedero");
+            }
+          }}
+        />
         <MenuRow
           icon={History}
           label="Historial de viajes"

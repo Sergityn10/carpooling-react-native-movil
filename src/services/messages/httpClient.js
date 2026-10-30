@@ -1,6 +1,7 @@
 // YouConnext - HTTP Client for Messages API (api-messages, port 4002)
 import { NativeModules, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import tokenStorage from "../tokenStorage";
 import httpClient from "../httpClient";
 
 const getMetroHost = () => {
@@ -153,7 +154,10 @@ const messagesHttpClient = new MessagesHttpClient();
 
 async function asegurarToken() {
   try {
-    const token = await AsyncStorage.getItem("@youconnext_token");
+    let token = await tokenStorage.getAuthToken();
+    if (!token) {
+      token = await AsyncStorage.getItem("@youconnext_token");
+    }
     if (token) {
       messagesHttpClient.setToken(token);
     }

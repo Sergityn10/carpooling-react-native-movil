@@ -24,6 +24,11 @@ import { useUser } from "../context/UserContext";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../constants";
 import { reservaService } from "../services/travels/reservaService";
 import { comentarioService } from "../services/travels/comentarioService";
+import {
+  getTripDriverName,
+  getTripDriverAvatar,
+  getTripDriverId,
+} from "../utils";
 
 const ValorarViajeScreen = ({ route, navigation }) => {
   const { user } = useUser();
@@ -65,16 +70,9 @@ const ValorarViajeScreen = ({ route, navigation }) => {
         });
       setPasajeros(pasajerosData);
 
-      const conductorId = viaje?.conductor_id || viaje?.conductor?.id;
-      const conductorNombre =
-        typeof viaje?.conductor === "object"
-          ? `${viaje?.conductor?.nombre || ""} ${viaje?.conductor?.apellidos || ""}`.trim() ||
-            "Conductor"
-          : viaje?.conductor || "Conductor";
-      const conductorImg =
-        typeof viaje?.conductor === "object"
-          ? viaje?.conductor?.img_perfil || null
-          : null;
+      const conductorId = viaje?.conductor_id || viaje?.conductor?.id || getTripDriverId(viaje);
+      const conductorNombre = getTripDriverName(viaje, "Conductor");
+      const conductorImg = getTripDriverAvatar(viaje);
 
       if (conductorId) {
         setConductor({

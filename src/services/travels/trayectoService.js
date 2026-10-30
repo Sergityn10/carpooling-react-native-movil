@@ -164,7 +164,7 @@ async function obtenerTrayectosPorEvento(eventoId, direccion) {
 // Buscar trayectos por evento cerca de tu ubicación — GET /api/trayecto/evento/:eventoId/cerca
 async function buscarTrayectosPorEventoCerca(
   eventoId,
-  { lat, lng, ciudad, radius, direccion, fecha } = {},
+  { lat, lng, ciudad, radius, direccion, fecha, userId } = {},
 ) {
   const params = new URLSearchParams();
   if (lat != null) params.set("lat", String(lat));
@@ -173,6 +173,7 @@ async function buscarTrayectosPorEventoCerca(
   if (radius != null) params.set("radius", String(radius));
   if (direccion) params.set("direccion", direccion);
   if (fecha) params.set("fecha", fecha);
+  if (userId) params.set("userId", String(userId));
   const query = params.toString() ? `?${params.toString()}` : "";
   return httpClient.request(`/api/trayecto/evento/${eventoId}/cerca${query}`);
 }
@@ -203,7 +204,7 @@ async function eliminarTrayecto(id) {
 
 // Obtener trayectos por viewport (mapa interactivo v2.0) — GET /api/trayecto/viewport
 async function obtenerTrayectosViewport(
-  { minLat, maxLat, minLng, maxLng, zoom, precision, format = "both", limit = 50, date, minSeats, maxPrice, eventoId } = {},
+  { minLat, maxLat, minLng, maxLng, zoom, precision, format = "both", limit = 50, date, fechaFin, minSeats, maxPrice, eventoId, hasEvent, userId } = {},
   signal
 ) {
   const params = new URLSearchParams();
@@ -221,12 +222,20 @@ async function obtenerTrayectosViewport(
     params.set("fecha", date);
     params.set("date", date);
   }
+  if (fechaFin) {
+    params.set("fechaFin", fechaFin);
+  }
   if (minSeats) {
     params.set("plazas", String(minSeats));
     params.set("minSeats", String(minSeats));
   }
-  if (maxPrice) params.set("maxPrice", String(maxPrice));
+  if (maxPrice) {
+    params.set("maxPrice", String(maxPrice));
+    params.set("precioMax", String(maxPrice));
+  }
   if (eventoId) params.set("eventoId", eventoId);
+  if (hasEvent != null) params.set("hasEvent", String(hasEvent));
+  if (userId) params.set("userId", String(userId));
 
   const query = params.toString() ? `?${params.toString()}` : "";
   return httpClient.request(`/api/trayecto/viewport${query}`, { signal });
@@ -234,7 +243,7 @@ async function obtenerTrayectosViewport(
 
 // Fallback local: filtrar trayectos disponibles por BBox (cuando el backend no tiene endpoint /viewport)
 async function obtenerTrayectosViewportLocal(
-  { minLat, maxLat, minLng, maxLng, zoom, precision, limit = 50, date, minSeats, maxPrice, eventoId } = {}
+  { minLat, maxLat, minLng, maxLng, zoom, precision, limit = 50, date, fechaFin, minSeats, maxPrice, eventoId, hasEvent, currentUserId } = {}
 ) {
   try {
     const res = await obtenerTrayectos({ limit: 200 });
@@ -243,6 +252,10 @@ async function obtenerTrayectosViewportLocal(
 
     return allTrips
       .filter((t) => {
+        if (currentUserId) {
+          const condId = t.conductor_id || t.conductor?.id || t.conductor;
+          if (condId && String(condId).toLowerCase() === String(currentUserId).toLowerCase()) return false;
+        }
         const estado = (t.status || t.estado || "").toLowerCase();
         const disponible = t.disponible ?? t.plazas ?? 0;
         const tripDateObj = parseTripDate(t);
@@ -270,6 +283,9 @@ async function obtenerTrayectosViewportLocal(
           const tripDateObj = parseTripDate(t);
           if (!tripDateObj) return true;
           const tripDateStr = tripDateObj.toISOString().split("T")[0];
+          if (fechaFin) {
+            return tripDateStr >= date && tripDateStr <= fechaFin;
+          }
           return tripDateStr === date;
         }
         return true;
@@ -283,6 +299,7 @@ async function obtenerTrayectosViewportLocal(
         return true;
       })
       .filter((t) => {
+        if (hasEvent && !t.evento_id && !t.eventoId) return false;
         if (eventoId && t.evento_id !== eventoId && t.eventoId !== eventoId) return false;
         return true;
       })

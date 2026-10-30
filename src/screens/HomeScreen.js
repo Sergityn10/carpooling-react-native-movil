@@ -1,4 +1,5 @@
-// YouConnext - HomeScreen (UI/UX Redesign)
+// YouConnext - HomeScreen (Guía de Estilo v2)
+// Cabecera estructurada negra #0B0F0E, chips redondos, eventos con badge ámbar y tarjeta de viaje viva
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
@@ -10,12 +11,11 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Location from "expo-location";
-import { Car, ScanLine, Ticket } from "lucide-react-native";
+import { Car, Ticket } from "lucide-react-native";
 import { useUser } from "../context/UserContext";
-import { COLORS, SPACING } from "../constants";
+import { COLORS, SPACING, BRAND } from "../constants";
 import {
   HomeHeader,
-  QuickActions,
   SectionHeader,
   EmptyState,
   HeroTripCard,
@@ -26,6 +26,7 @@ import {
   HeroCardSkeleton,
   CarouselSkeleton,
   AnimatedCardEntrance,
+  Chip,
 } from "../components";
 import { trayectoService } from "../services/travels/trayectoService";
 import { eventService } from "../services/eventService";
@@ -37,39 +38,47 @@ import {
   formatTripCountdown as _formatTripCountdown,
 } from "../services/dateUtils";
 import { messageService } from "../services/messages/messageService";
+import {
+  enrichTripsWithDriverProfiles,
+  getTripDriverName,
+  getTripDriverId,
+} from "../utils";
+
+const CATEGORIES = ["Todos", "Conciertos", "Deporte", "Ferias"];
 
 const HomeScreen = ({ navigation }) => {
   const { user } = useUser();
   const insets = useSafeAreaInsets();
   const [searchSheetVisible, setSearchSheetVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState("Todos");
 
   const [proximosViajes, setProximosViajes] = useState(
-    homeCache.getProximosViajes() || [],
+    homeCache.getProximosViajes() || []
   );
   const [loadingProximos, setLoadingProximos] = useState(
-    !(homeCache.getProximosViajes() && homeCache.getProximosViajes().length > 0),
+    !(homeCache.getProximosViajes() && homeCache.getProximosViajes().length > 0)
   );
 
   const [joinedEvents, setJoinedEvents] = useState(
-    homeCache.getJoinedEvents() || [],
+    homeCache.getJoinedEvents() || []
   );
   const [loadingJoined, setLoadingJoined] = useState(
-    !(homeCache.getJoinedEvents() && homeCache.getJoinedEvents().length > 0),
+    !(homeCache.getJoinedEvents() && homeCache.getJoinedEvents().length > 0)
   );
 
   const [eventosCercanos, setEventosCercanos] = useState(
-    homeCache.getEventosCercanos() || [],
+    homeCache.getEventosCercanos() || []
   );
   const [loadingEventos, setLoadingEventos] = useState(
-    !(homeCache.getEventosCercanos() && homeCache.getEventosCercanos().length > 0),
+    !(homeCache.getEventosCercanos() && homeCache.getEventosCercanos().length > 0)
   );
 
   const [viajesPopulares, setViajesPopulares] = useState(
-    homeCache.getViajesPopulares() || [],
+    homeCache.getViajesPopulares() || []
   );
   const [loadingPopulares, setLoadingPopulares] = useState(
-    !(homeCache.getViajesPopulares() && homeCache.getViajesPopulares().length > 0),
+    !(homeCache.getViajesPopulares() && homeCache.getViajesPopulares().length > 0)
   );
 
   const handleSearch = (params) => {
@@ -167,6 +176,18 @@ const HomeScreen = ({ navigation }) => {
     if (cached && cached.length > 0) {
       setViajesPopulares(cached);
       setLoadingPopulares(false);
+      // Re-enriquecer en segundo plano si hay trayectos sin nombre descifrado
+      const needsEnrich = cached.some((t) => getTripDriverName(t) === "Conductor");
+      if (needsEnrich) {
+        enrichTripsWithDriverProfiles(cached)
+          .then((enriched) => {
+            if (Array.isArray(enriched) && enriched.length > 0) {
+              setViajesPopulares(enriched);
+              homeCache.setViajesPopulares(enriched);
+            }
+          })
+          .catch(() => {});
+      }
       return;
     }
     setLoadingPopulares(true);
@@ -176,6 +197,10 @@ const HomeScreen = ({ navigation }) => {
       const now = Date.now();
       const safeData = (Array.isArray(data) ? data : [])
         .filter((t) => {
+          if (user?.id) {
+            const condId = t.conductor_id || t.conductor?.id || t.conductor;
+            if (condId && String(condId).toLowerCase() === String(user.id).toLowerCase()) return false;
+          }
           const estado = (t.status || t.estado || "").toLowerCase();
           const disponible = t.disponible ?? t.plazas ?? 0;
           const parsed = parseTripDate(t);
@@ -195,6 +220,16 @@ const HomeScreen = ({ navigation }) => {
         .slice(0, 8);
       setViajesPopulares(safeData);
       homeCache.setViajesPopulares(safeData);
+
+      // Enriquecer en segundo plano con perfiles de conductores descifrados
+      enrichTripsWithDriverProfiles(safeData)
+        .then((enriched) => {
+          if (Array.isArray(enriched) && enriched.length > 0) {
+            setViajesPopulares(enriched);
+            homeCache.setViajesPopulares(enriched);
+          }
+        })
+        .catch(() => {});
     } catch (err) {
       console.warn("Error al cargar viajes populares:", err.message);
       setViajesPopulares([]);
@@ -249,23 +284,6 @@ const HomeScreen = ({ navigation }) => {
     return "Buenas noches";
   };
 
-  const quickActionsData = [
-    {
-      icon: Car,
-      label: "Crear viaje",
-      subtitle: "Publica tus plazas libres",
-      gradient: COLORS.gradient.hero,
-      onPress: () => navigation.navigate("CrearViaje"),
-    },
-    {
-      icon: ScanLine,
-      label: "Escanear QR",
-      subtitle: "Valida tu billete",
-      gradient: COLORS.gradient.ocean,
-      onPress: () => navigation.navigate("EscanearQR"),
-    },
-  ];
-
   const loadingInitial =
     (loadingProximos || loadingJoined) &&
     proximosViajes.length === 0 &&
@@ -284,20 +302,30 @@ const HomeScreen = ({ navigation }) => {
   const eventTieneViajeAsociado = useCallback(
     (eventId) =>
       proximosViajes.some(
-        (v) => v.evento_id === eventId || v.eventoId === eventId,
+        (v) => v.evento_id === eventId || v.eventoId === eventId
       ),
-    [proximosViajes],
+    [proximosViajes]
   );
 
   const joinedEventIds = useMemo(
     () => new Set(joinedEvents.map((e) => e.id)),
-    [joinedEvents],
+    [joinedEvents]
   );
 
-  const eventosDescubrir = useMemo(
-    () => eventosCercanos.filter((e) => !joinedEventIds.has(e.id)),
-    [eventosCercanos, joinedEventIds],
-  );
+  // Filtro por categoría (Pág. 7: Todos, Conciertos, Deporte, Ferias)
+  const eventosDescubrir = useMemo(() => {
+    const list = eventosCercanos.filter((e) => !joinedEventIds.has(e.id));
+    if (selectedCategory === "Todos") return list;
+
+    const term = selectedCategory.toLowerCase();
+    return list.filter((e) => {
+      const cat = (e.category || e.tipo || e.name || "").toLowerCase();
+      if (term === "conciertos") return cat.includes("conciert") || cat.includes("músic") || cat.includes("festiv");
+      if (term === "deporte") return cat.includes("deport") || cat.includes("fútbol") || cat.includes("partid");
+      if (term === "ferias") return cat.includes("feria") || cat.includes("fiesta");
+      return cat.includes(term);
+    });
+  }, [eventosCercanos, joinedEventIds, selectedCategory]);
 
   const handleOpenHeroChat = async () => {
     if (!heroViaje) return;
@@ -326,9 +354,7 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const conductorNombre = heroViaje
-    ? typeof heroViaje.conductor === "object"
-      ? heroViaje.conductor?.nombre || heroViaje.conductor?.name || "Conductor"
-      : heroViaje.conductor || "Conductor"
+    ? getTripDriverName(heroViaje, "Conductor")
     : "";
 
   const renderEventoMiniCard = ({ item, index }) => (
@@ -364,9 +390,9 @@ const HomeScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" transparent backgroundColor="transparent" />
+      <StatusBar barStyle="light-content" backgroundColor={BRAND.black} />
 
-      {/* Header moderno con degradado y buscador superpuesto */}
+      {/* Cabecera Oficial Negra v2 con Logo, Saludo y Buscador */}
       <HomeHeader
         user={user}
         greeting={getSaludo()}
@@ -389,50 +415,68 @@ const HomeScreen = ({ navigation }) => {
           />
         }
       >
-        {/* Accesos rápidos con microtarjetas */}
-        <View style={styles.section}>
-          <QuickActions actions={quickActionsData} />
+        {/* Fila Oficial de Chips de Filtro (Pág. 4 y 7: Todos, Conciertos, Deporte, Ferias) */}
+        <View style={styles.filterSection}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterScroll}
+          >
+            {CATEGORIES.map((cat) => (
+              <Chip
+                key={cat}
+                label={cat}
+                active={selectedCategory === cat}
+                onPress={() => setSelectedCategory(cat)}
+                style={styles.categoryChip}
+              />
+            ))}
+          </ScrollView>
         </View>
 
-        {/* Sección de Actividad Inminente / Próximo Plan */}
-        <View style={styles.section}>
-          {loadingInitial ? (
-            <HeroCardSkeleton />
-          ) : heroViaje ? (
-            <HeroTripCard
-              viaje={heroViaje}
-              countdown={formatCountdown(heroViaje.hora)}
-              dateLabel={formatFecha(heroViaje.hora)}
-              timeLabel={formatHora(heroViaje.hora)}
-              conductorNombre={conductorNombre}
-              onPress={() =>
-                navigation.navigate("ViajeDetalle", { viaje: heroViaje })
-              }
-              onChatPress={handleOpenHeroChat}
+        {/* Sección de Actividad Inminente si el usuario tiene un viaje próximo */}
+        {heroViaje && (
+          <View style={styles.section}>
+            <SectionHeader
+              title="Tu próximo viaje"
+              subtitle="Trayecto confirmado listo para salir"
             />
-          ) : heroEvento ? (
-            <HeroEventCard
-              evento={heroEvento}
-              tieneViaje={eventTieneViajeAsociado(heroEvento.id)}
-              onPress={() =>
-                navigation.navigate("EventDetalle", {
-                  eventId: heroEvento.id,
-                  event: heroEvento,
-                })
-              }
-              onSearchTrip={() =>
-                navigation.navigate("SearchTab", {
-                  searchParams: { destination: heroEvento.name },
-                })
-              }
-              onOfferSeats={() =>
-                navigation.navigate("CrearViaje", { evento: heroEvento })
-              }
-            />
-          ) : null}
-        </View>
+            {loadingInitial ? (
+              <HeroCardSkeleton />
+            ) : (
+              <HeroTripCard
+                viaje={heroViaje}
+                countdown={formatCountdown(heroViaje.hora)}
+                dateLabel={formatFecha(heroViaje.hora)}
+                timeLabel={formatHora(heroViaje.hora)}
+                conductorNombre={conductorNombre}
+                onPress={() => {
+                  const driverId = getTripDriverId(heroViaje);
+                  const isConductor =
+                    heroViaje?.rol === "conductor" ||
+                    (heroViaje?.rol !== "pasajero" &&
+                      Boolean(
+                        user?.id &&
+                          driverId &&
+                          String(driverId).toLowerCase() ===
+                            String(user.id).toLowerCase(),
+                      ));
+                  if (isConductor) {
+                    navigation.navigate("ViajeDetalle", { viaje: heroViaje });
+                  } else {
+                    navigation.navigate("MiViaje", {
+                      viaje: heroViaje,
+                      id: heroViaje.id,
+                    });
+                  }
+                }}
+                onChatPress={handleOpenHeroChat}
+              />
+            )}
+          </View>
+        )}
 
-        {/* Eventos a los que estás unido */}
+        {/* Sección: Eventos a los que estás unido */}
         {eventosPendientes.length > 0 && (
           <View style={styles.section}>
             <SectionHeader
@@ -448,18 +492,15 @@ const HomeScreen = ({ navigation }) => {
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalListContent}
-              ItemSeparatorComponent={() => (
-                <View style={{ width: SPACING.md }} />
-              )}
             />
           </View>
         )}
 
-        {/* Eventos destacados / cerca de ti */}
+        {/* Sección: Eventos cerca de ti (Pág. 7) */}
         <View style={styles.section}>
           <SectionHeader
-            title="Descubre eventos"
-            subtitle="Cerca de ti para tu próximo viaje"
+            title="Eventos cerca de ti"
+            subtitle="Elige evento y comparte coche para llegar"
             actionLabel="Ver todos"
             onActionPress={() => navigation.navigate("SearchTab")}
           />
@@ -468,10 +509,12 @@ const HomeScreen = ({ navigation }) => {
           ) : eventosDescubrir.length === 0 ? (
             <EmptyState
               icon={Ticket}
-              tint={COLORS.secondary}
-              tintSoft={COLORS.secondarySoft}
-              title="Sin novedades por ahora"
-              subtitle="Vuelve más tarde para descubrir eventos cerca de ti"
+              tint={BRAND.accent}
+              tintSoft="#FBF0DE"
+              title="Todavía no hay eventos en esta categoría"
+              subtitle="¿Vas a ir a algún plan? Crea el evento o publica tu viaje."
+              actionLabel="Publicar mi viaje"
+              onActionPress={() => navigation.navigate("CrearViaje")}
             />
           ) : (
             <FlatList
@@ -481,19 +524,16 @@ const HomeScreen = ({ navigation }) => {
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalListContent}
-              ItemSeparatorComponent={() => (
-                <View style={{ width: SPACING.md }} />
-              )}
             />
           )}
         </View>
 
-        {/* Viajes disponibles / populares */}
+        {/* Sección: Viajes disponibles (Pág. 5) */}
         <View style={styles.section}>
           <SectionHeader
             title="Viajes disponibles"
-            subtitle="Trayectos activos con plazas libres"
-            actionLabel="Buscar"
+            subtitle="Plazas libres con conductores verificados"
+            actionLabel="Explorar"
             onActionPress={() => navigation.navigate("SearchTab")}
           />
           {loadingPopulares ? (
@@ -501,30 +541,31 @@ const HomeScreen = ({ navigation }) => {
           ) : viajesPopulares.length === 0 ? (
             <EmptyState
               icon={Car}
-              tint={COLORS.primary}
-              tintSoft={COLORS.primarySoft}
-              title="Sin viajes disponibles"
-              subtitle="Sé el primero en compartir tu trayecto"
-              actionLabel="Crear un viaje"
+              tint={BRAND.greenOnLight}
+              tintSoft="#E3F4EA"
+              title="Todavía no hay viajes publicados"
+              subtitle="¿Tienes coche? Publica el tuyo y llena las plazas."
+              actionLabel="Publicar mi viaje"
               onActionPress={() => navigation.navigate("CrearViaje")}
             />
           ) : (
-            <FlatList
-              data={viajesPopulares}
-              keyExtractor={(item) => `pop-${item.id}`}
-              renderItem={renderTripMiniCard}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalListContent}
-              ItemSeparatorComponent={() => (
-                <View style={{ width: SPACING.md }} />
-              )}
-            />
+            <View style={styles.verticalTripList}>
+              {viajesPopulares.map((item, index) => (
+                <AnimatedCardEntrance key={`pop-${item.id || index}`} index={index}>
+                  <TripMiniCard
+                    viaje={item}
+                    dateLabel={formatFecha(item.hora)}
+                    timeLabel={formatHora(item.hora)}
+                    onPress={() => navigation.navigate("ViajeDetalle", { viaje: item })}
+                  />
+                </AnimatedCardEntrance>
+              ))}
+            </View>
           )}
         </View>
       </ScrollView>
 
-      {/* Hoja de búsqueda emergente */}
+      {/* Hoja de búsqueda modal */}
       <SearchBottomSheet
         visible={searchSheetVisible}
         onClose={() => setSearchSheetVisible(false)}
@@ -537,21 +578,34 @@ const HomeScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.background, // #EEF5F0
   },
   content: {
     flex: 1,
   },
   contentContainer: {
-    paddingTop: SPACING.lg,
+    paddingTop: SPACING.md,
     paddingBottom: SPACING.xxl * 2,
+  },
+  filterSection: {
+    marginBottom: SPACING.lg,
+  },
+  filterScroll: {
+    paddingHorizontal: SPACING.screenMargin, // 20px
+    gap: 8,
+  },
+  categoryChip: {
+    marginRight: 4,
   },
   section: {
     marginBottom: SPACING.xl,
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: SPACING.screenMargin, // 20px
   },
   horizontalListContent: {
-    paddingRight: SPACING.lg,
+    paddingRight: SPACING.screenMargin,
+  },
+  verticalTripList: {
+    gap: 4,
   },
 });
 

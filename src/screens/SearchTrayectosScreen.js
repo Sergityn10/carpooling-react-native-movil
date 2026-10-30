@@ -36,13 +36,16 @@ import {
   MapaExploracionView,
 } from "../components";
 import { trayectoService } from "../services/travels/trayectoService";
+import { enrichTripsWithDriverProfiles } from "../utils";
 import { eventService } from "../services/eventService";
+import { useUser } from "../context/UserContext";
 
 const TAB_MAPA = "mapa";
 const TAB_TRAYECTOS = "trayectos";
 const TAB_EVENTOS = "eventos";
 
 const SearchTrayectosScreen = ({ navigation, route }) => {
+  const { user } = useUser();
   const initialParams = route.params?.searchParams || null;
   const initialTab = route.params?.tab || (initialParams ? TAB_TRAYECTOS : TAB_MAPA);
 
@@ -74,7 +77,28 @@ const SearchTrayectosScreen = ({ navigation, route }) => {
         passengers: params.passengers || 1,
       });
       const data = response.data || response.trayectos || response || [];
-      setResults(Array.isArray(data) ? data : []);
+      let safeData = Array.isArray(data) ? data : [];
+      if (user?.id) {
+        safeData = safeData.filter(
+          (t) => String(t.conductor_id || t.conductor?.id || t.conductor).toLowerCase() !== String(user.id).toLowerCase(),
+        );
+      }
+      setResults(safeData);
+
+      if (safeData.length > 0) {
+        enrichTripsWithDriverProfiles(safeData)
+          .then((enriched) => {
+            if (Array.isArray(enriched) && enriched.length > 0) {
+              const filteredEnriched = user?.id
+                ? enriched.filter(
+                    (t) => String(t.conductor_id || t.conductor?.id || t.conductor).toLowerCase() !== String(user.id).toLowerCase(),
+                  )
+                : enriched;
+              setResults(filteredEnriched);
+            }
+          })
+          .catch(() => {});
+      }
     } catch (err) {
       setError(err.message || "Error al buscar trayectos");
       setResults([]);
@@ -390,6 +414,7 @@ const SearchTrayectosScreen = ({ navigation, route }) => {
           <MapaExploracionView
             style={styles.mapComponent}
             onTripSelect={handleViajePress}
+            filters={{ currentUserId: user?.id }}
           />
         </View>
       ) : activeTab === TAB_TRAYECTOS ? (

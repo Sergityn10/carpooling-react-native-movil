@@ -1,36 +1,40 @@
-// YouConnext - EmptyState
+// YouConnext - EmptyState (Guía de Estilo v2, Pág. 6)
+// "Un estado vacío nunca es un callejón sin salida: siempre propone el siguiente paso"
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
-import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../../constants";
+import { View, Text, StyleSheet } from "react-native";
+import { COLORS, SPACING, RADIUS, FONTS, BRAND, SHADOWS } from "../../constants";
+import Button from "../common/Button";
 
 const EmptyState = ({
   icon: Icon,
-  tint = COLORS.primary,
-  tintSoft = COLORS.primarySoft,
+  tint = BRAND.greenOnLight,
+  tintSoft = "#E3F4EA",
   title,
   subtitle,
   actionLabel,
   onActionPress,
+  actionVariant = "driver", // por defecto acción de conductor negro estructurado (pág. 6)
 }) => (
   <View style={styles.card}>
     {Icon ? (
       <View style={[styles.iconOuter, { backgroundColor: tintSoft }]}>
         <View style={styles.iconInner}>
-          <Icon size={26} color={tint} strokeWidth={2} />
+          <Icon size={24} color={tint} strokeWidth={2.2} />
         </View>
       </View>
     ) : null}
+
     <Text style={styles.title}>{title}</Text>
     {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+
     {actionLabel && onActionPress ? (
-      <TouchableOpacity
-        style={[styles.action, { backgroundColor: tint }]}
+      <Button
+        title={actionLabel}
         onPress={onActionPress}
-        activeOpacity={0.85}
-        accessibilityRole="button"
-      >
-        <Text style={styles.actionText}>{actionLabel}</Text>
-      </TouchableOpacity>
+        variant={actionVariant}
+        size="medium"
+        style={styles.actionButton}
+      />
     ) : null}
   </View>
 );
@@ -41,53 +45,49 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.xl,
     paddingHorizontal: SPACING.lg,
     backgroundColor: COLORS.white,
-    borderRadius: RADIUS.xl,
-    ...SHADOWS.soft,
+    borderRadius: RADIUS.card, // 16px
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.card,
   },
   iconOuter: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   iconInner: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: COLORS.white,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E2EAE5",
   },
   title: {
-    fontSize: FONTS.md,
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+    fontSize: 16,
     lineHeight: 22,
     fontWeight: "700",
-    color: COLORS.gray900,
+    color: BRAND.black,
     textAlign: "center",
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: FONTS.sm,
-    lineHeight: 20,
-    color: COLORS.gray500,
+    fontFamily: FONTS.typography?.fonts?.body || "Inter",
+    fontSize: 13,
+    lineHeight: 18,
+    color: COLORS.gray600,
     textAlign: "center",
-    marginTop: SPACING.xs,
-    maxWidth: 280,
+    marginBottom: SPACING.md,
+    paddingHorizontal: 8,
   },
-  action: {
-    marginTop: SPACING.md,
-    minHeight: 44,
-    borderRadius: RADIUS.full,
-    paddingHorizontal: SPACING.lg,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  actionText: {
-    fontSize: FONTS.sm,
-    lineHeight: 20,
-    fontWeight: "700",
-    color: COLORS.white,
+  actionButton: {
+    minWidth: 180,
   },
 });
 

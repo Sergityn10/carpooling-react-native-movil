@@ -2,17 +2,52 @@
 // Caches public user info (id, name, img_perfil) so we don't refetch on every chat open.
 import { usuarioService } from "../usuarioService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import tokenStorage from "../tokenStorage";
 
 const cache = new Map();
 
-const decodeJwtPayload = (token) => {
+/**
+ * Decodificador Base64URL puro en JavaScript sin dependencia de atob (compatible con Hermes/React Native)
+ */
+const base64UrlDecode = (str) => {
+  if (!str || typeof str !== "string") return "";
+  let base64 = str.replace(/-/g, "+").replace(/_/g, "/");
+  while (base64.length % 4) {
+    base64 += "=";
+  }
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+  let output = "";
+  for (let i = 0; i < base64.length; i += 4) {
+    const enc1 = chars.indexOf(base64.charAt(i));
+    const enc2 = chars.indexOf(base64.charAt(i + 1));
+    const enc3 = chars.indexOf(base64.charAt(i + 2));
+    const enc4 = chars.indexOf(base64.charAt(i + 3));
+
+    if (enc1 === -1 || enc2 === -1) break;
+
+    const chr1 = (enc1 << 2) | (enc2 >> 4);
+    const chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+    const chr3 = ((enc3 & 3) << 6) | enc4;
+
+    output += String.fromCharCode(chr1);
+    if (enc3 !== 64 && enc3 !== -1) output += String.fromCharCode(chr2);
+    if (enc4 !== 64 && enc4 !== -1) output += String.fromCharCode(chr3);
+  }
+  return output;
+};
+
+export const decodeJwtPayload = (token) => {
+  if (!token || typeof token !== "string") return null;
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
   try {
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-    const payload = parts[1];
-    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
-    return JSON.parse(json);
-  } catch {
+    const jsonStr = base64UrlDecode(parts[1]);
+    return JSON.parse(jsonStr);
+  } catch (err) {
+    if (typeof __DEV__ !== "undefined" && __DEV__) {
+      console.warn("[userCache] Error decodificando JWT:", err?.message);
+    }
     return null;
   }
 };
@@ -21,32 +56,56 @@ let resolvedUuid = null;
 
 const userCache = {
   // Resolve the current user's UUID from the JWT (not user.id from main API)
-  async getMyUuid() {
+  async getMyUuid(fallbackUserId = null) {
     if (resolvedUuid) return resolvedUuid;
     try {
-      const token = await AsyncStorage.getItem("@youconnext_token");
+      let token = await tokenStorage.getAuthToken();
+      if (!token) {
+        token = await AsyncStorage.getItem("@youconnext_token");
+      }
       if (token) {
         const payload = decodeJwtPayload(token);
         if (payload) {
           resolvedUuid = String(
-            payload.id || payload.user_id || payload.userId || "",
+            payload.id ||
+              payload.user_id ||
+              payload.userId ||
+              payload.sub ||
+              "",
           );
-          console.log("[userCache] Resolved my UUID from JWT:", resolvedUuid);
+          if (typeof __DEV__ !== "undefined" && __DEV__) {
+            console.log("[userCache] Resolved my UUID from JWT:", resolvedUuid);
+          }
         }
       }
-    } catch {}
+    } catch (err) {
+      if (typeof __DEV__ !== "undefined" && __DEV__) {
+        console.warn("[userCache] Error al obtener UUID:", err?.message);
+      }
+    }
+
+    if (!resolvedUuid && fallbackUserId) {
+      resolvedUuid = String(fallbackUserId);
+    }
+
     return resolvedUuid || "";
   },
 
   // Synchronous version for use in render functions (returns cached value)
-  getMyUuidSync() {
-    return resolvedUuid || "";
+  getMyUuidSync(fallbackUserId = null) {
+    return resolvedUuid || (fallbackUserId ? String(fallbackUserId) : "");
   },
 
   // Get a single user from cache (no fetch)
   get(id) {
     if (!id) return null;
     return cache.get(String(id)) || null;
+  },
+
+  // Set a single user into cache
+  set(id, user) {
+    if (!id || !user) return;
+    cache.set(String(id), user);
   },
 
   // Get multiple users from cache (returns only cached ones)

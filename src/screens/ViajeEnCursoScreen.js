@@ -40,6 +40,7 @@ import {
   formatTripTime,
 } from "../services/dateUtils";
 import { getEstadoConfig } from "../utils/viajeEstado";
+import { getTripDriverId } from "../utils";
 import useLiveTracking from "../hooks/useLiveTracking";
 
 const ViajeEnCursoScreen = ({ route, navigation }) => {
@@ -87,9 +88,14 @@ const ViajeEnCursoScreen = ({ route, navigation }) => {
     estadoViaje === "pendiente" || estadoViaje === "pendiente_pago";
 
   const esConductor =
+    viaje?.rol !== "pasajero" &&
     !!user?.id &&
     [viaje?.conductor, viaje?.conductor_id, viaje?.conductorId].some(
-      (id) => id === user.id,
+      (id) =>
+        id &&
+        (String(id).toLowerCase() === String(user.id).toLowerCase() ||
+          (typeof id === "object" &&
+            String(id.id).toLowerCase() === String(user.id).toLowerCase())),
     );
   const enCurso = estadoViaje === "en curso" || estadoViaje === "activo";
 

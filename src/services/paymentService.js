@@ -1,5 +1,6 @@
 // YouConnext - Payment Service
 import httpClient from "./httpClient";
+import { generateUUID } from "../utils/uuid";
 
 // Crear cuenta Stripe Connect — POST /api/payment/stripe-connect
 async function createStripeConnect(data) {
@@ -64,6 +65,26 @@ async function getCashBalance() {
   return httpClient.request("/api/payment/cash-balance");
 }
 
+// Obtener movimientos unificados con filtros y paginación — GET /api/payment/movements
+async function getMovements({
+  role = "all",
+  type,
+  limit = 20,
+  offset = 0,
+  from_date,
+  to_date,
+} = {}) {
+  const query = new URLSearchParams();
+  if (role && role !== "all") query.set("role", role);
+  if (type) query.set("type", type);
+  if (limit) query.set("limit", String(limit));
+  if (offset !== undefined && offset !== null) query.set("offset", String(offset));
+  if (from_date) query.set("from_date", from_date);
+  if (to_date) query.set("to_date", to_date);
+  const qs = query.toString();
+  return httpClient.request(`/api/payment/movements${qs ? `?${qs}` : ""}`);
+}
+
 // Obtener balance del monedero (Wallet) — GET /api/payment/wallet-balance
 async function getWalletBalance() {
   return httpClient.request("/api/payment/wallet-balance");
@@ -76,11 +97,19 @@ async function getWalletTransactions(limit = 50, offset = 0) {
   );
 }
 
-// Crear Payout del monedero — POST /api/payment/wallet-payout
+// Crear Payout del monedero con clave de idempotencia UUID — POST /api/payment/wallet-payout
 async function createWalletPayout(data) {
+  const idempotencyKey = data?.idempotency_key || generateUUID();
+  const body = {
+    ...data,
+    idempotency_key: idempotencyKey,
+  };
   return httpClient.request("/api/payment/wallet-payout", {
     method: "POST",
-    body: data,
+    headers: {
+      "Idempotency-Key": idempotencyKey,
+    },
+    body,
   });
 }
 
@@ -128,6 +157,7 @@ async function getCheckoutLink(idReserva) {
 }
 
 export const paymentService = {
+  getMovements,
   createStripeConnect,
   getStripeConnectLink,
   getStripeConnect,

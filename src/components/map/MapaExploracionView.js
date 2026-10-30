@@ -5,6 +5,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { View, StyleSheet, Text, Platform } from "react-native";
 import MapView, { Marker, Geojson, PROVIDER_GOOGLE } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useUser } from "../../context/UserContext";
 import * as Location from "expo-location";
 import { Compass } from "lucide-react-native";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../../constants";
@@ -52,6 +53,7 @@ const MapaExploracionView = ({
 }) => {
   const mapRef = useRef(null);
   const insets = useSafeAreaInsets();
+  const { user } = useUser();
   const currentRegionRef = useRef(initialRegion);
 
   const [selectedTripId, setSelectedTripId] = useState(null);
@@ -66,14 +68,16 @@ const MapaExploracionView = ({
   const [mapTheme, setMapTheme] = useState("light"); // "light" | "dark"
   const [locationLoading, setLocationLoading] = useState(false);
 
-  // Filtros combinados (incluyendo fecha seleccionada)
+  // Filtros combinados (incluyendo fecha seleccionada y exclusión de viajes propios)
   const combinedFilters = useMemo(
     () => ({
       ...filters,
       ...activeFilters,
-      date: selectedDate,
+      date: typeof selectedDate === "object" && selectedDate ? selectedDate.startDate : selectedDate,
+      fechaFin: typeof selectedDate === "object" && selectedDate ? selectedDate.endDate : null,
+      currentUserId: user?.id,
     }),
-    [filters, activeFilters, selectedDate]
+    [filters, activeFilters, selectedDate, user?.id]
   );
 
   const {

@@ -35,11 +35,27 @@ const MapFilterBar = ({
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
 
+    if (typeof selectedDate === "object" && selectedDate !== null) {
+      return selectedDate.label || "Fin de semana";
+    }
+
     if (selectedDate === todayStr) return "Hoy";
     if (selectedDate === tomorrowStr) return "Mañana";
 
-    const d = new Date(selectedDate + "T00:00:00"); // Parse as local date
-    return d.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+    const parts = String(selectedDate).split("-");
+    if (parts.length === 3) {
+      const d = new Date(
+        parseInt(parts[0], 10),
+        parseInt(parts[1], 10) - 1,
+        parseInt(parts[2], 10)
+      );
+      return d.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+    }
+
+    const d = new Date(selectedDate + "T00:00:00");
+    return isNaN(d.getTime())
+      ? String(selectedDate)
+      : d.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
   }, [selectedDate]);
 
   return (

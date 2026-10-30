@@ -1,4 +1,4 @@
-// YouConnext - Main App Entry Point
+// YouConnext - Main App Entry Point (v2)
 import React from "react";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -7,14 +7,11 @@ import { PermissionProvider } from "./src/context/PermissionContext";
 import { OnboardingProvider } from "./src/context/OnboardingContext";
 import { ViajeProvider } from "./src/context/ViajeContext";
 import AppNavigator from "./src/navigation/AppNavigator";
-import { COLORS } from "./src/constants";
-// Deshabilitado: Eliminado el registro de tarea de ubicación en segundo plano
-// import "./src/services/locationBackgroundTask";
 
 export default function App() {
   return (
     <SafeAreaProvider>
-      <StatusBar style="dark" backgroundColor={COLORS.white} />
+      <StatusBar style="auto" />
       <UserProvider>
         <PermissionProvider>
           <OnboardingProvider>

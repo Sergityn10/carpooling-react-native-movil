@@ -2,6 +2,9 @@
 
 // Common (Genéricos)
 export { default as Button } from "./common/Button";
+export { default as Input } from "./common/Input";
+export { default as Chip } from "./common/Chip";
+export { default as RouteLine } from "./common/RouteLine";
 export { default as GoogleIcon } from "./GoogleIcon";
 export { default as Skeleton } from "./common/Skeleton";
 export { default as GradientBackground } from "./common/GradientBackground";
@@ -10,6 +13,9 @@ export { default as AnimatedCardEntrance } from "./common/AnimatedCardEntrance";
 export { default as PulseDot } from "./common/PulseDot";
 export { default as PermissionDisclosureSheet } from "./common/PermissionDisclosureSheet";
 export { default as PermissionBlockedSheet } from "./common/PermissionBlockedSheet";
+
+// Payments & Wallet
+export { default as MovementCard } from "./payments/MovementCard";
 
 // Home
 export { default as HomeHeader } from "./home/HomeHeader";

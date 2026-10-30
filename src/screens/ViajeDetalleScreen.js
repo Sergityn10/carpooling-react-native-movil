@@ -57,6 +57,11 @@ import {
   formatTripTime,
 } from "../services/dateUtils";
 import { getEstadoConfig } from "../utils/viajeEstado";
+import {
+  getTripDriverName,
+  getTripDriverAvatar,
+  getTripDriverId,
+} from "../utils";
 
 const ViajeDetalleScreen = ({ route, navigation }) => {
   const { viaje: viajeInicial, id: idDirecto } = route.params || {};
@@ -137,9 +142,20 @@ const ViajeDetalleScreen = ({ route, navigation }) => {
 
       // Buscar reserva del usuario actual
       if (user?.id) {
-        const mia = pasajerosList.find(
-          (p) => p.user_id === user.id || p.usuario_id === user.id,
-        );
+        const mia =
+          pasajerosList.find(
+            (p) =>
+              String(
+                p.user_id || p.usuario_id || p.usuario?.id || p.id_usuario,
+              ).toLowerCase() === String(user.id).toLowerCase(),
+          ) ||
+          (viajeInicial?.id_reserva
+            ? {
+                id_reserva: viajeInicial.id_reserva,
+                status: viajeInicial.reservaStatus || "completed",
+                precio: viajeInicial.precio,
+              }
+            : null);
         setReservaExistente(mia || null);
 
         if (mia) {
@@ -171,9 +187,19 @@ const ViajeDetalleScreen = ({ route, navigation }) => {
     }
   };
 
+  const driverId =
+    getTripDriverId(viaje) ||
+    viaje?.conductor_id ||
+    viaje?.conductorId ||
+    viaje?.conductor?.id;
   const esConductor =
-    user?.id ===
-    (viaje?.conductor_id || viaje?.conductorId || viaje?.conductor);
+    viaje?.rol === "conductor" ||
+    (viaje?.rol !== "pasajero" &&
+      Boolean(
+        user?.id &&
+          driverId &&
+          String(driverId).toLowerCase() === String(user.id).toLowerCase(),
+      ));
 
   const estadoViaje = (viaje?.status || viaje?.estado || "").toLowerCase();
   const estaCompletado =
@@ -690,13 +716,10 @@ const ViajeDetalleScreen = ({ route, navigation }) => {
 
   const conductorId = viaje?.conductor_id || viaje?.conductor?.id;
   const conductorNombre = conductorInfo?.name
-    ? conductorInfo.name
-    : typeof viaje?.conductor === "object"
-      ? `${viaje?.conductor?.nombre || ""} ${viaje?.conductor?.apellidos || ""}`.trim() ||
-        "Conductor"
-      : viaje?.conductor || "Conductor";
+    ? `${conductorInfo.name}${conductorInfo.surname ? " " + conductorInfo.surname : ""}`.trim()
+    : getTripDriverName(viaje, "Conductor");
 
-  const conductorAvatar = conductorInfo?.img_perfil || viaje?.conductor?.img_perfil;
+  const conductorAvatar = conductorInfo?.img_perfil || getTripDriverAvatar(viaje);
   const conductorRating = conductorInfo?.rating || "4.9";
   const conductorValoraciones = conductorInfo?.total_reviews || "18";
 

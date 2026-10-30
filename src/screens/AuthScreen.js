@@ -1,10 +1,10 @@
-// YouConnext - AuthScreen (Welcome / Gateway Screen)
+// YouConnext - AuthScreen (Pantalla de bienvenida oficial v2)
+// Estructura negra #0B0F0E, acento verde táctil, tipografía Sora/Inter, iconos Lucide
 import React from "react";
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
   Image,
   Linking,
@@ -14,24 +14,27 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   LogIn,
   UserPlus,
-  ArrowRight,
-  Leaf,
-  Users,
-  Zap,
   ShieldCheck,
+  Route,
+  Ticket,
+  BadgeCheck,
 } from "lucide-react-native";
-import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../constants";
+import { COLORS, SPACING, RADIUS, FONTS, BRAND } from "../constants";
+import { Button } from "../components";
 
 const AuthScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+      <StatusBar barStyle="light-content" backgroundColor={BRAND.black} />
+
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero Brand Section */}
-        <View style={styles.heroSection}>
+        {/* Cabecera estructurada en negro de marca */}
+        <View style={styles.heroCard}>
+          <View style={styles.ambientGlow} />
+
           <View style={styles.logoBadge}>
             <Image
               source={require("../../assets/logo-sin-bg-198px-ajustado.png")}
@@ -39,85 +42,79 @@ const AuthScreen = ({ navigation }) => {
               resizeMode="contain"
             />
           </View>
-          <Text style={styles.appName}>YouConnext</Text>
+
+          <Text style={styles.wordmark}>YouConnext</Text>
           <Text style={styles.tagline}>
-            Comparte coche con tu comunidad universitaria y profesional. Sostenible,
-            económico y seguro.
+            Comparte coche a tus eventos y pueblos. Sencillo, puntual y entre personas de confianza.
           </Text>
+
+          {/* Tres pilares oficiales con iconos de trazo Lucide (sin emojis) */}
+          <View style={styles.pillarsRow}>
+            <View style={styles.pillarItem}>
+              <View style={styles.pillarIconBadge}>
+                <Route size={16} color={BRAND.green} strokeWidth={2} />
+              </View>
+              <Text style={styles.pillarText}>Ruta directa</Text>
+            </View>
+
+            <View style={styles.pillarItem}>
+              <View style={styles.pillarIconBadge}>
+                <Ticket size={16} color={BRAND.accent} strokeWidth={2} />
+              </View>
+              <Text style={styles.pillarText}>Tus eventos</Text>
+            </View>
+
+            <View style={styles.pillarItem}>
+              <View style={styles.pillarIconBadge}>
+                <BadgeCheck size={16} color={BRAND.green} strokeWidth={2} />
+              </View>
+              <Text style={styles.pillarText}>Verificados</Text>
+            </View>
+          </View>
         </View>
 
-        {/* Feature Pills */}
-        <View style={styles.featuresRow}>
-          <View style={styles.featurePill}>
-            <Leaf size={14} color={COLORS.primary} strokeWidth={2.5} />
-            <Text style={styles.featureText}>Sostenible</Text>
-          </View>
-          <View style={styles.featurePill}>
-            <Users size={14} color={COLORS.secondary} strokeWidth={2.5} />
-            <Text style={styles.featureText}>Comunidad</Text>
-          </View>
-          <View style={styles.featurePill}>
-            <Zap size={14} color="#F59E0B" strokeWidth={2.5} />
-            <Text style={styles.featureText}>Ahorro</Text>
-          </View>
-        </View>
-
-        {/* Actions Card: Iniciar Sesión vs Registrarse */}
+        {/* Bloque de Acciones: Botones de 48px con radio 12 */}
         <View style={styles.actionsCard}>
-          <Text style={styles.actionsCardTitle}>Bienvenido a la comunidad</Text>
-          <Text style={styles.actionsCardSubtitle}>
-            Elige una opción para continuar
+          <Text style={styles.actionsTitle}>Bienvenido a YouConnext</Text>
+          <Text style={styles.actionsSubtitle}>
+            Accede a tu cuenta o regístrate en menos de dos minutos.
           </Text>
 
-          {/* 1. Botón Iniciar Sesión */}
-          <TouchableOpacity
-            style={styles.primaryButton}
+          <Button
+            title="Iniciar sesión"
             onPress={() => navigation.navigate("Login")}
-            activeOpacity={0.88}
-          >
-            <View style={styles.buttonIconLeft}>
-              <LogIn size={20} color={COLORS.white} strokeWidth={2.4} />
-            </View>
-            <Text style={styles.primaryButtonText}>Iniciar sesión</Text>
-            <ArrowRight size={18} color={COLORS.white} strokeWidth={2.5} />
-          </TouchableOpacity>
+            variant="primary"
+            icon={<LogIn size={18} color={COLORS.white} strokeWidth={2.4} />}
+            style={styles.buttonSpacing}
+          />
 
-          {/* 2. Botón Registrarse (Crear cuenta) */}
-          <TouchableOpacity
-            style={styles.secondaryButton}
+          <Button
+            title="Crear cuenta nueva"
             onPress={() => navigation.navigate("Register")}
-            activeOpacity={0.85}
-          >
-            <View style={styles.buttonIconLeft}>
-              <UserPlus size={20} color={COLORS.primary} strokeWidth={2.4} />
-            </View>
-            <Text style={styles.secondaryButtonText}>Crear cuenta nueva</Text>
-            <ArrowRight size={18} color={COLORS.primary} strokeWidth={2.5} />
-          </TouchableOpacity>
+            variant="outline"
+            icon={<UserPlus size={18} color={COLORS.primary} strokeWidth={2.4} />}
+          />
         </View>
 
-        {/* Trust & Legal Footer */}
+        {/* Pie de confianza y términos legales */}
         <View style={styles.footer}>
           <View style={styles.trustBadge}>
-            <ShieldCheck size={13} color={COLORS.gray400} strokeWidth={2} />
-            <Text style={styles.trustText}>Conexión cifrada y segura</Text>
+            <ShieldCheck size={14} color={COLORS.gray400} strokeWidth={2} />
+            <Text style={styles.trustText}>Comunidad con identidad verificada</Text>
           </View>
+
           <Text style={styles.footerText}>
-            Al continuar aceptas nuestros{" "}
+            Al continuar aceptas nuestras{" "}
             <Text
               style={styles.footerLink}
-              onPress={() =>
-                Linking.openURL("https://app.youconnext.es/condiciones")
-              }
+              onPress={() => Linking.openURL("https://app.youconnext.es/condiciones")}
             >
-              términos de servicio
+              condiciones de uso
             </Text>
             {" y "}
             <Text
               style={styles.footerLink}
-              onPress={() =>
-                Linking.openURL("https://app.youconnext.es/privacidad")
-              }
+              onPress={() => Linking.openURL("https://app.youconnext.es/privacidad")}
             >
               política de privacidad
             </Text>
@@ -132,158 +129,161 @@ const AuthScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.background, // #EEF5F0
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: "center",
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.xl,
+    justifyContent: "space-between",
+    paddingHorizontal: SPACING.screenMargin, // 20px
+    paddingTop: SPACING.lg,
     paddingBottom: SPACING.xl,
   },
-  heroSection: {
+  heroCard: {
+    backgroundColor: BRAND.black,
+    borderRadius: RADIUS.card, // 16px
+    paddingVertical: SPACING.xl,
+    paddingHorizontal: SPACING.lg,
     alignItems: "center",
-    marginBottom: SPACING.lg,
+    overflow: "hidden",
+    position: "relative",
+    borderWidth: 1,
+    borderColor: "#1E2724",
+    shadowColor: BRAND.black,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  ambientGlow: {
+    position: "absolute",
+    top: -50,
+    width: 220,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "rgba(0, 200, 83, 0.12)",
   },
   logoBadge: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: COLORS.white,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: "#141A18",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: SPACING.md,
-    ...SHADOWS.medium,
+    borderWidth: 1,
+    borderColor: "#2F3A36",
+    marginBottom: SPACING.sm,
   },
   logoImage: {
-    width: 60,
-    height: 60,
+    width: 48,
+    height: 48,
   },
-  appName: {
-    fontSize: FONTS.xxxl + 2,
-    lineHeight: 40,
-    fontWeight: "900",
-    letterSpacing: -0.6,
-    color: COLORS.gray900,
-    marginBottom: SPACING.xs,
+  wordmark: {
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+    fontSize: 26,
+    lineHeight: 32,
+    fontWeight: "800",
+    color: "#F2F5F4",
+    letterSpacing: -0.5,
+    marginBottom: 6,
   },
   tagline: {
-    fontSize: FONTS.sm + 1,
-    lineHeight: 22,
-    color: COLORS.gray500,
+    fontFamily: FONTS.typography?.fonts?.body || "Inter",
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#A7B2AE",
     textAlign: "center",
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: 8,
+    marginBottom: SPACING.lg,
   },
-  featuresRow: {
+  pillarsRow: {
     flexDirection: "row",
     justifyContent: "center",
-    gap: SPACING.xs + 2,
-    marginBottom: SPACING.xl,
+    gap: 12,
+    width: "100%",
+    paddingTop: 4,
   },
-  featurePill: {
-    flexDirection: "row",
+  pillarItem: {
     alignItems: "center",
-    gap: 6,
-    backgroundColor: COLORS.white,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: 7,
-    borderRadius: RADIUS.full,
-    borderWidth: 1,
-    borderColor: COLORS.gray100,
-    ...SHADOWS.small,
+    flex: 1,
   },
-  featureText: {
-    fontSize: FONTS.xs,
-    fontWeight: "700",
-    color: COLORS.gray800,
+  pillarIconBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#1D2522",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#2F3A36",
+    marginBottom: 6,
+  },
+  pillarText: {
+    fontFamily: FONTS.typography?.fonts?.body || "Inter",
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "600",
+    color: "#D0D9D5",
+    textAlign: "center",
   },
   actionsCard: {
     backgroundColor: COLORS.white,
-    borderRadius: RADIUS.xl,
+    borderRadius: RADIUS.card, // 16px
     padding: SPACING.lg,
     borderWidth: 1,
-    borderColor: COLORS.gray100,
-    marginBottom: SPACING.xl,
-    gap: SPACING.sm,
-    ...SHADOWS.medium,
+    borderColor: COLORS.border,
+    marginVertical: SPACING.lg,
+    shadowColor: BRAND.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  actionsCardTitle: {
-    fontSize: FONTS.md + 1,
-    fontWeight: "800",
-    color: COLORS.gray900,
+  actionsTitle: {
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: "700",
+    color: BRAND.black,
     textAlign: "center",
-    marginTop: SPACING.xs,
+    marginBottom: 4,
   },
-  actionsCardSubtitle: {
-    fontSize: FONTS.xs + 1,
-    color: COLORS.gray500,
+  actionsSubtitle: {
+    fontFamily: FONTS.typography?.fonts?.body || "Inter",
+    fontSize: 13,
+    lineHeight: 18,
+    color: COLORS.gray600,
     textAlign: "center",
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.lg,
   },
-  primaryButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 52,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.lg,
-    ...SHADOWS.medium,
-  },
-  buttonIconLeft: {
-    marginRight: SPACING.sm,
-  },
-  primaryButtonText: {
-    flex: 1,
-    fontSize: FONTS.md,
-    fontWeight: "800",
-    color: COLORS.white,
-    letterSpacing: 0.2,
-  },
-  secondaryButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 52,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.white,
-    borderWidth: 1.5,
-    borderColor: COLORS.primarySoft,
-    paddingHorizontal: SPACING.lg,
-    backgroundColor: COLORS.primarySoft,
-  },
-  secondaryButtonText: {
-    flex: 1,
-    fontSize: FONTS.md,
-    fontWeight: "800",
-    color: COLORS.primaryDark,
-    letterSpacing: 0.2,
+  buttonSpacing: {
+    marginBottom: 12,
   },
   footer: {
     alignItems: "center",
-    paddingHorizontal: SPACING.md,
-    gap: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
   },
   trustBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    marginBottom: 2,
+    gap: 5,
+    marginBottom: 6,
   },
   trustText: {
-    fontSize: 11,
-    color: COLORS.gray400,
-    fontWeight: "600",
+    fontFamily: FONTS.typography?.fonts?.body || "Inter",
+    fontSize: 12,
+    color: COLORS.gray600,
+    fontWeight: "500",
   },
   footerText: {
-    fontSize: FONTS.xs - 1,
+    fontFamily: FONTS.typography?.fonts?.body || "Inter",
+    fontSize: 11,
     color: COLORS.gray400,
     textAlign: "center",
     lineHeight: 16,
   },
   footerLink: {
     color: COLORS.primary,
-    fontWeight: "700",
+    fontWeight: "600",
   },
 });
 

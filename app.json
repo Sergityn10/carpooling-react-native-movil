@@ -13,6 +13,7 @@
       "associatedDomains": ["applinks:app.youconnext.es"]
     },
     "android": {
+      "versionCode": 51,
       "usesCleartextTraffic": true,
       "package": "app.youconnext",
       "intentFilters": [

@@ -48,6 +48,7 @@ import {
   PressableScale,
   AnimatedCardEntrance,
   PulseDot,
+  QRCodeModal,
 } from "../components";
 import { useUser } from "../context/UserContext";
 import { eventService } from "../services/eventService";
@@ -56,6 +57,12 @@ import { trayectoService } from "../services/travels/trayectoService";
 import { reservaService } from "../services/travels/reservaService";
 import { messageService } from "../services/messages/messageService";
 import { parseTripDate, localToUtcApi } from "../services/dateUtils";
+import {
+  getTripDriverName,
+  getTripDriverId,
+  enrichTripsWithDriverProfiles,
+  isLikelyId,
+} from "../utils";
 
 const TAB_VIAJES = "viajes";
 const TAB_EVENTOS = "eventos";
@@ -63,6 +70,24 @@ const TAB_EVENTOS = "eventos";
 const FILTER_TODOS = "todos";
 const FILTER_PROXIMOS = "proximos";
 const FILTER_COMPLETADOS = "completados";
+
+const formatPrecio = (precio) => {
+  if (precio == null || precio === "" || Number(precio) === 0) return "Gratis";
+  const num = Number(precio);
+  if (isNaN(num)) return `${precio}€`;
+  return num % 1 === 0 ? `${num}€` : `${num.toFixed(2).replace(".", ",")}€`;
+};
+
+const isFinishedStatus = (status) => {
+  const s = String(status || "").toLowerCase();
+  return (
+    s === "completado" ||
+    s === "completed" ||
+    s === "finalizado" ||
+    s === "cancelado" ||
+    s === "canceled"
+  );
+};
 
 const MisPlanesScreen = ({ navigation }) => {
   const { user } = useUser();
@@ -75,6 +100,8 @@ const MisPlanesScreen = ({ navigation }) => {
   const [errorViajes, setErrorViajes] = useState(null);
   const [refreshingViajes, setRefreshingViajes] = useState(false);
   const [resumingPagoId, setResumingPagoId] = useState(null);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [selectedQRViaje, setSelectedQRViaje] = useState(null);
 
   // --- Edit modal ---
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -123,50 +150,197 @@ const MisPlanesScreen = ({ navigation }) => {
       let misReservas = [];
       if (pasajeroRes.status === "fulfilled") {
         const raw = pasajeroRes.value;
-        misReservas = raw?.pasajerosList || raw?.data?.pasajerosList || [];
+        misReservas = Array.isArray(raw)
+          ? raw
+          : Array.isArray(raw?.pasajerosList)
+            ? raw.pasajerosList
+            : Array.isArray(raw?.data?.pasajerosList)
+              ? raw.data.pasajerosList
+              : Array.isArray(raw?.data)
+                ? raw.data
+                : [];
       }
 
-      const condViajes = misTrayectos.map((t) => ({
-        id: t.id,
-        origen: t.origen,
-        destino: t.destino,
-        hora: t.hora || t.fecha,
-        plazas: t.plazas,
-        disponible: t.disponible,
-        precio: t.precio,
-        precio_conductor: t.precio_conductor,
-        conductorName: `${user.name || user.nombre || "Conductor"}`.trim(),
-        status: (t.status || t.estado || "pendiente").toLowerCase(),
-        rol: "conductor",
-        keyId: `cond-${t.id}`,
-        originalData: t,
-      }));
+      const currentUserId = String(user.id).toLowerCase();
+      const tripsMap = new Map();
 
-      const pasViajes = misReservas.map((r) => {
-        const t = r.trayecto || {};
-        return {
+      // 1. Procesar misTrayectos (/api/trayecto/mis-trayectos)
+      // Puede devolver trayectos como conductor O como pasajero
+      misTrayectos.forEach((t) => {
+        if (!t || !t.id) return;
+
+        const driverId = getTripDriverId(t);
+        const isDriverId = Boolean(
+          driverId && String(driverId).toLowerCase() === currentUserId,
+        );
+
+        // Es conductor si explícitamente tiene rol="conductor" o si su ID coincide con el del conductor
+        // y NO tiene rol="pasajero" ni id_reserva
+        const isConductor =
+          (t.rol === "conductor" || isDriverId) &&
+          t.rol !== "pasajero" &&
+          !t.id_reserva;
+
+        const rol = isConductor ? "conductor" : "pasajero";
+        const idReserva = t.id_reserva || t.reserva_id || null;
+        const reservaStatus =
+          t.reserva_status ||
+          t.reservaStatus ||
+          (t.status === "completed" ? "completed" : null);
+
+        let conductorName = "Conductor";
+        if (rol === "conductor") {
+          conductorName = `${user.name || user.nombre || "Conductor"}`.trim();
+        } else {
+          conductorName = getTripDriverName(t, "Conductor");
+          if (
+            conductorName === "Conductor" &&
+            t.conductor &&
+            typeof t.conductor === "string" &&
+            !isLikelyId(t.conductor)
+          ) {
+            conductorName = t.conductor.trim();
+          }
+        }
+
+        // Si es conductor: cobra precio_conductor (o precio)
+        // Si es pasajero: lo que ha pagado el pasajero (t.precio_pagado ?? t.precio_total ?? t.precio_reserva ?? t.precio)
+        const precioPagadoPasajero =
+          t.precio_pagado ?? t.precio_total ?? t.precio_reserva ?? t.precio;
+        const precioConductor = t.precio_conductor ?? t.precio;
+
+        const item = {
           id: t.id,
-          id_reserva: r.id_reserva,
+          id_reserva: idReserva,
           origen: t.origen || "Sin especificar",
           destino: t.destino || "Sin especificar",
-          hora: t.hora || t.fecha || r.createdAt,
+          hora: t.hora || t.fecha,
           plazas: t.plazas,
-          precio: t.precio,
-          conductorName: t.conductor || "Conductor",
+          disponible: t.disponible,
+          precio: rol === "conductor" ? precioConductor : precioPagadoPasajero,
+          precio_conductor: rol === "conductor" ? precioConductor : null,
+          conductorName,
+          conductorId: driverId,
           status: (t.status || t.estado || "pendiente").toLowerCase(),
-          reservaStatus: r.status,
-          rol: "pasajero",
-          keyId: `pas-${r.id_reserva}`,
-          originalData: t,
+          reservaStatus,
+          rol,
+          keyId: `${rol}-${t.id}`,
+          originalData: { ...t, id: t.id, rol, id_reserva: idReserva },
         };
+
+        const mapKey = `${rol}_${t.id}`;
+        tripsMap.set(mapKey, item);
       });
 
-      const todos = [...condViajes, ...pasViajes].sort((a, b) => {
+      // 2. Procesar misReservas (/api/reserva/userId/:userId)
+      // Siempre son reservas como pasajero
+      misReservas.forEach((r) => {
+        if (!r) return;
+        const t = r.trayecto || {};
+        const tripId = t.id || r.id_trayecto || r.trayecto_id;
+        const idReserva = r.id_reserva || r.id;
+        if (!tripId && !idReserva) return;
+
+        const driverId = getTripDriverId(t) || t.conductor_id || r.conductor_id;
+        const conductorName = getTripDriverName(t, "Conductor");
+
+        // Lo que el pasajero pagó por esta reserva
+        const precioPagado =
+          r.precio_pagado ??
+          r.precio_total ??
+          r.precio ??
+          r.monto ??
+          (r.amount && r.amount > 100 ? r.amount / 100 : r.amount) ??
+          t.precio;
+
+        const reservaItem = {
+          id: tripId || idReserva,
+          id_reserva: idReserva,
+          origen: t.origen || r.origen || "Sin especificar",
+          destino: t.destino || r.destino || "Sin especificar",
+          hora: t.hora || t.fecha || r.fecha || r.createdAt,
+          plazas: t.plazas,
+          disponible: t.disponible,
+          precio: precioPagado,
+          precio_conductor: null, // Pasajero nunca tiene precio_conductor
+          conductorName,
+          conductorId: driverId,
+          status: (t.status || t.estado || r.status || "pendiente").toLowerCase(),
+          reservaStatus: r.status || "completed",
+          rol: "pasajero",
+          keyId: `pas-${idReserva || tripId}`,
+          originalData: {
+            ...t,
+            id: tripId,
+            id_reserva: idReserva,
+            reservaStatus: r.status,
+            rol: "pasajero",
+            precio: precioPagado,
+          },
+        };
+
+        const mapKey = `pasajero_${tripId || idReserva}`;
+
+        if (tripsMap.has(mapKey)) {
+          const existing = tripsMap.get(mapKey);
+          tripsMap.set(mapKey, {
+            ...existing,
+            ...reservaItem,
+            id_reserva: idReserva || existing.id_reserva,
+            reservaStatus: r.status || existing.reservaStatus,
+            precio: precioPagado ?? existing.precio,
+            conductorName:
+              conductorName && conductorName !== "Conductor"
+                ? conductorName
+                : existing.conductorName,
+            originalData: {
+              ...existing.originalData,
+              ...reservaItem.originalData,
+            },
+          });
+        } else {
+          tripsMap.set(mapKey, reservaItem);
+        }
+
+        // Si este tripId estaba erróneamente indexado como conductor,
+        // al existir una reserva como pasajero se elimina la entrada duplicada de conductor:
+        if (tripId && tripsMap.has(`conductor_${tripId}`)) {
+          tripsMap.delete(`conductor_${tripId}`);
+        }
+      });
+
+      const todos = Array.from(tripsMap.values()).sort((a, b) => {
         const da = parseTripDate(a);
         const db = parseTripDate(b);
         return (db ? db.getTime() : 0) - (da ? da.getTime() : 0);
       });
+
       setViajes(todos);
+
+      // Enriquecer en segundo plano nombres y avatares de conductores para viajes como pasajero
+      const passengerTrips = todos
+        .filter((v) => v.rol === "pasajero")
+        .map((v) => v.originalData);
+      if (passengerTrips.length > 0) {
+        enrichTripsWithDriverProfiles(passengerTrips)
+          .then(() => {
+            setViajes((prev) =>
+              prev.map((v) => {
+                if (v.rol === "pasajero") {
+                  const updatedName = getTripDriverName(
+                    v.originalData,
+                    v.conductorName,
+                  );
+                  if (updatedName && updatedName !== v.conductorName) {
+                    return { ...v, conductorName: updatedName };
+                  }
+                }
+                return v;
+              }),
+            );
+          })
+          .catch(() => {});
+      }
     } catch (err) {
       setErrorViajes(err.message || "No se pudieron cargar tus viajes.");
       setViajes([]);
@@ -208,14 +382,10 @@ const MisPlanesScreen = ({ navigation }) => {
 
   const filteredViajes = useMemo(() => {
     if (viajesFilter === FILTER_PROXIMOS) {
-      return viajes.filter(
-        (v) => v.status !== "completado" && v.status !== "cancelado",
-      );
+      return viajes.filter((v) => !isFinishedStatus(v.status));
     }
     if (viajesFilter === FILTER_COMPLETADOS) {
-      return viajes.filter(
-        (v) => v.status === "completado" || v.status === "cancelado",
-      );
+      return viajes.filter((v) => isFinishedStatus(v.status));
     }
     return viajes;
   }, [viajes, viajesFilter]);
@@ -240,13 +410,23 @@ const MisPlanesScreen = ({ navigation }) => {
   };
 
   const handleViajePress = (viaje) => {
-    const isEnCurso = viaje.status === "en curso" || viaje.status === "activo";
+    const statusLower = String(viaje.status || "").toLowerCase();
+    const isEnCurso =
+      statusLower === "en curso" ||
+      statusLower === "activo" ||
+      statusLower === "en_curso";
     if (isEnCurso) {
       navigation.navigate("ViajeEnCurso", { viaje: viaje.originalData });
     } else if (viaje.rol === "conductor") {
-      navigation.navigate("ViajeDetalle", { viaje: viaje.originalData });
+      navigation.navigate("ViajeDetalle", {
+        viaje: viaje.originalData,
+        id: viaje.id,
+      });
     } else {
-      navigation.navigate("MiViaje", { viaje: viaje.originalData });
+      navigation.navigate("MiViaje", {
+        viaje: viaje.originalData,
+        id: viaje.id,
+      });
     }
   };
 
@@ -278,7 +458,12 @@ const MisPlanesScreen = ({ navigation }) => {
 
   const handleOpenQR = (viaje, e) => {
     e.stopPropagation();
-    navigation.navigate("EscanearQR", { viaje: viaje.originalData });
+    if (viaje.rol === "conductor") {
+      setSelectedQRViaje(viaje.originalData);
+      setShowQRModal(true);
+    } else {
+      navigation.navigate("EscanearQR", { viaje: viaje.originalData });
+    }
   };
 
   const handleEventPress = (event) => {
@@ -420,9 +605,17 @@ const MisPlanesScreen = ({ navigation }) => {
 
   const renderViaje = ({ item, index }) => {
     const esConductor = item.rol === "conductor";
-    const isEnCurso = item.status === "en curso" || item.status === "activo";
-    const isCompletado = item.status === "completado";
-    const isCancelado = item.status === "cancelado";
+    const statusLower = String(item.status || "").toLowerCase();
+    const isEnCurso =
+      statusLower === "en curso" ||
+      statusLower === "activo" ||
+      statusLower === "en_curso";
+    const isCompletado =
+      statusLower === "completado" ||
+      statusLower === "completed" ||
+      statusLower === "finalizado";
+    const isCancelado =
+      statusLower === "cancelado" || statusLower === "canceled";
 
     return (
       <AnimatedCardEntrance index={index}>
@@ -479,14 +672,8 @@ const MisPlanesScreen = ({ navigation }) => {
           <View style={styles.priceChip}>
             <Text style={styles.priceChipText}>
               {esConductor
-                ? item.precio_conductor != null && item.precio_conductor > 0
-                  ? `${item.precio_conductor}€`
-                  : item.precio != null && item.precio > 0
-                    ? `${item.precio}€`
-                    : "Gratis"
-                : item.precio != null && item.precio > 0
-                  ? `${item.precio}€`
-                  : "Gratis"}
+                ? formatPrecio(item.precio_conductor ?? item.precio)
+                : formatPrecio(item.precio)}
             </Text>
           </View>
         </View>
@@ -1067,6 +1254,17 @@ const MisPlanesScreen = ({ navigation }) => {
           )}
         </SafeAreaView>
       </Modal>
+
+      {/* Modal QR Code para Conductor */}
+      <QRCodeModal
+        visible={showQRModal}
+        onClose={() => {
+          setShowQRModal(false);
+          setSelectedQRViaje(null);
+        }}
+        viaje={selectedQRViaje}
+        codigoQR={selectedQRViaje?.codigoQR}
+      />
     </SafeAreaView>
   );
 };

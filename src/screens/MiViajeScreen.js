@@ -42,6 +42,7 @@ import {
   formatTripTime,
 } from "../services/dateUtils";
 import { getEstadoConfig } from "../utils/viajeEstado";
+import { getTripDriverName } from "../utils";
 
 const MiViajeScreen = ({ route, navigation }) => {
   const { viaje: viajeInicial, id: idDirecto } = route.params || {};
@@ -115,9 +116,20 @@ const MiViajeScreen = ({ route, navigation }) => {
       }
 
       if (user?.id) {
-        const mia = pasajerosList.find(
-          (p) => p.user_id === user.id || p.usuario_id === user.id,
-        );
+        const mia =
+          pasajerosList.find(
+            (p) =>
+              String(
+                p.user_id || p.usuario_id || p.usuario?.id || p.id_usuario,
+              ).toLowerCase() === String(user.id).toLowerCase(),
+          ) ||
+          (viajeInicial?.id_reserva
+            ? {
+                id_reserva: viajeInicial.id_reserva,
+                status: viajeInicial.reservaStatus || "completed",
+                precio: viajeInicial.precio,
+              }
+            : null);
         console.log(
           "[MiViaje] reserva del usuario actual:",
           JSON.stringify(mia, null, 2),
@@ -398,11 +410,7 @@ const MiViajeScreen = ({ route, navigation }) => {
   const fechaLabel = tripDate ? formatTripDate(viaje) : "";
   const horaLabel = tripDate ? formatTripTime(viaje) : "";
   const conductorId = viaje?.conductor_id || viaje?.conductor?.id;
-  const conductorNombre =
-    typeof viaje?.conductor === "object"
-      ? `${viaje?.conductor?.nombre || ""} ${viaje?.conductor?.apellidos || ""}`.trim() ||
-        "Desconocido"
-      : viaje?.conductor || "Desconocido";
+  const conductorNombre = getTripDriverName(viaje, "Desconocido");
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -453,7 +461,22 @@ const MiViajeScreen = ({ route, navigation }) => {
                     : `Estado: ${reservaExistente.status}`}
               </Text>
               <Text style={styles.personSub}>
-                {viaje?.precio != null ? `${viaje.precio}€` : "Gratis"}
+                {(() => {
+                  const pVal =
+                    reservaExistente?.precio_pagado ??
+                    reservaExistente?.precio_total ??
+                    reservaExistente?.precio ??
+                    reservaExistente?.monto ??
+                    viaje?.precio;
+                  if (pVal == null || pVal === "" || Number(pVal) === 0)
+                    return "Gratis";
+                  const n = Number(pVal);
+                  return isNaN(n)
+                    ? `${pVal}€`
+                    : n % 1 === 0
+                      ? `${n}€`
+                      : `${n.toFixed(2).replace(".", ",")}€`;
+                })()}
               </Text>
             </View>
           </View>

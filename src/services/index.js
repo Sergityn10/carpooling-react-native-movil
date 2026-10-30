@@ -15,6 +15,10 @@ export { ubicacionTravelService } from "./travels/ubicacionService";
 export { combustibleService } from "./travels/combustibleService";
 export { rutaFrecuenteService } from "./travels/rutaFrecuenteService";
 
+// Payments & Real-time Stream
+export { paymentService } from "./paymentService";
+export { movementStreamService } from "./movementStreamService";
+
 // Events
 export { eventService } from "./eventService";
 

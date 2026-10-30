@@ -1,3 +1,37 @@
+
+function applyClientDefensiveFilters(tripsList, f = {}) {
+  if (!Array.isArray(tripsList)) return [];
+  return tripsList.filter((t) => {
+    if (f.minSeats != null) {
+      const disp = t.disponible ?? t.plazasDisponibles ?? t.plazas ?? 0;
+      if (disp < f.minSeats) return false;
+    }
+    if (f.maxPrice != null) {
+      if (t.precio != null && t.precio > f.maxPrice) return false;
+    }
+    if (f.date && t.hora) {
+      const tDate = new Date(t.hora).toISOString().split("T")[0];
+      if (f.fechaFin) {
+        if (tDate < f.date || tDate > f.fechaFin) return false;
+      } else {
+        if (tDate !== f.date) return false;
+      }
+    }
+    if (f.hasEvent && !t.evento_id && !t.eventoId) {
+      return false;
+    }
+    if (f.eventoId && t.evento_id !== f.eventoId && t.eventoId !== f.eventoId) {
+      return false;
+    }
+    if (f.currentUserId) {
+      const condId = t.conductor_id || t.conductor?.id || t.conductor;
+      if (condId && String(condId).toLowerCase() === String(f.currentUserId).toLowerCase()) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
 // YouConnext - Hook para gestión de Viewport en Mapa Interactivo
 // Debounce, AbortController, caché y estados reactivos
 
@@ -40,6 +74,7 @@ export function useMapViewport(initialRegion, filters = {}) {
   const activeRequestIdRef = useRef(0);
   const debounceTimerRef = useRef(null);
   const lastBoundsRef = useRef(null);
+  const currentRegionRef = useRef(initialRegion);
   const isMountedRef = useRef(true);
 
   // Referencia a los filtros actuales (evita que fetchViewport se recree)
@@ -108,9 +143,12 @@ export function useMapViewport(initialRegion, filters = {}) {
               precision,
               limit: DEFAULT_LIMIT,
               date: currentFilters.date,
+              fechaFin: currentFilters.fechaFin,
               minSeats: currentFilters.minSeats,
               maxPrice: currentFilters.maxPrice,
               eventoId: currentFilters.eventoId,
+              hasEvent: currentFilters.hasEvent,
+              userId: currentFilters.currentUserId,
             },
             signal
           );
@@ -134,9 +172,12 @@ export function useMapViewport(initialRegion, filters = {}) {
             precision,
             limit: DEFAULT_LIMIT,
             date: currentFilters.date,
+            fechaFin: currentFilters.fechaFin,
             minSeats: currentFilters.minSeats,
             maxPrice: currentFilters.maxPrice,
             eventoId: currentFilters.eventoId,
+            hasEvent: currentFilters.hasEvent,
+            currentUserId: currentFilters.currentUserId,
           });
         }
       };
@@ -163,9 +204,12 @@ export function useMapViewport(initialRegion, filters = {}) {
                 precision: "simplified",
                 limit: DEFAULT_LIMIT,
                 date: currentFilters.date,
+                fechaFin: currentFilters.fechaFin,
                 minSeats: currentFilters.minSeats,
                 maxPrice: currentFilters.maxPrice,
                 eventoId: currentFilters.eventoId,
+                hasEvent: currentFilters.hasEvent,
+                userId: currentFilters.currentUserId,
               },
               signal
             );
@@ -185,7 +229,8 @@ export function useMapViewport(initialRegion, filters = {}) {
         }
 
         // Renderizar inmediatamente los trayectos
-        setTrips(data || []);
+        const strictlyFiltered = applyClientDefensiveFilters(data || [], currentFilters);
+        setTrips(strictlyFiltered);
         if (isInitial) setIsInitialLoading(false);
 
         // Enriquecer en segundo plano con fotos y datos públicos de los conductores
@@ -198,7 +243,8 @@ export function useMapViewport(initialRegion, filters = {}) {
                 !signal.aborted &&
                 Array.isArray(enrichedData)
               ) {
-                setTrips(enrichedData);
+                const strictlyFilteredEnriched = applyClientDefensiveFilters(enrichedData || [], currentFilters);
+                setTrips(strictlyFilteredEnriched);
                 mapViewportCache.set(bounds, zoom, currentFilters, enrichedData);
               }
             })

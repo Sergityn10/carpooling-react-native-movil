@@ -1,84 +1,104 @@
-// YouConnext - Brand Colors & Constants
-// Tema: Sostenibilidad, movilidad verde, comunidad
+// YouConnext - Brand Colors & Constants (v2 - Octubre 2026)
+// Tema: Verde y negro, acento ámbar opcional para eventos
+import { BRAND, TOKENS } from "./tokens";
 
-// Colores principales
+export { BRAND, TOKENS };
+
+// Colores principales alineados con la Guía de Estilo v2
 export const COLORS = {
-  // Verde Bosque (Sostenibilidad - color principal)
-  primary: "#0D9F6E",
-  primaryDark: "#0A7E58",
-  primaryLight: "#10B981",
-  primarySoft: "#D1FAE5",
+  // Verde de Marca
+  primary: BRAND.greenOnLight,        // #0B7A3B sobre fondo claro
+  primaryBright: BRAND.green,         // #00C853 sobre fondo oscuro
+  primaryDark: BRAND.greenOnLightPressed, // #095F2E
+  primaryLight: BRAND.green,          // #00C853
+  primarySoft: "#E3F4EA",             // fondo verde suave
 
-  // Azul Oceano (Movilidad)
-  secondary: "#0EA5E9",
-  secondaryDark: "#0284C7",
-  secondaryLight: "#38BDF8",
-  secondarySoft: "#E0F2FE",
+  // Ámbar para eventos y avisos (según guía oficial)
+  accent: BRAND.accent,               // #F2A33C
+  accentDark: BRAND.accentTextOnLight, // #8A5200
+  accentLight: "#FDBA74",
+  accentSoft: "#FBF0DE",
 
-  // Lima Solar (Comunidad y energia)
-  accent: "#84CC16",
-  accentDark: "#65A30D",
-  accentLight: "#A3E635",
-  accentSoft: "#ECFCCB",
-
-  // Neutros
+  // Neutros estructuradores de YouConnext
+  black: BRAND.black,                 // #0B0F0E
   white: "#FFFFFF",
-  black: "#000000",
-  gray50: "#FAFAFA",
-  gray100: "#F4F4F5",
-  gray200: "#E4E4E7",
-  gray300: "#D4D4D8",
-  gray400: "#A1A1AA",
-  gray500: "#71717A",
-  gray600: "#52525B",
-  gray700: "#27272A",
-  gray800: "#18181B",
-  gray900: "#09090B",
+  gray50: "#EEF5F0",                  // fondo general de marca
+  gray100: "#F4FAF6",
+  gray200: "#D6E2DB",                 // borde separador
+  gray300: "#B8C9C1",
+  gray400: "#7A8884",                 // borde de campos (3.7:1)
+  gray500: "#6B7A75",                 // borde de campos oscuro (4.3:1)
+  gray600: "#4A5753",                 // texto secundario / muted
+  gray700: "#2F3A36",                 // separador decorativo oscuro
+  gray800: "#1D2522",                 // surface-2 oscuro
+  gray900: "#141A18",                 // surface-1 oscuro
+
+  // Superficies
+  surface: "#FFFFFF",
+  surface1: "#141A18",
+  surface2: "#1D2522",
+  surfaceDark: BRAND.black,
+  border: "#D6E2DB",
+  borderField: "#7A8884",
+  borderDark: "#2F3A36",
+  borderFieldDark: "#6B7A75",
+
+  // Texto
+  text: BRAND.black,
+  textMuted: "#4A5753",
+  textDark: "#F2F5F4",
+  textMutedDark: "#A7B2AE",
 
   // Estados
-  success: "#10B981",
-  successSoft: "#D1FAE5",
-  warning: "#F59E0B",
-  warningSoft: "#FEF3C7",
-  error: "#EF4444",
-  errorSoft: "#FEE2E2",
-  info: "#0EA5E9",
-  infoSoft: "#E0F2FE",
+  success: BRAND.greenOnLight,
+  successSoft: "#E3F4EA",
+  warning: BRAND.accent,
+  warningSoft: "#FBF0DE",
+  error: "#C62828",
+  errorDark: "#FF6B6B",
+  errorSoft: "#F9E7E4",
+  info: BRAND.greenOnLight,
+  infoSoft: "#E3F4EA",
 
   // Fondos
-  background: "#FAFAFA",
-  backgroundSecondary: "#F4F4F5",
+  background: "#EEF5F0",              // fondo general modo claro v2
+  backgroundDark: BRAND.black,        // fondo general modo oscuro v2
+  backgroundSecondary: "#FFFFFF",
   cardBackground: "#FFFFFF",
 
-  // Gradientes (para usar en estilos)
+  // Gradientes sutiles y elegantes (sin tonos chillones)
   gradient: {
-    greenStart: "#0D9F6E",
-    greenEnd: "#10B981",
-    blueStart: "#0EA5E9",
-    blueEnd: "#38BDF8",
-    limeStart: "#84CC16",
-    limeEnd: "#A3E635",
-    hero: ["#065F46", "#0A7E58", "#10B981"],
-    ocean: ["#075985", "#0284C7", "#38BDF8"],
-    fresh: ["#0D9F6E", "#0EA5E9"],
+    greenStart: BRAND.black,
+    greenEnd: "#141A18",
+    blueStart: BRAND.black,
+    blueEnd: "#141A18",
+    limeStart: BRAND.green,
+    limeEnd: "#00A843",
+    hero: [BRAND.black, "#141A18", "#1D2522"],
+    subtle: ["#FFFFFF", "#F4FAF6"],
+    darkGlow: [BRAND.black, "#0F1A14", BRAND.black],
+    accent: [BRAND.accent, "#E09228"],
   },
 };
 
-// Espaciado
+// Espaciado base 4
 export const SPACING = {
   xs: 4,
   sm: 8,
-  md: 16,
-  lg: 24,
-  xl: 32,
-  xxl: 48,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  xxl: 32,
+  screenMargin: 20,
+  cardGap: 12,
+  cardPadding: 16,
 };
 
-// Tamaños y pesos de fuente
+// Tamaños y pesos de fuente (Google Fonts: Sora e Inter)
 const FONT_SIZES = {
-  xs: 12,
-  sm: 14,
-  md: 16,
+  xs: 11,
+  sm: 12,
+  md: 15,
   lg: 18,
   xl: 20,
   xxl: 24,
@@ -100,84 +120,60 @@ export const FONTS = {
   ...FONT_SIZES,
   sizes: FONT_SIZES,
   weights: FONT_WEIGHTS,
+  typography: TOKENS.typography,
 };
 
-const SHADOW_SMALL = {
-  shadowColor: "#0F172A",
+// Sombras suaves con tinta al 8% (Pág. 3 de la guía: "0 2 8 con tinta al 8% para tarjetas")
+const SHADOW_SOFT_CARD = {
+  shadowColor: BRAND.black,
   shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.06,
-  shadowRadius: 6,
+  shadowOpacity: 0.08,
+  shadowRadius: 8,
   elevation: 2,
 };
 
-const SHADOW_MEDIUM = {
-  shadowColor: "#0F172A",
+const SHADOW_HOVER = {
+  shadowColor: BRAND.black,
   shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.08,
-  shadowRadius: 12,
-  elevation: 3,
-};
-
-const SHADOW_LARGE = {
-  shadowColor: "#0F172A",
-  shadowOffset: { width: 0, height: 8 },
   shadowOpacity: 0.12,
-  shadowRadius: 20,
-  elevation: 6,
-};
-
-const SHADOW_XLARGE = {
-  shadowColor: "#0F172A",
-  shadowOffset: { width: 0, height: 12 },
-  shadowOpacity: 0.16,
-  shadowRadius: 28,
-  elevation: 8,
-};
-
-// Sombras suaves y redondeadas (cross-platform iOS y Android)
-export const SHADOWS = {
-  xs: SHADOW_SMALL,
-  sm: SHADOW_SMALL,
-  small: SHADOW_SMALL,
-  md: SHADOW_MEDIUM,
-  medium: SHADOW_MEDIUM,
-  lg: SHADOW_LARGE,
-  large: SHADOW_LARGE,
-  xl: SHADOW_XLARGE,
-  soft: {
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  card: {
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.07,
-    shadowRadius: 14,
-    elevation: 3,
-  },
-};
-
-export const coloredShadow = (color, opacity = 0.22) => ({
-  shadowColor: color,
-  shadowOffset: { width: 0, height: 6 },
-  shadowOpacity: opacity,
-  shadowRadius: 16,
+  shadowRadius: 12,
   elevation: 4,
+};
+
+export const SHADOWS = {
+  xs: SHADOW_SOFT_CARD,
+  sm: SHADOW_SOFT_CARD,
+  small: SHADOW_SOFT_CARD,
+  md: SHADOW_HOVER,
+  medium: SHADOW_HOVER,
+  lg: SHADOW_HOVER,
+  large: SHADOW_HOVER,
+  xl: SHADOW_HOVER,
+  soft: SHADOW_SOFT_CARD,
+  card: SHADOW_SOFT_CARD,
+};
+
+export const coloredShadow = (color, opacity = 0.15) => ({
+  shadowColor: color,
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: opacity,
+  shadowRadius: 10,
+  elevation: 3,
 });
 
-// Border radius
+// Border radius: 12 para controles, 16 para tarjetas, 9999 para chips/redondos
 export const RADIUS = {
   xs: 4,
   sm: 8,
-  md: 12,
-  lg: 16,
+  md: 12,      // controles (botones y campos)
+  lg: 16,      // tarjetas
   xl: 24,
   "2xl": 32,
   xxl: 32,
-  full: 9999,
+  full: 9999,  // chips y avatares redondos
+  control: 12,
+  card: 16,
+  round: 9999,
 };
 
 // Configuración de la API
@@ -191,9 +187,9 @@ export const GPS_CONFIG = {
   ACCURACY_HIGH: 10,
   ACCURACY_MEDIUM: 50,
   ACCURACY_LOW: 100,
-  TRACKING_INTERVAL: 5000, // 5 segundos (UI updates)
-  SAVE_INTERVAL: 60000, // 1 minuto (guardado al backend)
-  MIN_DISTANCE: 10, // metros
+  TRACKING_INTERVAL: 5000,
+  SAVE_INTERVAL: 60000,
+  MIN_DISTANCE: 10,
 };
 
 // Estados de viaje

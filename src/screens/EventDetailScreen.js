@@ -62,6 +62,11 @@ import {
   EventAllTripsModal,
 } from "../components";
 import { messageService } from "../services/messages/messageService";
+import {
+  enrichTripsWithDriverProfiles,
+  getTripDriverName,
+  getTripDriverAvatar,
+} from "../utils";
 
 const SCREEN_HEIGHT = Dimensions.get("window").height;
 const COLLAPSED_HEIGHT = Math.round(SCREEN_HEIGHT * 0.34);
@@ -206,6 +211,15 @@ const EventDetailScreen = ({ route, navigation }) => {
         (Array.isArray(resVuelta) ? resVuelta : []);
       let idaList = Array.isArray(dataIda) ? dataIda : [];
       let vueltaList = Array.isArray(dataVuelta) ? dataVuelta : [];
+
+      if (user?.id) {
+        idaList = idaList.filter(
+          (t) => String(t.conductor_id || t.conductor?.id || t.conductor).toLowerCase() !== String(user.id).toLowerCase(),
+        );
+        vueltaList = vueltaList.filter(
+          (t) => String(t.conductor_id || t.conductor?.id || t.conductor).toLowerCase() !== String(user.id).toLowerCase(),
+        );
+      }
 
       const conductorIds = [
         ...new Set(
@@ -469,12 +483,33 @@ const EventDetailScreen = ({ route, navigation }) => {
         lng: pos.coords.longitude,
         direccion: activeTripTab,
         radius: 5,
+        userId: user?.id,
       });
 
       const trips = res.trayectos || res.data || (Array.isArray(res) ? res : []);
-      const tripsList = Array.isArray(trips) ? trips : [];
+      let tripsList = Array.isArray(trips) ? trips : [];
+      if (user?.id) {
+        tripsList = tripsList.filter(
+          (t) => String(t.conductor_id || t.conductor?.id || t.conductor).toLowerCase() !== String(user.id).toLowerCase(),
+        );
+      }
       setNearbyTrips(tripsList);
       setIsNearbyActive(true);
+
+      if (tripsList.length > 0) {
+        enrichTripsWithDriverProfiles(tripsList)
+          .then((enriched) => {
+            if (Array.isArray(enriched) && enriched.length > 0) {
+              const filteredEnriched = user?.id
+                ? enriched.filter(
+                    (t) => String(t.conductor_id || t.conductor?.id || t.conductor).toLowerCase() !== String(user.id).toLowerCase(),
+                  )
+                : enriched;
+              setNearbyTrips(filteredEnriched);
+            }
+          })
+          .catch(() => {});
+      }
     } catch (e) {
       console.warn("Error al buscar viajes cercanos:", e);
       Alert.alert("Aviso", "No se encontraron trayectos cerca de tu ubicación actual.");
@@ -662,8 +697,7 @@ const EventDetailScreen = ({ route, navigation }) => {
           )
             return null;
 
-          const conductorNombre =
-            typeof viaje.conductor === "string" ? viaje.conductor : "Conductor";
+          const conductorNombre = getTripDriverName(viaje, "Conductor");
 
           return (
             <Marker

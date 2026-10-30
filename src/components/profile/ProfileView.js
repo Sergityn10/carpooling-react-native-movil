@@ -19,6 +19,7 @@ import MainMenuSection from "./sections/MainMenuSection";
 import HistorialSection from "./sections/HistorialSection";
 import VehiculosSection from "./sections/VehiculosSection";
 import MonederoSection from "./sections/MonederoSection";
+import WalletScreen from "../../screens/WalletScreen";
 import BonoEnergeticoSection from "./sections/BonoEnergeticoSection";
 import PermisosPrivacidadSection from "./sections/PermisosPrivacidadSection";
 
@@ -983,31 +984,8 @@ const ProfileView = ({
         );
       case "monedero":
         return (
-          <MonederoSection
-            walletBalance={walletBalance}
-            walletBalanceEuros={getWalletBalanceEuros()}
-            caeData={caeData}
-            loadingWallet={loadingWallet}
-            walletError={walletError}
-            walletTransactions={walletTransactions}
-            walletPayouts={walletPayouts}
-            linkedAccounts={linkedAccounts}
-            stripeConnectStatus={stripeConnectStatus}
-            stripeOnboardingLoading={stripeOnboardingLoading}
-            showPayoutModal={showPayoutModal}
-            payoutAmount={payoutAmount}
-            processingPayout={processingPayout}
-            onSetPayoutAmount={setPayoutAmount}
-            onShowPayoutModal={() => setShowPayoutModal(true)}
-            onClosePayoutModal={() => {
-              setShowPayoutModal(false);
-              setPayoutAmount("");
-            }}
-            onWithdraw={handleWithdraw}
-            onViewStripeAccount={handleViewStripeAccount}
-            onSetupStripeConnect={handleSetupStripeConnect}
-            onSetupPaymentMethod={handleSetupPaymentMethod}
-            onRetryWallet={fetchWalletData}
+          <WalletScreen
+            navigation={navigation}
             onBack={handleBackToMenu}
           />
         );

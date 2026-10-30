@@ -72,7 +72,6 @@ const MapDatePickerSheet = ({
     }
     return list;
   }, []);
-
   const handleQuickSelect = (dateStr) => {
     onSelectDate(dateStr);
     onClose?.();
@@ -80,6 +79,10 @@ const MapDatePickerSheet = ({
 
   const handleNativeDateChange = (event, date) => {
     setShowNativePicker(Platform.OS === "ios");
+    if (event?.type === "dismissed") {
+      setShowNativePicker(false);
+      return;
+    }
     if (date) {
       const iso = getLocalDateString(date);
       onSelectDate(iso);
@@ -88,14 +91,49 @@ const MapDatePickerSheet = ({
   };
 
   // Calcular próximo fin de semana (Sábado)
-  const weekendIso = useMemo(() => {
+  const weekendData = useMemo(() => {
     const today = new Date();
     const day = today.getDay();
     const diff = day === 6 ? 0 : day === 0 ? 6 : 6 - day;
     const nextSat = new Date(today);
     nextSat.setDate(today.getDate() + diff);
-    return getLocalDateString(nextSat);
-  }, []);
+    const nextSun = new Date(nextSat);
+    nextSun.setDate(nextSat.getDate() + 1);
+
+    const saturdayIso = getLocalDateString(nextSat);
+    const sundayIso = getLocalDateString(nextSun);
+
+    const isWeekendActive =
+      (typeof selectedDate === "object" &&
+        selectedDate !== null &&
+        selectedDate.startDate === saturdayIso) ||
+      selectedDate === saturdayIso;
+
+    return {
+      startDate: saturdayIso,
+      endDate: sundayIso,
+      saturdayIso,
+      sundayIso,
+      isWeekendActive,
+      label: `Sáb ${nextSat.getDate()} - Dom ${nextSun.getDate()}`,
+    };
+  }, [selectedDate]);
+
+  const getPickerDate = () => {
+    if (!selectedDate) return new Date();
+    const str =
+      typeof selectedDate === "string" ? selectedDate : selectedDate?.startDate;
+    if (!str) return new Date();
+    const parts = str.split("-");
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      return new Date(y, m, d, 12, 0, 0);
+    }
+    const parsed = new Date(str);
+    return isNaN(parsed.getTime()) ? new Date() : parsed;
+  };
 
   if (!visible) return null;
 
@@ -224,21 +262,21 @@ const MapDatePickerSheet = ({
               style={[
                 styles.quickCard,
                 isDark && styles.quickCardDark,
-                selectedDate === weekendIso && styles.quickCardSelected,
+                weekendData.isWeekendActive && styles.quickCardSelected,
               ]}
-              onPress={() => handleQuickSelect(weekendIso)}
+              onPress={() => handleQuickSelect({ startDate: weekendData.startDate, endDate: weekendData.endDate, isWeekend: true, label: "Fin de semana" })}
               scaleTo={0.97}
             >
               <Calendar
                 size={18}
-                color={selectedDate === weekendIso ? COLORS.white : COLORS.gray700}
+                color={weekendData.isWeekendActive ? COLORS.white : COLORS.gray700}
                 strokeWidth={2.2}
               />
               <Text
                 style={[
                   styles.quickText,
                   isDark && styles.textWhite,
-                  selectedDate === weekendIso && styles.quickTextSelected,
+                  weekendData.isWeekendActive && styles.quickTextSelected,
                 ]}
               >
                 Fin de semana
@@ -316,7 +354,7 @@ const MapDatePickerSheet = ({
           {/* Picker nativo */}
           {showNativePicker && (
             <DateTimePicker
-              value={selectedDate ? new Date(selectedDate) : new Date()}
+              value={getPickerDate()}
               mode="date"
               display={Platform.OS === "ios" ? "spinner" : "default"}
               minimumDate={new Date()}

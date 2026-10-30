@@ -1,4 +1,4 @@
-// YouConnext - App Navigator
+// YouConnext - App Navigator (5 Tabs oficiales: Inicio, Explorar, Publicar, Mis viajes, Perfil)
 import React from "react";
 import {
   NavigationContainer,
@@ -8,20 +8,20 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import {
   View,
+  Text,
   StyleSheet,
   ActivityIndicator,
-  Platform,
   Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Home,
   User,
-  ScanLine,
+  Car,
   Compass,
-  CalendarCheck,
+  Plus,
 } from "lucide-react-native";
-import { COLORS } from "../constants";
+import { COLORS, BRAND, FONTS, SHADOWS, RADIUS } from "../constants";
 import { useUser } from "../context/UserContext";
 import {
   HomeScreen,
@@ -48,25 +48,30 @@ import {
   ChatDetailScreen,
   DirectChatScreen,
   EventParticipantsScreen,
+  WalletScreen,
 } from "../screens";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 // Componente para los iconos del tab
-const TabIcon = ({ Icon, focused, color }) => (
+const TabIcon = ({ Icon, focused }) => (
   <View style={styles.tabIconContainer}>
     <Icon
-      size={24}
+      size={22}
       color={focused ? COLORS.primary : COLORS.gray400}
       strokeWidth={focused ? 2.5 : 2}
     />
   </View>
 );
 
-// Navegacion principal (con tabs)
-const MainTabs = () => {
+// Componente ficticio para la pestaña central "Publicar"
+const EmptyScreen = () => null;
+
+// Navegación principal con 5 Pestañas: Inicio, Explorar, + Publicar, Mis viajes, Perfil
+const MainTabs = ({ navigation }) => {
   const insets = useSafeAreaInsets();
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -82,6 +87,7 @@ const MainTabs = () => {
         tabBarLabelStyle: styles.tabLabel,
       }}
     >
+      {/* 1. Inicio */}
       <Tab.Screen
         name="Home"
         component={HomeScreen}
@@ -92,6 +98,8 @@ const MainTabs = () => {
           tabBarLabel: "Inicio",
         }}
       />
+
+      {/* 2. Explorar (Mapa interactivo, trayectos y eventos) */}
       <Tab.Screen
         name="SearchTab"
         component={SearchTrayectosScreen}
@@ -102,16 +110,41 @@ const MainTabs = () => {
           tabBarLabel: "Explorar",
         }}
       />
+
+      {/* 3. Publicar (Botón central ámbar destacado con + grande) */}
+      <Tab.Screen
+        name="PublicarTab"
+        component={EmptyScreen}
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.navigate("CrearViaje");
+          },
+        }}
+        options={{
+          tabBarLabel: "Publicar",
+          tabBarLabelStyle: styles.tabLabelCenter,
+          tabBarIcon: () => (
+            <View style={styles.publishCenterButton}>
+              <Plus size={24} color={BRAND.black} strokeWidth={2.8} />
+            </View>
+          ),
+        }}
+      />
+
+      {/* 4. Mis viajes */}
       <Tab.Screen
         name="MisPlanes"
         component={MisPlanesScreen}
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon Icon={CalendarCheck} focused={focused} />
+            <TabIcon Icon={Car} focused={focused} />
           ),
-          tabBarLabel: "Mis planes",
+          tabBarLabel: "Mis viajes",
         }}
       />
+
+      {/* 5. Perfil */}
       <Tab.Screen
         name="Perfil"
         component={PerfilScreen}
@@ -126,7 +159,7 @@ const MainTabs = () => {
   );
 };
 
-// Pantalla de carga mientras se verifica la sesion
+// Pantalla de carga mientras se verifica la sesión
 const LoadingScreen = () => (
   <View style={styles.loadingContainer}>
     <Image
@@ -142,12 +175,15 @@ const LoadingScreen = () => (
   </View>
 );
 
-// Configuración de Deep Linking para la app YouConnext
+// Configuración de Deep Linking
 const REDIRECT_SCREEN_MAP = {
   perfil: "Perfil",
   "mis-planes": "MisPlanes",
   home: "Home",
   buscar: "SearchTab",
+  wallet: "Wallet",
+  monedero: "Wallet",
+  historial: "Historial",
 };
 
 const linking = {
@@ -174,6 +210,8 @@ const linking = {
         },
       },
       ViajeEnCurso: "api/trayecto/:id/en-curso",
+      Wallet: "wallet",
+      Historial: "historial",
     },
   },
   getStateFromPath(path, config) {
@@ -197,7 +235,7 @@ const linking = {
   },
 };
 
-// Navegacion principal de la app
+// Navegación principal de la app
 const AppNavigator = () => {
   const { user, isAuthenticated, loading } = useUser();
 
@@ -282,7 +320,8 @@ const AppNavigator = () => {
         <Stack.Screen name="Chats" component={ChatListScreen} />
         <Stack.Screen name="ChatDetalle" component={ChatDetailScreen} />
         <Stack.Screen name="DirectChat" component={DirectChatScreen} />
-        <Stack.Screen name="Historial" component={HomeScreen} />
+        <Stack.Screen name="Wallet" component={WalletScreen} />
+        <Stack.Screen name="Historial" component={WalletScreen} />
         <Stack.Screen name="Estadisticas" component={HomeScreen} />
         <Stack.Screen name="Ajustes" component={HomeScreen} />
       </Stack.Navigator>
@@ -298,8 +337,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   loadingLogo: {
-    width: 100,
-    height: 100,
+    width: 90,
+    height: 90,
     marginBottom: 16,
   },
   loadingSpinner: {
@@ -307,22 +346,46 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     backgroundColor: COLORS.white,
-    borderTopWidth: 0,
-    elevation: 0,
-    shadowColor: COLORS.gray900,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border, // #D6E2DB
+    elevation: 4,
+    shadowColor: BRAND.black,
     shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    paddingTop: 8,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    paddingTop: 6,
   },
   tabIconContainer: {
     alignItems: "center",
     justifyContent: "center",
   },
   tabLabel: {
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
     fontSize: 11,
     fontWeight: "600",
     marginTop: 2,
+  },
+  tabLabelCenter: {
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+    fontSize: 11,
+    fontWeight: "700",
+    color: BRAND.black,
+    marginTop: 2,
+  },
+  // Botón central ámbar oficial (Pág. 6 de la Guía)
+  publishCenterButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: BRAND.accent, // #F2A33C
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+    shadowColor: BRAND.accent,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 4,
   },
 });
 

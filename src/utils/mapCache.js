@@ -1,5 +1,5 @@
 // YouConnext - Caché en Cliente para Viewports de Mapa
-// LRU con TTL de 30s y validación de contención geoespacial
+// LRU con TTL de 30s, validación de contención geoespacial e igualdad estricta de filtros
 
 const CACHE_TTL = 30000;
 const MAX_CACHE_SIZE = 50;
@@ -9,12 +9,21 @@ class MapViewportCache {
     this.cache = new Map();
   }
 
-  generateKey(bounds, zoom, filters = {}) {
-    const filterKey = Object.entries(filters)
+  generateFilterKey(filters = {}) {
+    if (!filters) return "";
+    return Object.entries(filters)
+      .filter(([_, v]) => v !== undefined && v !== null && v !== "")
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, v]) => `${k}:${v}`)
+      .map(([k, v]) => `${k}:${typeof v === "object" ? JSON.stringify(v) : v}`)
       .join("|");
+  }
 
+  isFiltersEqual(f1 = {}, f2 = {}) {
+    return this.generateFilterKey(f1) === this.generateFilterKey(f2);
+  }
+
+  generateKey(bounds, zoom, filters = {}) {
+    const filterKey = this.generateFilterKey(filters);
     const boundsKey = `${bounds.minLat.toFixed(4)},${bounds.minLng.toFixed(4)},${bounds.maxLat.toFixed(4)},${bounds.maxLng.toFixed(4)},${zoom}`;
     return filterKey ? `${boundsKey}|${filterKey}` : boundsKey;
   }
@@ -44,7 +53,11 @@ class MapViewportCache {
     }
 
     for (const [cacheKey, entry] of this.cache.entries()) {
-      if (!this.isExpired(entry) && this.isContainedInCached(bounds, entry.bounds)) {
+      if (
+        !this.isExpired(entry) &&
+        this.isFiltersEqual(entry.filters, filters) &&
+        this.isContainedInCached(bounds, entry.bounds)
+      ) {
         this.cache.delete(cacheKey);
         this.cache.set(cacheKey, { ...entry, timestamp: now });
         return entry.data;

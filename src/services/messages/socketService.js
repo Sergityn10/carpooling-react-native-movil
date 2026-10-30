@@ -2,6 +2,8 @@
 import { io } from "socket.io-client";
 import { NativeModules, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import tokenStorage from "../tokenStorage";
+import { decodeJwtPayload } from "./userCache";
 
 const getMetroHost = () => {
   const scriptURL = NativeModules?.SourceCode?.scriptURL;
@@ -42,6 +44,8 @@ let socket = null;
 let isConnecting = false;
 
 const socketService = {
+  currentUserId: null,
+
   async connect(userId) {
     if (socket && socket.connected) return socket;
     if (isConnecting) return socket;
@@ -50,15 +54,29 @@ const socketService = {
 
     let token = null;
     try {
-      token = await AsyncStorage.getItem("@youconnext_token");
+      token = await tokenStorage.getAuthToken();
+      if (!token) {
+        token = await AsyncStorage.getItem("@youconnext_token");
+      }
     } catch {}
+
+    let effectiveUserId = userId || this.currentUserId;
+    if (!effectiveUserId && token) {
+      const payload = decodeJwtPayload(token);
+      effectiveUserId =
+        payload?.id || payload?.user_id || payload?.userId || payload?.sub || "";
+    }
+
+    if (effectiveUserId) {
+      this.currentUserId = String(effectiveUserId);
+    }
 
     const url = getSocketUrl();
 
     socket = io(url, {
       auth: {
         token: token || undefined,
-        id: userId,
+        id: this.currentUserId || undefined,
         serverOffset: 0,
       },
       transports: ["websocket"],
@@ -70,8 +88,11 @@ const socketService = {
 
     socket.on("connect", () => {
       isConnecting = false;
+      if (this.currentUserId) {
+        socket.emit("setUserId", this.currentUserId);
+      }
       if (typeof __DEV__ !== "undefined" && __DEV__) {
-        console.log("[Socket] Connected to messages server");
+        console.log("[Socket] Connected to messages server as user:", this.currentUserId);
       }
     });
 
@@ -97,6 +118,7 @@ const socketService = {
       socket.disconnect();
       socket = null;
       isConnecting = false;
+      this.currentUserId = null;
     }
   },
 
@@ -110,8 +132,10 @@ const socketService = {
 
   // Emit setUserId to join personal room
   setUserId(userId) {
+    if (!userId) return;
+    this.currentUserId = String(userId);
     if (socket && socket.connected) {
-      socket.emit("setUserId", userId);
+      socket.emit("setUserId", this.currentUserId);
     }
   },
 

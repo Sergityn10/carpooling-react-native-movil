@@ -32,6 +32,7 @@ import {
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../../constants";
 import PressableScale from "../common/PressableScale";
 import { formatTripDate, formatTripTime, formatTripCountdown } from "../../services/dateUtils";
+import { getTripDriverName, getTripDriverAvatar } from "../../utils";
 
 const SHEET_DISMISS_THRESHOLD = 80;
 
@@ -109,18 +110,9 @@ const TripPreviewSheet = ({
   const isDark = theme === "dark";
 
   // Resolver foto y nombre de conductor de forma segura
-  const driverAvatar =
-    img_perfil ||
-    trip.conductor_img ||
-    (typeof conductor === "object"
-      ? conductor?.img_perfil || conductor?.avatar || conductor?.avatar_url || conductor?.photo
-      : null);
+  const driverAvatar = getTripDriverAvatar(trip);
 
-  const driverName =
-    (typeof conductor === "object" ? conductor?.nombre || conductor?.name : conductor) ||
-    trip.conductorNombre ||
-    trip.conductor_nombre ||
-    "Conductor";
+  const driverName = getTripDriverName(trip, "Conductor");
 
   const rating =
     conductorRating ||
@@ -217,17 +209,9 @@ const TripPreviewSheet = ({
             >
               {siblingTrips.map((sTrip) => {
                 const isCurrent = String(sTrip.id) === String(trip.id);
-                const sConductor = sTrip.conductor;
-                const sDriverName =
-                  (typeof sConductor === "object" ? sConductor?.nombre || sConductor?.name : sConductor) ||
-                  sTrip.conductorNombre ||
-                  sTrip.conductor_nombre ||
-                  "Conductor";
+                const sDriverName = getTripDriverName(sTrip, "Conductor");
                 const sFirstName = sDriverName.split(" ")[0];
-                const sAvatar =
-                  sTrip.img_perfil ||
-                  sTrip.conductor_img ||
-                  (typeof sConductor === "object" ? sConductor?.img_perfil || sConductor?.avatar || sConductor?.photo : null);
+                const sAvatar = getTripDriverAvatar(sTrip);
                 const sPrice = sTrip.precio ?? 0;
                 const sTime = formatTripTime(sTrip);
 

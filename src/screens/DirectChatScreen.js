@@ -51,7 +51,7 @@ const formatDateSeparator = (dateString) => {
 };
 
 const DirectChatScreen = ({ route, navigation }) => {
-  const { peerId, chat, chatId } = route.params || {};
+  const { peerId, chat, chatId, peerProfile } = route.params || {};
   const { user } = useUser();
   const insets = useSafeAreaInsets();
 
@@ -60,32 +60,47 @@ const DirectChatScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [resolvedUserId, setResolvedUserId] = useState("");
-  const [peerName, setPeerName] = useState("");
-  const [peerAvatar, setPeerAvatar] = useState(null);
+  const [peerName, setPeerName] = useState(peerProfile?.name || "");
+  const [peerAvatar, setPeerAvatar] = useState(peerProfile?.img_perfil || null);
   const [resolvedChatId, setResolvedChatId] = useState(null);
   const flatListRef = useRef(null);
 
   useEffect(() => {
-    userCache.getMyUuid().then((uuid) => {
+    userCache.getMyUuid(user?.id).then((uuid) => {
       setResolvedUserId(uuid);
     });
   }, [user?.id]);
 
-  const currentUserId = resolvedUserId;
+  // Colección de todos los identificadores conocidos del usuario actual
+  const myIdentifiers = React.useMemo(() => {
+    const ids = new Set();
+    if (resolvedUserId) ids.add(String(resolvedUserId).toLowerCase());
+    if (user?.id) ids.add(String(user.id).toLowerCase());
+    if (user?.userId) ids.add(String(user.userId).toLowerCase());
+    if (user?.uuid) ids.add(String(user.uuid).toLowerCase());
+    const syncUuid = userCache.getMyUuidSync(user?.id);
+    if (syncUuid) ids.add(String(syncUuid).toLowerCase());
+    return ids;
+  }, [resolvedUserId, user?.id, user?.userId, user?.uuid]);
+
+  const isMineId = useCallback(
+    (senderId, item = null) => {
+      if (item?._isMine) return true;
+      if (!senderId) return false;
+      const s = String(senderId).toLowerCase();
+      return myIdentifiers.has(s);
+    },
+    [myIdentifiers],
+  );
+
+  const currentUserId =
+    resolvedUserId || userCache.getMyUuidSync(user?.id) || String(user?.id || "");
   const actualChatId = chatId || chat?.chat_id || chat?.id || resolvedChatId;
   const otherUserId =
     peerId ||
-    (String(chat?.send_by) === currentUserId
+    (isMineId(chat?.send_by)
       ? chat?.send_to
       : chat?.send_by || chat?.send_to);
-
-  const isMineId = (senderId) => {
-    if (!senderId || !currentUserId) return false;
-    const s = String(senderId);
-    return (
-      s === currentUserId || s.toLowerCase() === currentUserId.toLowerCase()
-    );
-  };
 
   const fetchMessages = useCallback(async () => {
     if (!actualChatId) return;
@@ -142,18 +157,36 @@ const DirectChatScreen = ({ route, navigation }) => {
 
       setMessages((prev) => {
         const offsetId = data.serverOffset?.toString();
-        const existsById = prev.some((m) => m.id?.toString() === offsetId);
+        const existsById =
+          offsetId && prev.some((m) => m.id?.toString() === offsetId);
         if (existsById) return prev;
 
-        const existsByContent = prev.some(
+        // Reconciliar con mensaje temporal pendiente
+        const pendingIndex = prev.findIndex(
           (m) =>
             m.content === data.message &&
-            Math.abs(
-              new Date(m.created_at).getTime() -
-                new Date(data.created_at).getTime(),
-            ) < 10000,
+            (m._pending ||
+              Math.abs(
+                new Date(m.created_at).getTime() -
+                  new Date(data.created_at).getTime(),
+              ) < 10000),
         );
-        if (existsByContent) return prev;
+
+        const isMineServer = isMineId(data.send_by);
+
+        if (pendingIndex !== -1) {
+          const updated = [...prev];
+          const prevMsg = updated[pendingIndex];
+          updated[pendingIndex] = {
+            ...prevMsg,
+            id: data.serverOffset || prevMsg.id,
+            sender_id: data.send_by || prevMsg.sender_id,
+            created_at: data.created_at || prevMsg.created_at,
+            _pending: false,
+            _isMine: prevMsg._isMine || isMineServer,
+          };
+          return updated;
+        }
 
         return [
           ...prev,
@@ -164,6 +197,7 @@ const DirectChatScreen = ({ route, navigation }) => {
             content: data.message,
             created_at: data.created_at,
             type: "TEXT",
+            _isMine: isMineServer,
           },
         ];
       });
@@ -174,7 +208,7 @@ const DirectChatScreen = ({ route, navigation }) => {
     return () => {
       socketService.off("chat_message", handleMessage);
     };
-  }, [currentUserId, actualChatId, otherUserId]);
+  }, [currentUserId, actualChatId, otherUserId, isMineId]);
 
   useEffect(() => {
     if (otherUserId) {
@@ -193,14 +227,18 @@ const DirectChatScreen = ({ route, navigation }) => {
     setInputText("");
 
     const tempId = `temp_${Date.now()}`;
+    const myPrimaryId =
+      currentUserId || userCache.getMyUuidSync(user?.id) || String(user?.id || "");
+
     const tempMessage = {
       id: tempId,
       chat_id: actualChatId,
-      sender_id: currentUserId,
+      sender_id: myPrimaryId,
       content: text,
       created_at: new Date().toISOString(),
       type: "TEXT",
       _pending: true,
+      _isMine: true,
     };
 
     setMessages((prev) => [...prev, tempMessage]);
@@ -211,14 +249,27 @@ const DirectChatScreen = ({ route, navigation }) => {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === tempId
-                ? { ...m, id: ack.serverOffset, _pending: false }
+                ? {
+                    ...m,
+                    id: ack.serverOffset,
+                    sender_id: myPrimaryId,
+                    _pending: false,
+                    _isMine: true,
+                  }
                 : m,
             ),
           );
         } else {
           setMessages((prev) =>
             prev.map((m) =>
-              m.id === tempId ? { ...m, _pending: false } : m,
+              m.id === tempId
+                ? {
+                    ...m,
+                    sender_id: myPrimaryId,
+                    _pending: false,
+                    _isMine: true,
+                  }
+                : m,
             ),
           );
         }
@@ -227,7 +278,9 @@ const DirectChatScreen = ({ route, navigation }) => {
       console.warn("[DirectChat] Error al enviar mensaje:", err.message);
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === tempId ? { ...m, _pending: false, _failed: true } : m,
+          m.id === tempId
+            ? { ...m, _pending: false, _failed: true, _isMine: true }
+            : m,
         ),
       );
     } finally {
@@ -244,7 +297,7 @@ const DirectChatScreen = ({ route, navigation }) => {
   );
 
   const renderMessage = ({ item, index }) => {
-    const isMine = isMineId(item.sender_id);
+    const isMine = isMineId(item.sender_id, item);
     const prevMsg = messages[index - 1];
     const showDateSep =
       !prevMsg ||
@@ -316,9 +369,14 @@ const DirectChatScreen = ({ route, navigation }) => {
               </Text>
             )}
           </View>
-          <Text style={styles.headerName} numberOfLines={1}>
-            {displayName}
-          </Text>
+          <View style={styles.headerTextCol}>
+            <Text style={styles.headerName} numberOfLines={1}>
+              {displayName}
+            </Text>
+            <Text style={styles.headerSubtitle} numberOfLines={1}>
+              Chat directo
+            </Text>
+          </View>
         </View>
 
         <View style={{ width: 24 }} />
@@ -400,19 +458,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: SPACING.sm,
   },
+  headerTextCol: {
+    flex: 1,
+    justifyContent: "center",
+  },
   headerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: COLORS.secondary,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
   headerAvatarImage: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
   },
   headerAvatarText: {
     fontSize: FONTS.md,
@@ -420,10 +482,15 @@ const styles = StyleSheet.create({
     color: COLORS.white,
   },
   headerName: {
-    fontSize: FONTS.md,
-    fontWeight: "600",
+    fontSize: FONTS.sm + 1,
+    fontWeight: "700",
     color: COLORS.gray800,
-    flex: 1,
+  },
+  headerSubtitle: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: COLORS.gray400,
+    marginTop: 1,
   },
   messagesList: {
     paddingHorizontal: SPACING.md,

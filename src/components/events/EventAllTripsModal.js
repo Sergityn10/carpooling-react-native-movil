@@ -25,6 +25,7 @@ import { ViajeCard } from "../index";
 import AnimatedCardEntrance from "../common/AnimatedCardEntrance";
 import EmptyState from "../home/EmptyState";
 import { parseTripDate } from "../../services/dateUtils";
+import { getTripDriverName } from "../../utils";
 
 const EventAllTripsModal = ({
   visible,
@@ -70,7 +71,7 @@ const EventAllTripsModal = ({
       const destMatch = (t.destino || "")
         .toLowerCase()
         .includes(searchQuery.toLowerCase().trim());
-      const conductorMatch = (typeof t.conductor === "string" ? t.conductor : "")
+      const conductorMatch = getTripDriverName(t, "")
         .toLowerCase()
         .includes(searchQuery.toLowerCase().trim());
 
