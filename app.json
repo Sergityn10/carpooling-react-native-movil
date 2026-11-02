@@ -42,6 +42,12 @@
     "plugins": [
       "./plugins/withGoogleServicesFile",
       "./plugins/withAndroidSigning",
+      [
+        "./plugins/withAsyncStorageLimit",
+        {
+          "sizeInMB": 50
+        }
+      ],
       "@react-native-google-signin/google-signin",
       "@react-native-community/datetimepicker",
       [

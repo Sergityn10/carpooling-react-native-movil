@@ -24,3 +24,9 @@ export { eventService } from "./eventService";
 
 // Notifications
 export { notificacionService } from "./notifications/notificacionService";
+
+// Enterprise & Organizations
+export { enterpriseService } from "./enterpriseService";
+
+// Storage & Cache Protection
+export { storageManager, safeSetItem, safeMultiSet, purgeVolatileCaches } from "./storageManager";

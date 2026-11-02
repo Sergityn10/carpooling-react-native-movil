@@ -1,4 +1,4 @@
-// YouConnext - User Context
+// YouConnext - User Context (con soporte para Inicio de Sesión Unificado B2B/B2C)
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -13,10 +13,25 @@ import userCache from "../services/messages/userCache";
 import { homeCache } from "../services/homeCache";
 import socketService from "../services/messages/socketService";
 import {
+  safeMultiSet,
+  safeSetItem,
+  purgeVolatileCaches,
+  storageManager,
+} from "../services/storageManager";
+import {
   registerPushDevice,
   unregisterPushDevice,
   listenForTokenRefresh,
 } from "../services/notifications/pushRegistration";
+
+const STORAGE_KEYS = {
+  USER: "@youconnext_user",
+  ACTIVE_MODE: "@youconnext_active_mode",
+  IDENTITY: "@youconnext_identity",
+  PERMISSIONS: "@youconnext_permissions",
+  MEMBERSHIPS: "@youconnext_corporate_memberships",
+  SELECTED_ENTERPRISE: "@youconnext_selected_enterprise",
+};
 
 const UserContext = createContext();
 
@@ -25,7 +40,14 @@ export const UserProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Cargar usuario desde AsyncStorage al iniciar
+  // Estados B2B / Identidad y Gobernanza de Modo
+  const [activeMode, setActiveMode] = useState("personal"); // "personal" | "enterprise"
+  const [identity, setIdentity] = useState(null);
+  const [permissions, setPermissions] = useState({});
+  const [corporateMemberships, setCorporateMemberships] = useState([]);
+  const [selectedEnterprise, setSelectedEnterprise] = useState(null);
+
+  // Cargar usuario y preferencias desde AsyncStorage al iniciar
   useEffect(() => {
     loadUser();
   }, []);
@@ -58,6 +80,7 @@ export const UserProvider = ({ children }) => {
     );
     return () => subscription?.remove();
   }, [isAuthenticated]);
+
   useEffect(() => {
     if (!isAuthenticated || !user?.id) return;
 
@@ -79,10 +102,139 @@ export const UserProvider = ({ children }) => {
     };
   }, [isAuthenticated, user?.id]);
 
+  // Normalizar datos de login unificado
+  const processUnifiedAuthResponse = async (response) => {
+    const token = response.token;
+    const refreshToken = response.refreshToken;
+
+    if (token) {
+      await tokenStorage.setAuthToken(token);
+      httpClient.setToken(token);
+      travelsHttpClient.setToken(token);
+      notificationsHttpClient.setToken(token);
+    }
+    if (refreshToken) {
+      await tokenStorage.setRefreshToken(refreshToken);
+      httpClient.setRefreshToken(refreshToken);
+    }
+
+    const resIdentity = response.identity || {};
+    const resPermissions = response.permissions || {};
+    const legalEntity = response.legal_entity;
+    const naturalPerson = response.natural_person;
+    const initialMode = response.initial_mode;
+
+    const memberships = naturalPerson?.memberships ||
+      (naturalPerson?.primary_membership ? [naturalPerson.primary_membership] : []);
+
+    const chosenEnterprise = legalEntity
+      ? {
+          id: legalEntity.enterprise_id,
+          name: legalEntity.name,
+          cif: legalEntity.cif,
+          sector: legalEntity.sector,
+          location: legalEntity.location,
+          verified: legalEntity.verified,
+        }
+      : naturalPerson?.primary_membership || (memberships.length > 0 ? memberships[0] : null);
+
+    // Determinar modo activo:
+    // Si es LEGAL_ENTITY, forzosamente 'enterprise'
+    let modeToSet = "personal";
+    if (resIdentity.type === "LEGAL_ENTITY") {
+      modeToSet = "enterprise";
+    } else {
+      const savedMode = await AsyncStorage.getItem(STORAGE_KEYS.ACTIVE_MODE);
+      if (savedMode === "enterprise" && resPermissions.can_access_corporate_mode) {
+        modeToSet = "enterprise";
+      } else if (initialMode === "enterprise" && resPermissions.can_access_corporate_mode) {
+        modeToSet = "enterprise";
+      } else {
+        modeToSet = "personal";
+      }
+    }
+
+    // Construir objeto user normalizado
+    let normalizedUser = {
+      id: resIdentity.user_id || response.userId,
+      email: resIdentity.email || response.email,
+      name: naturalPerson?.first_name || resIdentity.display_name || legalEntity?.name || "Usuario",
+      surname: naturalPerson?.last_name || "",
+      img_perfil: resIdentity.avatar || response.img_perfil || null,
+      phone: naturalPerson?.phone || legalEntity?.phone || null,
+      dni: naturalPerson?.dni || null,
+      role: resIdentity.system_role || response.role || (resIdentity.type === "LEGAL_ENTITY" ? "enterprise" : "user"),
+      classification: resIdentity.classification || "REGULAR_USER",
+      identity_type: resIdentity.type || (resIdentity.system_role === "enterprise" ? "LEGAL_ENTITY" : "NATURAL_PERSON"),
+      is_corporate_member: Boolean(naturalPerson?.is_corporate_member || memberships.length > 0 || legalEntity),
+      onboarding_ended: response.onboarding_ended ?? 1,
+    };
+
+    // Intentar enriquecer datos con usuarioService si es persona física
+    if (resIdentity.type !== "LEGAL_ENTITY") {
+      try {
+        const infoRes = await usuarioService.getUserInfo();
+        const infoData = infoRes.data || infoRes;
+        normalizedUser = {
+          ...normalizedUser,
+          ...infoData,
+          completitud: infoRes.completitud ?? null,
+          completitud_cae: infoRes.completitud_cae ?? null,
+          monedero: infoRes.monedero ?? null,
+        };
+      } catch (err) {
+        console.warn("[UserContext] No se pudo obtener info adicional de usuario:", err?.message);
+      }
+    }
+
+    // Guardar en Storage de forma atómica y protegida contra SQLITE_FULL
+    const storagePairs = [
+      [STORAGE_KEYS.USER, JSON.stringify(normalizedUser)],
+      [STORAGE_KEYS.ACTIVE_MODE, modeToSet],
+      [STORAGE_KEYS.IDENTITY, JSON.stringify(resIdentity)],
+      [STORAGE_KEYS.PERMISSIONS, JSON.stringify(resPermissions)],
+      [STORAGE_KEYS.MEMBERSHIPS, JSON.stringify(memberships)],
+    ];
+    if (chosenEnterprise) {
+      storagePairs.push([
+        STORAGE_KEYS.SELECTED_ENTERPRISE,
+        JSON.stringify(chosenEnterprise),
+      ]);
+    }
+
+    await safeMultiSet(storagePairs);
+
+    // Actualizar estado en React
+    setUser(normalizedUser);
+    setIdentity(resIdentity);
+    setPermissions(resPermissions);
+    setCorporateMemberships(memberships);
+    setSelectedEnterprise(chosenEnterprise);
+    setActiveMode(modeToSet);
+    setIsAuthenticated(true);
+
+    return normalizedUser;
+  };
+
   // Cargar usuario almacenado
   const loadUser = async () => {
     try {
       const token = await tokenStorage.getAuthToken();
+
+      // Restaurar preferencias B2B locales
+      const [savedMode, savedIdentity, savedPerms, savedMemberships, savedEnt] = await Promise.all([
+        AsyncStorage.getItem(STORAGE_KEYS.ACTIVE_MODE),
+        AsyncStorage.getItem(STORAGE_KEYS.IDENTITY),
+        AsyncStorage.getItem(STORAGE_KEYS.PERMISSIONS),
+        AsyncStorage.getItem(STORAGE_KEYS.MEMBERSHIPS),
+        AsyncStorage.getItem(STORAGE_KEYS.SELECTED_ENTERPRISE),
+      ]);
+
+      if (savedMode) setActiveMode(savedMode);
+      if (savedIdentity) setIdentity(JSON.parse(savedIdentity));
+      if (savedPerms) setPermissions(JSON.parse(savedPerms));
+      if (savedMemberships) setCorporateMemberships(JSON.parse(savedMemberships));
+      if (savedEnt) setSelectedEnterprise(JSON.parse(savedEnt));
 
       if (token) {
         httpClient.setToken(token);
@@ -94,33 +246,41 @@ export const UserProvider = ({ children }) => {
         if (refreshTokenValue) {
           httpClient.setRefreshToken(refreshTokenValue);
         }
+
         try {
-          // validateToken y getUserInfo en paralelo para evitar latencia secuencial
-          const [validateRes, infoRes] = await Promise.all([
-            authService.validateToken(),
-            usuarioService.getUserInfo(),
-          ]);
-          const userData = validateRes.data || validateRes;
-          const fullUser = {
-            id: userData.userId,
-            email: userData.email,
-            img_perfil: userData.img_perfil,
-            ciudad: userData.ciudad,
-            onboarding_ended: userData.onboarding_ended,
-            role: userData.role,
-            ...(infoRes.data || infoRes),
-            completitud: infoRes.completitud ?? null,
-            completitud_cae: infoRes.completitud_cae ?? null,
-            monedero: infoRes.monedero ?? null,
-          };
-          await AsyncStorage.setItem(
-            "@youconnext_user",
-            JSON.stringify(fullUser),
-          );
-          setUser(fullUser);
-          setIsAuthenticated(true);
+          // Si el usuario es persona jurídica, no consultar validateToken de usuarios B2C
+          const localUserData = await AsyncStorage.getItem(STORAGE_KEYS.USER);
+          const parsedLocalUser = localUserData ? JSON.parse(localUserData) : null;
+
+          if (parsedLocalUser?.role === "enterprise" || parsedLocalUser?.identity_type === "LEGAL_ENTITY") {
+            setUser(parsedLocalUser);
+            setIsAuthenticated(true);
+            setActiveMode("enterprise");
+          } else {
+            const [validateRes, infoRes] = await Promise.all([
+              authService.validateToken(),
+              usuarioService.getUserInfo(),
+            ]);
+            const userData = validateRes.data || validateRes;
+            const fullUser = {
+              ...parsedLocalUser,
+              id: userData.userId,
+              email: userData.email,
+              img_perfil: userData.img_perfil,
+              ciudad: userData.ciudad,
+              onboarding_ended: userData.onboarding_ended,
+              role: userData.role,
+              ...(infoRes.data || infoRes),
+              completitud: infoRes.completitud ?? null,
+              completitud_cae: infoRes.completitud_cae ?? null,
+              monedero: infoRes.monedero ?? null,
+            };
+            await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(fullUser));
+            setUser(fullUser);
+            setIsAuthenticated(true);
+          }
         } catch (error) {
-          console.error("Error al obtener info del usuario:", error);
+          console.error("Error al obtener info del usuario en loadUser:", error);
           const isAuthError =
             error?.status === 401 ||
             error?.message?.includes("401") ||
@@ -129,9 +289,7 @@ export const UserProvider = ({ children }) => {
           if (isAuthError) {
             await clearStoredSession();
           } else {
-            // Error de red o servidor: mantener sesión, usar datos locales
-            const localUserData =
-              await AsyncStorage.getItem("@youconnext_user");
+            const localUserData = await AsyncStorage.getItem(STORAGE_KEYS.USER);
             if (localUserData) {
               const parsedUser = JSON.parse(localUserData);
               setUser(parsedUser);
@@ -140,8 +298,7 @@ export const UserProvider = ({ children }) => {
           }
         }
       } else {
-        // Fallback: cargar usuario guardado localmente
-        const userData = await AsyncStorage.getItem("@youconnext_user");
+        const userData = await AsyncStorage.getItem(STORAGE_KEYS.USER);
         if (userData) {
           const parsedUser = JSON.parse(userData);
           setUser(parsedUser);
@@ -155,11 +312,32 @@ export const UserProvider = ({ children }) => {
     }
   };
 
+  // Conmutador de modo: "personal" ⇋ "enterprise"
+  const switchMode = async (mode, enterpriseId = null) => {
+    try {
+      const targetMode = mode === "enterprise" ? "enterprise" : "personal";
+      setActiveMode(targetMode);
+      await safeSetItem(STORAGE_KEYS.ACTIVE_MODE, targetMode);
+
+      if (enterpriseId && corporateMemberships.length > 0) {
+        const ent = corporateMemberships.find(
+          (m) => String(m.id || m.enterprise_id) === String(enterpriseId),
+        );
+        if (ent) {
+          setSelectedEnterprise(ent);
+          await safeSetItem(STORAGE_KEYS.SELECTED_ENTERPRISE, JSON.stringify(ent));
+        }
+      }
+    } catch (e) {
+      console.error("Error al conmutar modo en UserContext:", e);
+    }
+  };
+
   // Guardar sesión (token + usuario)
   const saveSession = async (userData, token) => {
     try {
       userCache.clear();
-      await AsyncStorage.setItem("@youconnext_user", JSON.stringify(userData));
+      await safeSetItem(STORAGE_KEYS.USER, JSON.stringify(userData));
       if (token) {
         await tokenStorage.setAuthToken(token);
         httpClient.setToken(token);
@@ -176,7 +354,14 @@ export const UserProvider = ({ children }) => {
 
   // Limpiar sesión almacenada
   const clearStoredSession = async () => {
-    await AsyncStorage.removeItem("@youconnext_user");
+    await AsyncStorage.multiRemove([
+      STORAGE_KEYS.USER,
+      STORAGE_KEYS.ACTIVE_MODE,
+      STORAGE_KEYS.IDENTITY,
+      STORAGE_KEYS.PERMISSIONS,
+      STORAGE_KEYS.MEMBERSHIPS,
+      STORAGE_KEYS.SELECTED_ENTERPRISE,
+    ]);
     await tokenStorage.clearAllAuthTokens();
     httpClient.clearToken();
     travelsHttpClient.clearToken();
@@ -185,6 +370,11 @@ export const UserProvider = ({ children }) => {
     homeCache.clear();
     socketService.disconnect();
     setUser(null);
+    setIdentity(null);
+    setPermissions({});
+    setCorporateMemberships([]);
+    setSelectedEnterprise(null);
+    setActiveMode("personal");
     setIsAuthenticated(false);
   };
 
@@ -195,7 +385,7 @@ export const UserProvider = ({ children }) => {
       const token = response.token;
       httpClient.setToken(token);
       travelsHttpClient.setToken(token);
-      // Tras registro, obtener info completa del usuario
+
       let userData = {
         id: response.userId,
         email,
@@ -212,10 +402,7 @@ export const UserProvider = ({ children }) => {
           monedero: infoRes.monedero ?? null,
         };
       } catch (infoErr) {
-        console.warn(
-          "[UserContext] getUserInfo fallo en crearUsuario:",
-          infoErr?.message,
-        );
+        console.warn("[UserContext] getUserInfo fallo en crearUsuario:", infoErr?.message);
       }
 
       await saveSession(userData, token);
@@ -226,22 +413,34 @@ export const UserProvider = ({ children }) => {
     }
   };
 
-  // Iniciar sesión (email + password)
+  // Iniciar sesión (Login Unificado)
   const iniciarSesion = async (email, password) => {
     try {
-      const response = await authService.login(email, password);
+      const response = await authService.unifiedLogin({
+        email,
+        password,
+        auth_type: "auto",
+      });
+
+      // Si recibimos la respuesta estandarizada de identidad
+      if (response?.identity) {
+        const normalizedUser = await processUnifiedAuthResponse(response);
+        return { ...response, user: normalizedUser };
+      }
+
+      // Fallback para login clásico
       const token = response.token;
       httpClient.setToken(token);
       travelsHttpClient.setToken(token);
-      // Construir userData con lo que devuelve login + validateToken
+
       let userData = {
         id: response.userId,
         email,
         img_perfil: response.img_perfil,
         onboarding_ended: response.onboarding_ended,
+        role: response.role || "user",
       };
 
-      // Obtener info completa del usuario
       try {
         const infoRes = await usuarioService.getUserInfo();
         userData = {
@@ -252,16 +451,60 @@ export const UserProvider = ({ children }) => {
           monedero: infoRes.monedero ?? null,
         };
       } catch (infoErr) {
-        console.warn(
-          "[UserContext] getUserInfo fallo en iniciarSesion:",
-          infoErr?.message,
-        );
+        console.warn("[UserContext] getUserInfo fallo en iniciarSesion:", infoErr?.message);
       }
 
       await saveSession(userData, token);
       return { ...response, user: userData };
     } catch (error) {
       console.error("Error al iniciar sesión:", error);
+      throw error;
+    }
+  };
+
+  // Login con Google nativo (Login Unificado)
+  const loginGoogleNative = async (idToken, method = "login", options = {}) => {
+    try {
+      const response = await authService.unifiedLogin({
+        id_token: idToken,
+        auth_method: "google",
+      });
+
+      if (response?.identity) {
+        const normalizedUser = await processUnifiedAuthResponse(response);
+        return { token: response.token, userId: response.identity.user_id, user: normalizedUser };
+      }
+
+      // Fallback legacy
+      const res = await authService.loginWithGoogleAndroid(idToken, method, options);
+      const { token, userId, img_perfil } = res;
+
+      httpClient.setToken(token);
+      travelsHttpClient.setToken(token);
+      let userData = {
+        id: userId,
+        img_perfil: img_perfil || null,
+        onboarding_ended: res.onboarding_ended,
+        role: res.role || "user",
+      };
+
+      try {
+        const infoRes = await usuarioService.getUserInfo();
+        userData = {
+          ...userData,
+          ...(infoRes.data || infoRes),
+          completitud: infoRes.completitud ?? null,
+          completitud_cae: infoRes.completitud_cae ?? null,
+          monedero: infoRes.monedero ?? null,
+        };
+      } catch (infoErr) {
+        console.warn("[UserContext] getUserInfo fallo en loginGoogle:", infoErr?.message);
+      }
+
+      await saveSession(userData, token);
+      return { token, userId, user: userData };
+    } catch (error) {
+      console.error("Error al iniciar sesión con Google:", error);
       throw error;
     }
   };
@@ -273,63 +516,16 @@ export const UserProvider = ({ children }) => {
     } catch (error) {
       console.error("Error al cerrar sesión en API:", error);
     } finally {
-      // Cerrar sesión también en el SDK nativo de Google
       try {
         await GoogleSignin.signOut();
-      } catch (e) {
-        // Ignorar si no hay sesión de Google
-      }
-      // Desregistrar token de notificaciones
+      } catch (e) {}
+
       try {
         const jwtToken = await tokenStorage.getAuthToken();
         await unregisterPushDevice(jwtToken);
-      } catch (e) {
-        // Ignorar si falla; clearStoredSession limpia el token igualmente
-      }
+      } catch (e) {}
+
       await clearStoredSession();
-    }
-  };
-
-  // Login con Google nativo — recibe idToken del SDK de Google Sign-In
-  const loginGoogleNative = async (idToken, method = "login", options = {}) => {
-    try {
-      const res = await authService.loginWithGoogleAndroid(
-        idToken,
-        method,
-        options,
-      );
-      const { token, userId, img_perfil } = res;
-
-      httpClient.setToken(token);
-      travelsHttpClient.setToken(token);
-      let userData = {
-        id: userId,
-        img_perfil: img_perfil || null,
-        onboarding_ended: res.onboarding_ended,
-      };
-
-      // Obtener info completa del usuario
-      try {
-        const infoRes = await usuarioService.getUserInfo();
-        userData = {
-          ...userData,
-          ...(infoRes.data || infoRes),
-          completitud: infoRes.completitud ?? null,
-          completitud_cae: infoRes.completitud_cae ?? null,
-          monedero: infoRes.monedero ?? null,
-        };
-      } catch (infoErr) {
-        console.warn(
-          "[UserContext] getUserInfo fallo en loginGoogle:",
-          infoErr?.message,
-        );
-      }
-
-      await saveSession(userData, token);
-      return { token, userId, user: userData };
-    } catch (error) {
-      console.error("Error al iniciar sesión con Google:", error);
-      throw error;
     }
   };
 
@@ -338,7 +534,6 @@ export const UserProvider = ({ children }) => {
     try {
       await usuarioService.updateUser(datos);
 
-      // Tras actualizar, refrescar datos del usuario
       try {
         const infoRes = await usuarioService.getUserInfo();
         const infoData = infoRes.data || infoRes;
@@ -350,19 +545,12 @@ export const UserProvider = ({ children }) => {
           completitud_cae: infoRes.completitud_cae ?? null,
           monedero: infoRes.monedero ?? null,
         };
-        await AsyncStorage.setItem(
-          "@youconnext_user",
-          JSON.stringify(updatedUser),
-        );
+        await safeSetItem(STORAGE_KEYS.USER, JSON.stringify(updatedUser));
         setUser(updatedUser);
         return updatedUser;
       } catch {
-        // Si no se puede refrescar, actualizar localmente
         const updatedUser = { ...user, ...datos };
-        await AsyncStorage.setItem(
-          "@youconnext_user",
-          JSON.stringify(updatedUser),
-        );
+        await safeSetItem(STORAGE_KEYS.USER, JSON.stringify(updatedUser));
         setUser(updatedUser);
         return updatedUser;
       }
@@ -376,6 +564,14 @@ export const UserProvider = ({ children }) => {
     user,
     loading,
     isAuthenticated,
+    activeMode,
+    identity,
+    permissions,
+    corporateMemberships,
+    selectedEnterprise,
+    switchMode,
+    setSelectedEnterprise,
+    clearAppCache: purgeVolatileCaches,
     crearUsuario,
     iniciarSesion,
     loginGoogleNative,

@@ -2276,6 +2276,70 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingVertical: SPACING.md,
   },
+
+  // Banner Switcher a Modo Organización
+  enterpriseSwitchBanner: {
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.md,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.card,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    overflow: "hidden",
+    ...SHADOWS.card,
+  },
+  enterpriseSwitchInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: SPACING.cardPadding,
+    gap: 12,
+  },
+  enterpriseIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: RADIUS.control,
+    backgroundColor: "#F4FAF6",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  enterpriseTextBox: {
+    flex: 1,
+  },
+  enterpriseTagRow: {
+    backgroundColor: "#E3F4EA",
+    alignSelf: "flex-start",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: RADIUS.round,
+    marginBottom: 3,
+  },
+  enterpriseTagText: {
+    fontSize: 9.5,
+    fontWeight: "700",
+    color: COLORS.primary,
+    letterSpacing: 0.5,
+  },
+  enterpriseTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: COLORS.gray900 || "#0B0F0E",
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+  },
+  enterpriseSubtitle: {
+    fontSize: 11,
+    color: COLORS.gray500,
+    marginTop: 2,
+  },
+  enterpriseArrowBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F4FAF6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });
 
 export default styles;
