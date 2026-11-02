@@ -52,9 +52,18 @@ async function leaveEvent(eventId) {
   });
 }
 
-// Listar participantes — GET /api/events/:id/participants
+// Listar participantes (público) — GET /api/events/:id/participants
 async function getParticipants(eventId) {
   return httpClient.request(`/api/events/${eventId}/participants`);
+}
+
+// Listar participantes detallados (con ciudad y provincia) — GET /api/events/:id/participants/details
+async function getParticipantsDetails(eventId) {
+  try {
+    return await httpClient.request(`/api/events/${eventId}/participants/details`);
+  } catch (err) {
+    return await httpClient.request(`/api/events/${eventId}/participants`);
+  }
 }
 
 // Eventos a los que se ha unido el usuario — GET /api/events/me/joined
@@ -71,5 +80,6 @@ export const eventService = {
   joinEvent,
   leaveEvent,
   getParticipants,
+  getParticipantsDetails,
   getMyJoinedEvents,
 };

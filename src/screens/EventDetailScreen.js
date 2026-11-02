@@ -55,6 +55,7 @@ import { useUser } from "../context/UserContext";
 import {
   EventHeroImage,
   EventInfoSection,
+  EventMetricsCard,
   EventCodeCard,
   EventDescription,
   EventLinks,
@@ -281,7 +282,7 @@ const EventDetailScreen = ({ route, navigation }) => {
     if (!eventId) return;
     setLoadingParticipants(true);
     try {
-      const res = await eventService.getParticipants(eventId);
+      const res = await eventService.getParticipantsDetails(eventId);
       const list = res.participants || res.data || [];
       setParticipants(Array.isArray(list) ? list : []);
       const myId = String(user?.id || user?.userId || user?.user_id || "");
@@ -376,7 +377,7 @@ const EventDetailScreen = ({ route, navigation }) => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([fetchEvent(), fetchTrayectos(), fetchParticipants()]);
+    await Promise.allSettled([fetchEvent(), fetchTrayectos(), fetchParticipants()]);
     setRefreshing(false);
   };
 
@@ -645,6 +646,71 @@ const EventDetailScreen = ({ route, navigation }) => {
   const activeTrips =
     activeTripTab === "ida" ? displayTripsIda : displayTripsVuelta;
 
+  const mobilityMetrics = React.useMemo(() => {
+    const allTrips = [...trayectosIda, ...trayectosVuelta];
+    const totalTrayectos = allTrips.length;
+
+    let totalPasajeros = 0;
+    let plazasLibres = 0;
+    let plazasTotales = 0;
+
+    allTrips.forEach((t) => {
+      const plazas =
+        typeof t.plazas === "number" ? t.plazas : parseInt(t.plazas, 10) || 0;
+      const disponible =
+        typeof t.disponible === "number"
+          ? t.disponible
+          : parseInt(t.disponible, 10) || 0;
+
+      const occupied = Math.max(0, plazas - disponible);
+      totalPasajeros += occupied;
+      plazasLibres += Math.max(0, disponible);
+      plazasTotales += plazas;
+    });
+
+    return {
+      totalTrayectos,
+      trayectosIdaCount: trayectosIda.length,
+      trayectosVueltaCount: trayectosVuelta.length,
+      totalPasajeros,
+      plazasLibres,
+      plazasTotales,
+      totalInscritos: participants.length || (event?._count?.participants ?? 0),
+    };
+  }, [trayectosIda, trayectosVuelta, participants, event]);
+
+  const locationSummary = React.useMemo(() => {
+    if (!event) return { city: "Presencial", subtext: "" };
+    if (eventAddress) {
+      const parts = eventAddress.split(",").map((s) => s.trim());
+      const city =
+        parts.length > 2
+          ? parts[parts.length - 2]
+          : parts[0] || "Presencial";
+      return { city, subtext: eventAddress };
+    }
+    return {
+      city: event.city || event.name || "Presencial",
+      subtext:
+        event.address_line1 ||
+        (hasValidCoords ? `${lat.toFixed(3)}, ${lng.toFixed(3)}` : ""),
+    };
+  }, [event, eventAddress, hasValidCoords, lat, lng]);
+
+  const citiesSummary = React.useMemo(() => {
+    const cities = [
+      ...new Set(
+        participants
+          .map((p) => (p.ciudad || p.provincia || "").trim())
+          .filter(Boolean)
+      ),
+    ];
+    if (cities.length === 0) return null;
+    if (cities.length === 1) return `Asistentes desde ${cities[0]}`;
+    if (cities.length === 2) return `Desde ${cities[0]} y ${cities[1]}`;
+    return `Desde ${cities[0]}, ${cities[1]} y más ciudades`;
+  }, [participants]);
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
@@ -842,7 +908,7 @@ const EventDetailScreen = ({ route, navigation }) => {
           {/* Imagen Hero */}
           <EventHeroImage image={event.image} />
 
-          {/* Información principal */}
+          {/* Información principal con Fechas, Horarios y Ubicación */}
           <EventInfoSection
             name={event.name}
             company={event.company}
@@ -850,6 +916,32 @@ const EventDetailScreen = ({ route, navigation }) => {
             startDate={event.start_date}
             endDate={event.end_date}
             address={eventAddress}
+            latitude={lat}
+            longitude={lng}
+            onOpenMaps={recenterMap}
+          />
+
+          {/* Resumen de Métricas de Movilidad y Asistencia (KPIs en vivo) */}
+          <EventMetricsCard
+            totalTrayectos={mobilityMetrics.totalTrayectos}
+            trayectosIdaCount={mobilityMetrics.trayectosIdaCount}
+            trayectosVueltaCount={mobilityMetrics.trayectosVueltaCount}
+            totalPasajeros={mobilityMetrics.totalPasajeros}
+            plazasLibres={mobilityMetrics.plazasLibres}
+            totalInscritos={mobilityMetrics.totalInscritos}
+            locationName={locationSummary.city}
+            locationSubtext={locationSummary.subtext}
+            loading={loadingTrayectos || loadingParticipants}
+            onTrayectosPress={() => {
+              if (!isExpanded) animateSheet(EXPANDED_HEIGHT);
+            }}
+            onInscritosPress={() => {
+              navigation.navigate("EventParticipants", {
+                eventId,
+                event,
+                eventName: event?.name || event?.title,
+              });
+            }}
           />
 
           {/* Código del evento */}
@@ -932,7 +1024,7 @@ const EventDetailScreen = ({ route, navigation }) => {
                           : "asistentes registrados"}
                       </Text>
                       <Text style={styles.viewParticipantsSub}>
-                        Ver de dónde son y chatear
+                        {citiesSummary || "Ver de dónde son y chatear"}
                       </Text>
                     </View>
                   </View>
@@ -968,16 +1060,44 @@ const EventDetailScreen = ({ route, navigation }) => {
                   }
                   activeOpacity={0.7}
                 >
-                  <View style={styles.notJoinedIconWrap}>
-                    <Users size={18} color={COLORS.primary} strokeWidth={2.5} />
-                  </View>
+                  {participants.length > 0 ? (
+                    <View style={styles.avatarStack}>
+                      {participants.slice(0, 3).map((p, idx) => (
+                        <View
+                          key={p.id || idx}
+                          style={[
+                            styles.stackAvatarWrap,
+                            { marginLeft: idx === 0 ? 0 : -8, zIndex: 3 - idx },
+                          ]}
+                        >
+                          {p.img_perfil ? (
+                            <Image
+                              source={{ uri: p.img_perfil }}
+                              style={styles.stackAvatarImg}
+                            />
+                          ) : (
+                            <View style={styles.stackAvatarFallback}>
+                              <Text style={styles.stackAvatarText}>
+                                {(p.name || "U").charAt(0).toUpperCase()}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <View style={styles.notJoinedIconWrap}>
+                      <Users size={18} color={COLORS.primary} strokeWidth={2.5} />
+                    </View>
+                  )}
                   <View style={{ flex: 1 }}>
                     <Text style={styles.notJoinedTitle}>¿Asistirás a este evento?</Text>
                     <Text style={styles.notJoinedSubtitle}>
                       {participants.length}{" "}
                       {participants.length === 1
-                        ? "persona se ha unido · Ver asistentes"
-                        : "personas se han unido · Ver asistentes"}
+                        ? "persona se ha unido"
+                        : "personas se han unido"}{" "}
+                      {citiesSummary ? `· ${citiesSummary}` : "· Ver asistentes"}
                     </Text>
                   </View>
                   <ChevronRight size={18} color={COLORS.gray400} strokeWidth={2.5} />

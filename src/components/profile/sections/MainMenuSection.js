@@ -18,6 +18,8 @@ import {
   Calendar,
   History,
   Building,
+  Building2,
+  ArrowLeftRight,
   Star,
   Zap,
   ChevronRight,
@@ -29,6 +31,7 @@ import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../../../constants";
 import styles from "../profileStyles";
 import GradientBackground from "../../common/GradientBackground";
 import PressableScale from "../../common/PressableScale";
+import { useUser } from "../../../context/UserContext";
 
 const getBonoInfo = (user) => {
   const cc = user.completitud_cae;
@@ -88,11 +91,22 @@ const MainMenuSection = ({
   walletBalanceEuros,
   onNavigate,
 }) => {
+  const { switchMode, permissions, selectedEnterprise, corporateMemberships } = useUser();
   const completion = user?.completitud?.porcentaje_total ?? 0;
   const displayName = `${user?.name || user?.nombre || "Usuario"} ${user?.surname || user?.apellidos || ""}`.trim();
   const initial = (user?.name || user?.nombre || "U").charAt(0).toUpperCase();
   const locationText = [user?.ciudad, user?.provincia].filter(Boolean).join(", ");
   const bono = getBonoInfo(user);
+
+  const hasEnterprise = Boolean(
+    user?.is_corporate_member ||
+    permissions?.can_switch_dashboard ||
+    permissions?.can_access_corporate_mode ||
+    (corporateMemberships && corporateMemberships.length > 0) ||
+    selectedEnterprise ||
+    user?.role === "enterprise"
+  );
+  const orgName = selectedEnterprise?.name || selectedEnterprise?.enterprise_name || (corporateMemberships?.[0]?.enterprise_name) || "Mi Organización";
 
   return (
     <ScrollView
@@ -172,6 +186,36 @@ const MainMenuSection = ({
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Acceso a Modo Organización si pertenece a una entidad */}
+      {hasEnterprise && (
+        <PressableScale
+          style={styles.enterpriseSwitchBanner}
+          onPress={() => switchMode("enterprise")}
+          scaleTo={0.98}
+          accessibilityLabel="Cambiar a Modo Organización"
+        >
+          <View style={styles.enterpriseSwitchInner}>
+            <View style={styles.enterpriseIconBox}>
+              <Building2 size={20} color={COLORS.primary} strokeWidth={2.4} />
+            </View>
+            <View style={styles.enterpriseTextBox}>
+              <View style={styles.enterpriseTagRow}>
+                <Text style={styles.enterpriseTagText}>MODO ORGANIZACIÓN</Text>
+              </View>
+              <Text style={styles.enterpriseTitle} numberOfLines={1}>
+                {orgName}
+              </Text>
+              <Text style={styles.enterpriseSubtitle}>
+                Toca para gestionar eventos, equipo y métricas
+              </Text>
+            </View>
+            <View style={styles.enterpriseArrowBtn}>
+              <ArrowLeftRight size={15} color={COLORS.primary} strokeWidth={2.4} />
+            </View>
+          </View>
+        </PressableScale>
+      )}
 
       {/* Tarjeta Destacada del Monedero con Degradado de Marca */}
       <PressableScale
@@ -296,14 +340,19 @@ const MainMenuSection = ({
         />
         <MenuRow
           icon={Building}
-          label="Mi empresa / Universidad"
+          label={hasEnterprise ? `Organización: ${orgName}` : "Mi empresa / Universidad"}
+          badge={hasEnterprise ? "Gestionar" : undefined}
           isLast
-          onPress={() =>
-            Alert.alert(
-              "Centro oficial",
-              "Vincula tu correo corporativo o universitario para acceder a viajes exclusivos de tu comunidad.",
-            )
-          }
+          onPress={() => {
+            if (hasEnterprise) {
+              switchMode("enterprise");
+            } else {
+              Alert.alert(
+                "Centro oficial",
+                "Vincula tu correo corporativo o universitario para acceder a viajes exclusivos de tu comunidad.",
+              );
+            }
+          }}
         />
       </View>
 

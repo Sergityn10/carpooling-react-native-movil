@@ -213,6 +213,15 @@ class HttpClient {
 
     if (this.token) {
       headers["Authorization"] = `Bearer ${this.token}`;
+      const existingCookie = headers["Cookie"] || headers["cookie"] || "";
+      const cookieParts = existingCookie ? [existingCookie] : [];
+      if (!existingCookie.includes("access_token=")) {
+        cookieParts.push(`access_token=${this.token}`);
+      }
+      if (!existingCookie.includes("enterprise_access_token=")) {
+        cookieParts.push(`enterprise_access_token=${this.token}`);
+      }
+      headers["Cookie"] = cookieParts.join("; ");
     }
 
     if (hasBody) {

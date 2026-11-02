@@ -61,9 +61,18 @@ export { default as EventCard } from "./events/EventCard";
 export { default as EventHeader } from "./events/EventHeader";
 export { default as EventHeroImage } from "./events/EventHeroImage";
 export { default as EventInfoSection } from "./events/EventInfoSection";
+export { default as EventMetricsCard } from "./events/EventMetricsCard";
 export { default as EventCodeCard } from "./events/EventCodeCard";
 export { default as EventDescription } from "./events/EventDescription";
 export { default as EventLocation } from "./events/EventLocation";
 export { default as EventLinks } from "./events/EventLinks";
 export { default as EventTripsSection } from "./events/EventTripsSection";
 export { default as EventAllTripsModal } from "./events/EventAllTripsModal";
+
+// Enterprise (Organizaciones B2B)
+export {
+  EnterpriseHeader,
+  EnterpriseEventCard,
+  EventMetricsSummary,
+  InviteMemberModal,
+} from "./enterprise";

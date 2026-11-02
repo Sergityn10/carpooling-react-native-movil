@@ -25,3 +25,15 @@ export { default as DirectChatScreen } from "./DirectChatScreen";
 export { default as EventParticipantsScreen } from "./EventParticipantsScreen";
 export { default as WalletScreen } from "./WalletScreen";
 
+// Enterprise (Organizaciones B2B)
+export {
+  EnterpriseDashboardScreen,
+  EnterpriseEventsScreen,
+  EnterpriseCrearEventoScreen,
+  EnterpriseEditarEventoScreen,
+  EnterpriseEventDetailScreen,
+  EnterpriseQRScannerScreen,
+  EnterpriseEmployeesScreen,
+  EnterpriseSettingsScreen,
+} from "./enterprise";
+

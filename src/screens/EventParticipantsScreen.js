@@ -44,7 +44,7 @@ const EventParticipantsScreen = ({ route, navigation }) => {
   const fetchParticipants = useCallback(async () => {
     if (!eventId) return;
     try {
-      const res = await eventService.getParticipants(eventId);
+      const res = await eventService.getParticipantsDetails(eventId);
       const list = res.participants || res.data || [];
       setParticipants(Array.isArray(list) ? list : []);
     } catch (err) {

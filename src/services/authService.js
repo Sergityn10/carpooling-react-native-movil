@@ -1,7 +1,36 @@
 // YouConnext - Auth Service
 import httpClient from "./httpClient";
 
-// Login — POST /api/auth/login
+// Inicio de sesión unificado — POST /api/auth/unified-login
+// Admite Email + Password (auth_type: "auto") o Google OAuth ({ id_token, auth_method: "google" })
+// Retorna respuesta estandarizada: { token, refreshToken, identity, legal_entity, natural_person, permissions, initial_mode }
+async function unifiedLogin(params = {}) {
+  const { email, password, id_token, auth_method, auth_type = "auto" } = params;
+  let body = {};
+  if (id_token) {
+    body = { id_token, auth_method: auth_method || "google" };
+  } else {
+    body = { email, password, auth_type };
+  }
+
+  try {
+    return await httpClient.request("/api/auth/unified-login", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    // Si el endpoint unificado no responde o devuelve 404 en entornos en transición, fallback suave
+    if (error?.status === 404 || error?.message?.includes("404")) {
+      if (id_token) {
+        return loginWithGoogleAndroid(id_token, "login");
+      }
+      return login(email, password);
+    }
+    throw error;
+  }
+}
+
+// Login clásico — POST /api/auth/login
 // auth_method: "PASSWORD" (por defecto) o "GOOGLE"
 // Retorna: { status, message, userId, token, img_perfil, onboarding_ended }
 async function login(email, password, auth_method = "PASSWORD") {
@@ -81,6 +110,7 @@ async function loginWithGoogleAndroid(
 }
 
 export const authService = {
+  unifiedLogin,
   login,
   register,
   checkEmailExists,

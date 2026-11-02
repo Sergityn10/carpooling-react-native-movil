@@ -49,7 +49,12 @@ import {
   DirectChatScreen,
   EventParticipantsScreen,
   WalletScreen,
+  EnterpriseCrearEventoScreen,
+  EnterpriseEditarEventoScreen,
+  EnterpriseEventDetailScreen,
+  EnterpriseQRScannerScreen,
 } from "../screens";
+import EnterpriseNavigator from "./EnterpriseNavigator";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -237,7 +242,7 @@ const linking = {
 
 // Navegación principal de la app
 const AppNavigator = () => {
-  const { user, isAuthenticated, loading } = useUser();
+  const { user, isAuthenticated, loading, activeMode } = useUser();
 
   if (loading) {
     return <LoadingScreen />;
@@ -286,7 +291,30 @@ const AppNavigator = () => {
           animation: "slide_from_right",
         }}
       >
-        <Stack.Screen name="Main" component={MainTabs} />
+        {activeMode === "enterprise" ? (
+          <Stack.Screen name="EnterpriseRoot" component={EnterpriseNavigator} />
+        ) : (
+          <Stack.Screen name="Main" component={MainTabs} />
+        )}
+        {/* Pantallas secundarias exclusivas de la Suite de Organización */}
+        <Stack.Screen
+          name="EnterpriseCrearEvento"
+          component={EnterpriseCrearEventoScreen}
+          options={{ animation: "slide_from_bottom" }}
+        />
+        <Stack.Screen
+          name="EnterpriseEditarEvento"
+          component={EnterpriseEditarEventoScreen}
+        />
+        <Stack.Screen
+          name="EnterpriseEventDetail"
+          component={EnterpriseEventDetailScreen}
+        />
+        <Stack.Screen
+          name="EnterpriseQRScanner"
+          component={EnterpriseQRScannerScreen}
+          options={{ animation: "slide_from_bottom" }}
+        />
         <Stack.Screen
           name="EscanearQR"
           component={EscanearQRScreen}
