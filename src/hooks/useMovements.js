@@ -21,7 +21,14 @@ export function useMovements(initialRole = "all") {
   const [balance, setBalance] = useState({
     balance_cents: 0,
     balance_eur: "0.00",
+    available_cents: 0,
+    available_eur: "0.00",
+    pending_cents: 0,
+    pending_eur: "0.00",
+    total_cents: 0,
+    total_eur: "0.00",
     currency: "eur",
+    has_stripe_account: true,
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -30,9 +37,20 @@ export function useMovements(initialRole = "all") {
   const [error, setError] = useState(null);
   const [isStreamConnected, setIsStreamConnected] = useState(false);
 
+  // Referencias estables para evitar bucles de renderizado y reconexión
   const offsetRef = useRef(0);
   const isLoadingMoreRef = useRef(false);
   const isMountedRef = useRef(true);
+  const balanceRef = useRef(balance);
+  balanceRef.current = balance;
+  const roleFilterRef = useRef(roleFilter);
+  roleFilterRef.current = roleFilter;
+  const hasMoreRef = useRef(hasMore);
+  hasMoreRef.current = hasMore;
+
+  // Control de cooldown (TTL de 45 segundos) y deduplicación de peticiones de balance en vuelo
+  const lastBalanceFetchRef = useRef(0);
+  const activeBalancePromiseRef = useRef(null);
 
   // 1. Carga inicial Offline-First (Stale-While-Revalidate)
   useEffect(() => {
@@ -51,7 +69,16 @@ export function useMovements(initialRole = "all") {
               setMovements(parsed.movements);
             }
             if (parsed.balance) {
-              setBalance(parsed.balance);
+              const cachedBal = {
+                ...parsed.balance,
+                available_eur:
+                  parsed.balance.available_eur ||
+                  parsed.balance.balance_eur ||
+                  "0.00",
+                pending_eur: parsed.balance.pending_eur || "0.00",
+              };
+              balanceRef.current = cachedBal;
+              setBalance(cachedBal);
             }
           }
         }
@@ -69,35 +96,136 @@ export function useMovements(initialRole = "all") {
     };
   }, []);
 
-  // 2. Consulta y sincronización de balance T+0
-  const fetchBalance = useCallback(async () => {
-    try {
-      const res = await paymentService.getWalletBalance();
-      if (res && res.balances && res.balances.length > 0) {
-        const primary = res.balances[0];
-        const cents = primary.balance_cents ?? 0;
+  // 2. Consulta y sincronización de balance en Stripe Connect con TTL y deduplicación en vuelo
+  const fetchBalance = useCallback(async (force = false) => {
+    const now = Date.now();
+
+    // Si no es un refresco forzado (pull-to-refresh) y han pasado menos de 45s, reutilizar el balance en memoria
+    if (
+      !force &&
+      now - lastBalanceFetchRef.current < 45000 &&
+      balanceRef.current.has_stripe_account &&
+      balanceRef.current.available_eur !== "0.00"
+    ) {
+      return balanceRef.current;
+    }
+
+    // Deduplicación: Si ya hay una llamada a getCashBalance en curso, reutilizar la misma promesa
+    if (activeBalancePromiseRef.current) {
+      return activeBalancePromiseRef.current;
+    }
+
+    activeBalancePromiseRef.current = (async () => {
+      try {
+        const res = await paymentService.getCashBalance();
+
+        let availableCents = 0;
+        let availableEur = "0.00";
+        let pendingCents = 0;
+        let pendingEur = "0.00";
+        let currency = "eur";
+
+        if (res) {
+          // 1. Extraer saldo disponible (available)
+          if (res.availableAmount !== undefined && res.availableAmount !== null) {
+            const num =
+              typeof res.availableAmount === "number"
+                ? res.availableAmount
+                : parseFloat(String(res.availableAmount).replace(",", ".")) || 0;
+            availableEur = num.toFixed(2);
+            availableCents = Math.round(num * 100);
+          } else if (res.cashBalance?.available?.[0]?.amount !== undefined) {
+            availableCents = res.cashBalance.available[0].amount || 0;
+            availableEur = (availableCents / 100).toFixed(2);
+            currency = res.cashBalance.available[0].currency || currency;
+          }
+
+          // 2. Extraer saldo pendiente (pending)
+          if (res.pendingAmount !== undefined && res.pendingAmount !== null) {
+            const num =
+              typeof res.pendingAmount === "number"
+                ? res.pendingAmount
+                : parseFloat(String(res.pendingAmount).replace(",", ".")) || 0;
+            pendingEur = num.toFixed(2);
+            pendingCents = Math.round(num * 100);
+          } else if (res.cashBalance?.pending?.[0]?.amount !== undefined) {
+            pendingCents = res.cashBalance.pending[0].amount || 0;
+            pendingEur = (pendingCents / 100).toFixed(2);
+            if (!currency && res.cashBalance.pending[0].currency) {
+              currency = res.cashBalance.pending[0].currency;
+            }
+          }
+        }
+
+        const totalCents = availableCents + pendingCents;
+        const totalEur = (totalCents / 100).toFixed(2);
+
         const newBalance = {
-          balance_cents: cents,
-          balance_eur: (cents / 100).toFixed(2),
-          currency: primary.currency || "eur",
+          balance_cents: availableCents,
+          balance_eur: availableEur,
+          available_cents: availableCents,
+          available_eur: availableEur,
+          pending_cents: pendingCents,
+          pending_eur: pendingEur,
+          total_cents: totalCents,
+          total_eur: totalEur,
+          currency,
+          has_stripe_account: true,
         };
+
+        lastBalanceFetchRef.current = Date.now();
+        balanceRef.current = newBalance;
+
         if (isMountedRef.current) {
           setBalance(newBalance);
         }
         return newBalance;
+      } catch (err) {
+        const errMsg = err?.message || "";
+        const status = err?.status;
+
+        // 404: El usuario no tiene cuenta Stripe Connect creada todavía
+        if (
+          status === 404 ||
+          errMsg.includes("STRIPE_ACCOUNT_NOT_FOUND") ||
+          errMsg.includes("no tiene cuenta")
+        ) {
+          const notFoundBalance = {
+            balance_cents: 0,
+            balance_eur: "0.00",
+            available_cents: 0,
+            available_eur: "0.00",
+            pending_cents: 0,
+            pending_eur: "0.00",
+            total_cents: 0,
+            total_eur: "0.00",
+            currency: "eur",
+            has_stripe_account: false,
+          };
+          lastBalanceFetchRef.current = Date.now();
+          balanceRef.current = notFoundBalance;
+          if (isMountedRef.current) {
+            setBalance(notFoundBalance);
+          }
+          return notFoundBalance;
+        }
+
+        if (typeof __DEV__ !== "undefined" && __DEV__) {
+          console.warn("[useMovements] Error al actualizar balance de Stripe:", errMsg);
+        }
+        return null;
+      } finally {
+        activeBalancePromiseRef.current = null;
       }
-    } catch (err) {
-      if (typeof __DEV__ !== "undefined" && __DEV__) {
-        console.warn("[useMovements] Error al actualizar balance:", err?.message);
-      }
-    }
-    return null;
+    })();
+
+    return activeBalancePromiseRef.current;
   }, []);
 
-  // 3. Carga paginada de movimientos desde la API
+  // 3. Carga paginada de movimientos desde la API con referencias estables
   const loadMovements = useCallback(
     async (isRefresh = false) => {
-      if (!isRefresh && (isLoadingMoreRef.current || !hasMore)) {
+      if (!isRefresh && (isLoadingMoreRef.current || !hasMoreRef.current)) {
         return;
       }
 
@@ -110,15 +238,16 @@ export function useMovements(initialRole = "all") {
       }
 
       setError(null);
+      const currentRole = roleFilterRef.current;
 
       try {
         const [movementsRes, freshBalance] = await Promise.all([
           paymentService.getMovements({
-            role: roleFilter === "all" ? undefined : roleFilter,
+            role: currentRole === "all" ? undefined : currentRole,
             limit: PAGE_LIMIT,
             offset: offsetRef.current,
           }),
-          isRefresh ? fetchBalance() : Promise.resolve(null),
+          fetchBalance(isRefresh),
         ]);
 
         if (!isMountedRef.current) return;
@@ -132,10 +261,10 @@ export function useMovements(initialRole = "all") {
               : [...prev, ...fetchedMovements];
 
             // Guardar en caché los primeros 20 elementos y balance
-            if (isRefresh && roleFilter === "all") {
+            if (isRefresh && currentRole === "all") {
               const cachePayload = {
                 movements: nextList.slice(0, PAGE_LIMIT),
-                balance: freshBalance || balance,
+                balance: freshBalance || balanceRef.current,
                 updated_at: new Date().toISOString(),
               };
               AsyncStorage.setItem(
@@ -149,7 +278,9 @@ export function useMovements(initialRole = "all") {
 
           offsetRef.current += fetchedMovements.length;
           const totalCount = movementsRes.total ?? 0;
-          setHasMore(offsetRef.current < totalCount);
+          const moreAvailable = offsetRef.current < totalCount;
+          hasMoreRef.current = moreAvailable;
+          setHasMore(moreAvailable);
         } else {
           setError("No se pudieron cargar los movimientos");
         }
@@ -167,18 +298,19 @@ export function useMovements(initialRole = "all") {
         isLoadingMoreRef.current = false;
       }
     },
-    [roleFilter, hasMore, balance, fetchBalance],
+    [fetchBalance],
   );
 
   // 4. Recargar cuando cambia el filtro de rol
   useEffect(() => {
     setLoading(true);
     offsetRef.current = 0;
+    hasMoreRef.current = true;
     setHasMore(true);
     loadMovements(true);
-  }, [roleFilter]);
+  }, [roleFilter, loadMovements]);
 
-  // 5. Manejo de ciclo de vida del canal SSE (Ahorro de batería extremo)
+  // 5. Manejo de ciclo de vida del canal SSE con referencias estables (Cero reconexiones espurias)
   useFocusEffect(
     useCallback(() => {
       let isScreenFocused = true;
@@ -199,24 +331,21 @@ export function useMovements(initialRole = "all") {
           setIsStreamConnected(true);
         } else if (type === "balance.current") {
           setIsStreamConnected(true);
-          if (data && data.balance_cents !== undefined) {
-            setBalance({
-              balance_cents: data.balance_cents,
-              balance_eur:
-                data.balance_eur || (data.balance_cents / 100).toFixed(2),
-              currency: data.currency || "eur",
-            });
-          }
+          // Reutiliza caché si han pasado menos de 45s
+          fetchBalance(false);
         } else if (type === "movement.created") {
           // Si coincide con el filtro o estamos en 'all', refrescar en T+0
-          if (roleFilter === "all" || data?.role === roleFilter) {
+          if (
+            roleFilterRef.current === "all" ||
+            data?.role === roleFilterRef.current
+          ) {
             loadMovements(true);
           } else {
             // Siempre actualizar balance si entra dinero
-            fetchBalance();
+            fetchBalance(true);
           }
         } else if (type === "balance.updated") {
-          fetchBalance();
+          fetchBalance(true);
         } else if (type === "error") {
           setIsStreamConnected(false);
         }
@@ -241,7 +370,7 @@ export function useMovements(initialRole = "all") {
         // Desconexión inmediata al abandonar la pantalla
         movementStreamService.disconnect();
       };
-    }, [roleFilter, loadMovements, fetchBalance]),
+    }, [loadMovements, fetchBalance]),
   );
 
   const refresh = useCallback(() => {
@@ -249,10 +378,15 @@ export function useMovements(initialRole = "all") {
   }, [loadMovements]);
 
   const loadMore = useCallback(() => {
-    if (!isLoadingMoreRef.current && hasMore && !loading && !refreshing) {
+    if (
+      !isLoadingMoreRef.current &&
+      hasMoreRef.current &&
+      !loading &&
+      !refreshing
+    ) {
       loadMovements(false);
     }
-  }, [hasMore, loading, refreshing, loadMovements]);
+  }, [loading, refreshing, loadMovements]);
 
   return {
     movements,

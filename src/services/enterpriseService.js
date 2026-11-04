@@ -255,6 +255,20 @@ async function getEnterpriseEvents(params = {}) {
     const combinedList = Array.from(mergedMap.values());
 
     if (combinedList.length > 0) {
+      // Recuperar mapa de eventos cacheados previamente para reconciliar metadatos (como capacity/aforo personalizado)
+      const existingEventsMap = new Map();
+      try {
+        const storedPrev = await AsyncStorage.getItem(STORAGE_KEYS.EVENTS);
+        if (storedPrev) {
+          const parsedPrev = JSON.parse(storedPrev);
+          if (Array.isArray(parsedPrev)) {
+            parsedPrev.forEach((e) => {
+              if (e && e.id) existingEventsMap.set(String(e.id), e);
+            });
+          }
+        }
+      } catch {}
+
       // Normalizar campos para asegurar que name, title, start_date, start_at, total_participants y status estén presentes
       const normalized = combinedList.map((ev) => {
         const count =
@@ -287,6 +301,24 @@ async function getEnterpriseEvents(params = {}) {
           normalizedStatus = "upcoming";
         }
 
+        // Reconciliación de aforo: busca todos los posibles alias en la API y fallback a la caché local del usuario
+        const existingEv = existingEventsMap.get(String(ev.id));
+        const rawCapacity =
+          ev.capacity ??
+          ev.max_capacity ??
+          ev.max_attendees ??
+          ev.max_participants ??
+          ev.aforo ??
+          ev.attendees ??
+          ev.plazas ??
+          existingEv?.capacity ??
+          null;
+
+        const finalCapacity =
+          rawCapacity !== null && rawCapacity !== undefined && !isNaN(Number(rawCapacity))
+            ? Number(rawCapacity)
+            : null;
+
         return {
           ...ev,
           id: String(ev.id),
@@ -313,7 +345,7 @@ async function getEnterpriseEvents(params = {}) {
           checked_in_count: ev.checked_in_count || 0,
           carpool_routes_count: ev.carpool_routes_count || 0,
           co2_saved_kg: ev.co2_saved_kg || 0,
-          capacity: Number(ev.capacity) || 100,
+          capacity: finalCapacity,
           unique_code: ev.unique_code || "",
           image: ev.image || null,
         };
@@ -364,6 +396,32 @@ async function getEnterpriseEventById(id) {
         (ev.city ? `${ev.city}${ev.country ? `, ${ev.country}` : ""}` : "Sede Corporativa");
       const addressLine1 = ev.address_line1 || ev.location || location;
 
+      // Reconciliar aforo: alias de API o caché local
+      let existingCapacity = null;
+      try {
+        const stored = await AsyncStorage.getItem(STORAGE_KEYS.EVENTS);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          const found = parsed.find((item) => String(item.id) === String(id));
+          if (found && found.capacity !== undefined) existingCapacity = found.capacity;
+        }
+      } catch {}
+
+      const rawCap =
+        ev.capacity ??
+        ev.max_capacity ??
+        ev.max_attendees ??
+        ev.max_participants ??
+        ev.aforo ??
+        ev.attendees ??
+        ev.plazas ??
+        existingCapacity;
+
+      const finalCapacity =
+        rawCap !== null && rawCap !== undefined && !isNaN(Number(rawCap))
+          ? Number(rawCap)
+          : null;
+
       return {
         ...ev,
         id: String(ev.id),
@@ -377,6 +435,7 @@ async function getEnterpriseEventById(id) {
         address_line1: addressLine1,
         city: ev.city || "",
         country: ev.country || "ES",
+        capacity: finalCapacity,
         total_participants: count,
         participants_count: count,
         inscribed_count: count,
@@ -403,6 +462,14 @@ async function createEnterpriseEvent(eventData) {
   const locationStr = eventData.location || "Sede Corporativa";
   const titleStr = eventData.name || eventData.title || "Nuevo Evento Corporativo";
 
+  const userCapacity =
+    eventData.capacity !== undefined &&
+    eventData.capacity !== null &&
+    eventData.capacity !== "" &&
+    !isNaN(Number(eventData.capacity))
+      ? Number(eventData.capacity)
+      : null;
+
   const createdObj = {
     id: newEventId,
     name: titleStr,
@@ -414,7 +481,7 @@ async function createEnterpriseEvent(eventData) {
     end_at: endDateStr,
     location: locationStr,
     address_line1: locationStr,
-    capacity: Number(eventData.capacity) || 100,
+    capacity: userCapacity,
     registered_attendees: 0,
     total_participants: 0,
     participants_count: 0,
@@ -428,16 +495,41 @@ async function createEnterpriseEvent(eventData) {
     unique_code: (titleStr).slice(0, 4).toUpperCase() + "-" + Math.random().toString(36).substring(2, 6).toUpperCase(),
     tags: eventData.tags || ["Corporativo"],
     image: eventData.image || "https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=800&q=80",
+    url: eventData.url || null,
+    ticket_url: eventData.ticketUrl || eventData.ticket_url || null,
     created_at: new Date().toISOString(),
   };
 
   const payload = {
     name: createdObj.name,
+    title: createdObj.name,
     description: createdObj.description,
     startDate: createdObj.start_date,
+    start_date: createdObj.start_date,
     endDate: createdObj.end_date,
+    end_date: createdObj.end_date,
     location: createdObj.location,
+    address: createdObj.location,
+    tags: createdObj.tags,
   };
+  if (userCapacity !== null) {
+    payload.capacity = userCapacity;
+    payload.max_capacity = userCapacity;
+    payload.max_attendees = userCapacity;
+    payload.max_participants = userCapacity;
+    payload.aforo = userCapacity;
+    payload.attendees = userCapacity;
+    payload.plazas = userCapacity;
+  }
+  if (eventData.image) {
+    payload.image = eventData.image;
+  }
+  if (eventData.url) {
+    payload.url = eventData.url;
+  }
+  if (eventData.ticketUrl || eventData.ticket_url) {
+    payload.ticket_url = eventData.ticketUrl || eventData.ticket_url;
+  }
   if (eventData.latitude !== undefined && eventData.latitude !== null) {
     payload.latitude = Number(eventData.latitude);
   }
@@ -446,31 +538,51 @@ async function createEnterpriseEvent(eventData) {
   }
 
   try {
-    const res = await httpClient.request("/api/enterprise/service-events", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    if (res?.service_event) {
-      createdObj.id = String(res.service_event.id);
-      if (res.service_event.title) {
-        createdObj.name = res.service_event.title;
-        createdObj.title = res.service_event.title;
+    let res;
+    try {
+      res = await httpClient.request("/api/enterprise/service-events", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    } catch (errService) {
+      // Fallback a /api/events si la organización gestiona eventos de plataforma (docs/api/events.md sección 5)
+      res = await httpClient.request("/api/events", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    }
+
+    const createdEventData = res?.service_event || res?.event;
+    if (createdEventData) {
+      createdObj.id = String(createdEventData.id);
+      if (createdEventData.title || createdEventData.name) {
+        createdObj.name = createdEventData.title || createdEventData.name;
+        createdObj.title = createdObj.name;
       }
-      if (res.service_event.address_line1) {
-        createdObj.location = res.service_event.address_line1;
-        createdObj.address_line1 = res.service_event.address_line1;
+      if (createdEventData.address_line1 || createdEventData.location) {
+        createdObj.location = createdEventData.address_line1 || createdEventData.location;
+        createdObj.address_line1 = createdObj.location;
       }
-      if (res.service_event.start_at) {
-        createdObj.start_date = res.service_event.start_at;
-        createdObj.start_at = res.service_event.start_at;
+      if (createdEventData.start_at || createdEventData.start_date) {
+        createdObj.start_date = createdEventData.start_at || createdEventData.start_date;
+        createdObj.start_at = createdObj.start_date;
       }
-      if (res.service_event.end_at) {
-        createdObj.end_date = res.service_event.end_at;
-        createdObj.end_at = res.service_event.end_at;
+      if (createdEventData.end_at || createdEventData.end_date) {
+        createdObj.end_date = createdEventData.end_at || createdEventData.end_date;
+        createdObj.end_at = createdObj.end_date;
       }
-      if (res.service_event.status) {
-        createdObj.original_status = res.service_event.status;
-        createdObj.status = ["active", "in_progress"].includes(res.service_event.status) ? "active" : "upcoming";
+      if (createdEventData.status) {
+        createdObj.original_status = createdEventData.status;
+        createdObj.status = ["active", "in_progress"].includes(createdEventData.status) ? "active" : "upcoming";
+      }
+      if (createdEventData.image) {
+        createdObj.image = createdEventData.image;
+      }
+      if (createdEventData.url) {
+        createdObj.url = createdEventData.url;
+      }
+      if (createdEventData.ticket_url) {
+        createdObj.ticket_url = createdEventData.ticket_url;
       }
     }
   } catch (error) {
@@ -490,9 +602,19 @@ async function updateEnterpriseEvent(id, updateData) {
   const payload = { ...updateData };
   if (updateData.startDate || updateData.start_date) {
     payload.startDate = updateData.startDate || updateData.start_date;
+    payload.start_date = updateData.startDate || updateData.start_date;
   }
   if (updateData.endDate || updateData.end_date) {
     payload.endDate = updateData.endDate || updateData.end_date;
+    payload.end_date = updateData.endDate || updateData.end_date;
+  }
+  if (updateData.location || updateData.address) {
+    payload.location = updateData.location || updateData.address;
+    payload.address = updateData.location || updateData.address;
+  }
+  if (updateData.name || updateData.title) {
+    payload.name = updateData.name || updateData.title;
+    payload.title = updateData.name || updateData.title;
   }
   if (updateData.latitude !== undefined && updateData.latitude !== null) {
     payload.latitude = Number(updateData.latitude);
@@ -500,12 +622,35 @@ async function updateEnterpriseEvent(id, updateData) {
   if (updateData.longitude !== undefined && updateData.longitude !== null) {
     payload.longitude = Number(updateData.longitude);
   }
+  if (updateData.ticketUrl || updateData.ticket_url) {
+    payload.ticket_url = updateData.ticketUrl || updateData.ticket_url;
+  }
+  if (updateData.capacity !== undefined) {
+    const userCapacity =
+      updateData.capacity !== null && updateData.capacity !== "" && !isNaN(Number(updateData.capacity))
+        ? Number(updateData.capacity)
+        : null;
+    payload.capacity = userCapacity;
+    payload.max_capacity = userCapacity;
+    payload.max_attendees = userCapacity;
+    payload.max_participants = userCapacity;
+    payload.aforo = userCapacity;
+    payload.attendees = userCapacity;
+    payload.plazas = userCapacity;
+  }
 
   try {
-    await httpClient.request(`/api/enterprise/service-events/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    });
+    try {
+      await httpClient.request(`/api/enterprise/service-events/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+    } catch (errService) {
+      await httpClient.request(`/api/events/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+    }
   } catch (error) {
     console.error("[EnterpriseService] updateEnterpriseEvent API error:", error?.message);
     throw error;
@@ -514,13 +659,31 @@ async function updateEnterpriseEvent(id, updateData) {
   const currentEvents = await getEnterpriseEvents();
   const updatedList = currentEvents.map((ev) => {
     if (String(ev.id) === String(id)) {
+      const nextTitle = updateData.name || updateData.title || ev.title || ev.name;
+      const nextLocation = updateData.location || updateData.address_line1 || ev.location || ev.address_line1;
+      const nextStartDate = updateData.startDate || updateData.start_date || updateData.start_at || ev.start_date || ev.start_at;
+      const nextEndDate = updateData.endDate || updateData.end_date || updateData.end_at || ev.end_date || ev.end_at;
+
       return {
         ...ev,
         ...updateData,
-        title: updateData.name || updateData.title || ev.title,
-        name: updateData.name || updateData.title || ev.name,
-        address_line1: updateData.location || ev.address_line1,
-        location: updateData.location || ev.location,
+        title: nextTitle,
+        name: nextTitle,
+        address_line1: nextLocation,
+        location: nextLocation,
+        start_date: nextStartDate,
+        start_at: nextStartDate,
+        end_date: nextEndDate,
+        end_at: nextEndDate,
+        image: updateData.image !== undefined ? updateData.image : ev.image,
+        url: updateData.url !== undefined ? updateData.url : ev.url,
+        ticket_url: updateData.ticket_url || updateData.ticketUrl || ev.ticket_url,
+        capacity:
+          updateData.capacity !== undefined
+            ? (updateData.capacity !== null && updateData.capacity !== "" && !isNaN(Number(updateData.capacity))
+                ? Number(updateData.capacity)
+                : null)
+            : ev.capacity,
         latitude: updateData.latitude !== undefined ? updateData.latitude : ev.latitude,
         longitude: updateData.longitude !== undefined ? updateData.longitude : ev.longitude,
         updated_at: new Date().toISOString(),

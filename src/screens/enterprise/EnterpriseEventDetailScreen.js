@@ -32,10 +32,13 @@ import {
   Sparkles,
   ChevronRight,
   TrendingUp,
+  Globe,
+  Ticket,
 } from "lucide-react-native";
 import { COLORS, SPACING, RADIUS, FONTS, BRAND, SHADOWS } from "../../constants";
 import PressableScale from "../../components/common/PressableScale";
 import { enterpriseService } from "../../services/enterpriseService";
+import { formatImageUri } from "../../components/enterprise/EventImagePicker";
 import { eventService } from "../../services/eventService";
 import { trayectoService } from "../../services/travels/trayectoService";
 import { enrichTripsWithDriverProfiles } from "../../utils";
@@ -402,9 +405,9 @@ const EnterpriseEventDetailScreen = ({ navigation, route }) => {
         }
       >
         {/* Banner */}
-        {event.image ? (
+        {formatImageUri(event.image) ? (
           <Image
-            source={{ uri: event.image }}
+            source={{ uri: formatImageUri(event.image) }}
             style={styles.bannerImage}
             resizeMode="cover"
           />
@@ -529,7 +532,7 @@ const EnterpriseEventDetailScreen = ({ navigation, route }) => {
                 </Text>
                 <Text style={styles.kpiBoxLabel}>Inscritos</Text>
                 <Text style={styles.kpiBoxHint}>
-                  Aforo: {event.capacity || 100} plazas
+                  {event.capacity ? `Aforo: ${event.capacity} plazas` : "Aforo no especificado"}
                 </Text>
               </View>
             </View>
@@ -636,6 +639,33 @@ const EnterpriseEventDetailScreen = ({ navigation, route }) => {
             <View style={styles.descSection}>
               <Text style={styles.sectionLabel}>Información del Evento</Text>
               <Text style={styles.descText}>{event.description}</Text>
+            </View>
+          ) : null}
+
+          {/* Enlaces Oficiales y de Entradas */}
+          {(event.url || event.ticket_url) ? (
+            <View style={styles.eventLinksContainer}>
+              {event.url ? (
+                <TouchableOpacity
+                  style={styles.eventLinkBtn}
+                  onPress={() => Linking.openURL(event.url).catch(() => {})}
+                  activeOpacity={0.8}
+                >
+                  <Globe size={15} color={COLORS.primary} strokeWidth={2.4} />
+                  <Text style={styles.eventLinkBtnText} numberOfLines={1}>Web Oficial</Text>
+                </TouchableOpacity>
+              ) : null}
+
+              {event.ticket_url ? (
+                <TouchableOpacity
+                  style={[styles.eventLinkBtn, styles.eventTicketBtn]}
+                  onPress={() => Linking.openURL(event.ticket_url).catch(() => {})}
+                  activeOpacity={0.8}
+                >
+                  <Ticket size={15} color="#0284C7" strokeWidth={2.4} />
+                  <Text style={[styles.eventLinkBtnText, { color: "#0284C7" }]} numberOfLines={1}>Comprar Entradas</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           ) : null}
 
@@ -1049,6 +1079,33 @@ const styles = StyleSheet.create({
     color: COLORS.gray600,
     lineHeight: 19,
     marginTop: 4,
+  },
+  eventLinksContainer: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
+  },
+  eventLinkBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F0FDF4",
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: RADIUS.control,
+    gap: 6,
+  },
+  eventTicketBtn: {
+    backgroundColor: "#F0F9FF",
+    borderColor: "#BAE6FD",
+  },
+  eventLinkBtnText: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: COLORS.primaryDark,
   },
   attendeesHeader: {
     flexDirection: "row",

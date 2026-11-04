@@ -94,9 +94,15 @@ const getStatusBadge = (status) => {
       icon: CheckCircle2,
     };
   }
-  if (norm === "pending" || norm === "en_custodia" || norm === "in_custody") {
+  if (
+    norm === "pending" ||
+    norm === "en_custodia" ||
+    norm === "in_custody" ||
+    norm === "requires_capture" ||
+    norm === "uncaptured"
+  ) {
     return {
-      text: "En custodia",
+      text: "En proceso",
       color: COLORS.accentDark,
       bg: COLORS.accentSoft,
       icon: Clock,

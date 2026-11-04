@@ -14,6 +14,7 @@ import {
   Alert,
   RefreshControl,
   StatusBar,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -28,6 +29,7 @@ import {
   AlertCircle,
   RefreshCw,
   Coins,
+  ExternalLink,
 } from "lucide-react-native";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS, BRAND } from "../constants";
 import GradientBackground from "../components/common/GradientBackground";
@@ -64,9 +66,23 @@ const WalletScreen = ({ navigation, route, onBack }) => {
   const [showPayoutModal, setShowPayoutModal] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState("");
   const [isSubmittingPayout, setIsSubmittingPayout] = useState(false);
+  const [isLinkingStripe, setIsLinkingStripe] = useState(false);
   const idempotencyKeyRef = useRef("");
 
-  const balanceEurNum = parseFloat(balance.balance_eur) || 0;
+  // Desglose de importes Stripe Connect (Disponible vs Pendiente)
+  const availableEurNum =
+    parseFloat(balance.available_eur || balance.balance_eur) || 0;
+  const pendingEurNum = parseFloat(balance.pending_eur || "0.00") || 0;
+  const totalEurNum =
+    parseFloat(balance.total_eur) || availableEurNum + pendingEurNum;
+
+  const availableEurFormatted = (
+    balance.available_eur ||
+    balance.balance_eur ||
+    "0.00"
+  ).replace(".", ",");
+  const pendingEurFormatted = (balance.pending_eur || "0.00").replace(".", ",");
+  const totalEurFormatted = totalEurNum.toFixed(2).replace(".", ",");
 
   // Apertura del modal con generación de clave de idempotencia única
   const handleOpenPayoutModal = () => {
@@ -81,10 +97,33 @@ const WalletScreen = ({ navigation, route, onBack }) => {
     setPayoutAmount("");
   };
 
-  // Botones de porcentaje rápido
+  // Botones de porcentaje rápido sobre saldo disponible
   const handleSetPercentage = (percent) => {
-    const calculated = (balanceEurNum * percent).toFixed(2);
+    const calculated = (availableEurNum * percent).toFixed(2);
     setPayoutAmount(calculated.replace(".", ","));
+  };
+
+  // Vinculación rápida con Stripe Connect para cuentas pendientes
+  const handleSetupStripe = async () => {
+    setIsLinkingStripe(true);
+    try {
+      const res = await paymentService.getStripeConnectLink();
+      if (res?.accountLink?.url) {
+        await Linking.openURL(res.accountLink.url);
+      } else {
+        Alert.alert(
+          "Aviso",
+          "No se pudo generar el enlace de vinculación con Stripe. Inténtalo más tarde.",
+        );
+      }
+    } catch (e) {
+      Alert.alert(
+        "Error",
+        e?.message || "No se pudo conectar con Stripe Connect.",
+      );
+    } finally {
+      setIsLinkingStripe(false);
+    }
   };
 
   // Confirmación de retiro con protección contra doble clic
@@ -97,10 +136,10 @@ const WalletScreen = ({ navigation, route, onBack }) => {
       return;
     }
 
-    if (normalizedAmount > balanceEurNum) {
+    if (normalizedAmount > availableEurNum) {
       Alert.alert(
         "Saldo insuficiente",
-        "El importe solicitado supera tu saldo disponible.",
+        `El importe solicitado supera tu saldo disponible (${availableEurFormatted} €). Los fondos pendientes aún no están liberados.`,
       );
       return;
     }
@@ -166,6 +205,18 @@ const WalletScreen = ({ navigation, route, onBack }) => {
     }
   };
 
+  const handleEndReached = () => {
+    if (
+      movements.length > 0 &&
+      hasMore &&
+      !loading &&
+      !isLoadingMore &&
+      !refreshing
+    ) {
+      loadMore();
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
@@ -206,8 +257,8 @@ const WalletScreen = ({ navigation, route, onBack }) => {
         maxToRenderPerBatch={10}
         windowSize={5}
         removeClippedSubviews={true}
-        onEndReachedThreshold={0.3}
-        onEndReached={loadMore}
+        onEndReachedThreshold={0.2}
+        onEndReached={handleEndReached}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -218,7 +269,7 @@ const WalletScreen = ({ navigation, route, onBack }) => {
         }
         ListHeaderComponent={
           <View style={styles.listHeaderContainer}>
-            {/* Tarjeta Hero de Saldo (Fintech Dashboard) */}
+            {/* Tarjeta Hero de Saldo (Fintech Dashboard: Disponible vs Pendiente) */}
             <View style={styles.heroCard}>
               <GradientBackground
                 colors={COLORS.gradient.hero}
@@ -229,8 +280,12 @@ const WalletScreen = ({ navigation, route, onBack }) => {
               <View style={styles.heroInner}>
                 <View style={styles.heroTopRow}>
                   <View style={styles.heroPill}>
-                    <Wallet size={13} color={COLORS.white} strokeWidth={2.5} />
-                    <Text style={styles.heroPillText}>Saldo Consolidado</Text>
+                    <ShieldCheck
+                      size={13}
+                      color={BRAND.green}
+                      strokeWidth={2.5}
+                    />
+                    <Text style={styles.heroPillText}>Stripe Connect</Text>
                   </View>
 
                   {/* Badge de conexión SSE en vivo */}
@@ -254,30 +309,73 @@ const WalletScreen = ({ navigation, route, onBack }) => {
                   </View>
                 </View>
 
-                {/* Importe consolidado principal */}
-                <Text style={styles.heroAmountText}>
-                  {balance.balance_eur.replace(".", ",")} €
-                </Text>
+                {/* Sección 1: Dinero Disponible (Foco Principal de Retiro) */}
+                <View style={styles.availableSection}>
+                  <View style={styles.availableBadgeRow}>
+                    <View style={styles.availableBadge}>
+                      <CheckCircle2
+                        size={12}
+                        color={BRAND.green}
+                        strokeWidth={2.6}
+                      />
+                      <Text style={styles.availableBadgeText}>
+                        DINERO DISPONIBLE
+                      </Text>
+                    </View>
+                  </View>
 
-                <View style={styles.heroSubtitleRow}>
-                  <CheckCircle2
-                    size={14}
-                    color={BRAND.green}
-                    strokeWidth={2.4}
-                  />
-                  <Text style={styles.heroSubtitleText}>
-                    Acreditación inmediata de ganancias por trayectos
+                  {/* Cifra destacada de disponible */}
+                  <Text style={styles.heroAmountText}>
+                    {availableEurFormatted} €
+                  </Text>
+
+                  <Text style={styles.availableHintText}>
+                    Fondos liberados listos para transferir a tu cuenta bancaria
                   </Text>
                 </View>
 
-                {/* Botón de Retiro */}
+                {/* Sección 2: Dinero Pendiente (En proceso de liquidación) */}
+                <View style={styles.pendingCardBox}>
+                  <View style={styles.pendingHeaderRow}>
+                    <View style={styles.pendingBadge}>
+                      <Clock
+                        size={12}
+                        color={COLORS.warning}
+                        strokeWidth={2.6}
+                      />
+                      <Text style={styles.pendingBadgeText}>
+                        DINERO PENDIENTE
+                      </Text>
+                    </View>
+                    <Text style={styles.pendingAmountText}>
+                      {pendingEurFormatted} €
+                    </Text>
+                  </View>
+                  <Text style={styles.pendingNoticeText}>
+                    En proceso de liquidación por pasarelas o reservas en curso.
+                  </Text>
+                </View>
+
+                {/* Resumen Total si existen fondos pendientes */}
+                {pendingEurNum > 0 && (
+                  <View style={styles.totalRow}>
+                    <Text style={styles.totalLabelText}>
+                      Total en balance:
+                    </Text>
+                    <Text style={styles.totalValueText}>
+                      {totalEurFormatted} €
+                    </Text>
+                  </View>
+                )}
+
+                {/* Botón de Retiro (Habilitado solo si hay dinero disponible) */}
                 <TouchableOpacity
                   style={[
                     styles.withdrawButton,
-                    balanceEurNum <= 0 && styles.withdrawButtonDisabled,
+                    availableEurNum <= 0 && styles.withdrawButtonDisabled,
                   ]}
                   onPress={handleOpenPayoutModal}
-                  disabled={balanceEurNum <= 0}
+                  disabled={availableEurNum <= 0}
                   activeOpacity={0.88}
                 >
                   <ArrowUpFromLine
@@ -286,11 +384,51 @@ const WalletScreen = ({ navigation, route, onBack }) => {
                     strokeWidth={2.5}
                   />
                   <Text style={styles.withdrawButtonText}>
-                    Retirar saldo a mi cuenta
+                    Retirar saldo disponible
                   </Text>
                 </TouchableOpacity>
               </View>
             </View>
+
+            {/* Aviso para completar onboarding si no tiene cuenta Stripe vinculada */}
+            {balance.has_stripe_account === false && (
+              <View style={styles.stripeOnboardingCard}>
+                <View style={styles.stripeOnboardingHeader}>
+                  <AlertCircle
+                    size={20}
+                    color={COLORS.warning}
+                    strokeWidth={2.4}
+                  />
+                  <Text style={styles.stripeOnboardingTitle}>
+                    Cuenta Stripe Connect requerida
+                  </Text>
+                </View>
+                <Text style={styles.stripeOnboardingDesc}>
+                  Para recibir los pagos de los pasajeros y transferir tus ganancias a tu banco, vincula tu cuenta de Stripe Connect.
+                </Text>
+                <TouchableOpacity
+                  style={styles.stripeOnboardingBtn}
+                  onPress={handleSetupStripe}
+                  disabled={isLinkingStripe}
+                  activeOpacity={0.85}
+                >
+                  {isLinkingStripe ? (
+                    <ActivityIndicator size="small" color={COLORS.white} />
+                  ) : (
+                    <>
+                      <ExternalLink
+                        size={15}
+                        color={COLORS.white}
+                        strokeWidth={2.4}
+                      />
+                      <Text style={styles.stripeOnboardingBtnText}>
+                        Vincular cuenta con Stripe
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Pestañas de Filtro por Rol (Segmented Control) */}
             <View style={styles.segmentedTabsContainer}>
@@ -404,9 +542,18 @@ const WalletScreen = ({ navigation, route, onBack }) => {
               <Text style={styles.availableLabel}>
                 Saldo disponible para transferir:{" "}
                 <Text style={styles.availableAmount}>
-                  {balance.balance_eur.replace(".", ",")} €
+                  {availableEurFormatted} €
                 </Text>
               </Text>
+
+              {pendingEurNum > 0 && (
+                <View style={styles.pendingModalHint}>
+                  <Clock size={12} color={COLORS.accentDark} strokeWidth={2.4} />
+                  <Text style={styles.pendingModalHintText}>
+                    Tienes {pendingEurFormatted} € en proceso que estarán disponibles en cuanto se liquiden.
+                  </Text>
+                </View>
+              )}
 
               {/* Input grande de importe */}
               <View style={styles.inputWrapper}>
@@ -590,6 +737,150 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: COLORS.white,
     letterSpacing: -0.6,
+  },
+  availableSection: {
+    marginTop: 2,
+    gap: 4,
+  },
+  availableBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  availableBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(0, 200, 83, 0.2)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.round,
+  },
+  availableBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: BRAND.green,
+    letterSpacing: 0.5,
+  },
+  availableHintText: {
+    fontSize: FONTS.xs,
+    color: "rgba(255,255,255,0.85)",
+    fontWeight: "500",
+  },
+  pendingCardBox: {
+    backgroundColor: "rgba(242, 163, 60, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(242, 163, 60, 0.35)",
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    gap: 6,
+  },
+  pendingHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  pendingBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(242, 163, 60, 0.22)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.round,
+  },
+  pendingBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: COLORS.warning,
+    letterSpacing: 0.5,
+  },
+  pendingAmountText: {
+    fontSize: FONTS.md + 2,
+    fontWeight: "800",
+    color: COLORS.warning,
+    letterSpacing: -0.3,
+  },
+  pendingNoticeText: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.82)",
+    fontWeight: "500",
+    lineHeight: 15,
+  },
+  totalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 4,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.14)",
+  },
+  totalLabelText: {
+    fontSize: FONTS.xs,
+    color: "rgba(255,255,255,0.75)",
+    fontWeight: "600",
+  },
+  totalValueText: {
+    fontSize: FONTS.sm + 1,
+    fontWeight: "800",
+    color: COLORS.white,
+  },
+  stripeOnboardingCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    borderWidth: 1.5,
+    borderColor: "rgba(242, 163, 60, 0.4)",
+    gap: SPACING.sm,
+    ...SHADOWS.card,
+  },
+  stripeOnboardingHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+  },
+  stripeOnboardingTitle: {
+    fontSize: FONTS.md,
+    fontWeight: "800",
+    color: COLORS.black,
+  },
+  stripeOnboardingDesc: {
+    fontSize: FONTS.xs + 1,
+    color: COLORS.gray600,
+    lineHeight: 18,
+  },
+  stripeOnboardingBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.full,
+    paddingVertical: 12,
+    marginTop: SPACING.xs,
+  },
+  stripeOnboardingBtnText: {
+    fontSize: FONTS.sm,
+    fontWeight: "800",
+    color: COLORS.white,
+  },
+  pendingModalHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: COLORS.accentSoft,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs + 2,
+    borderRadius: RADIUS.sm,
+    marginTop: 2,
+  },
+  pendingModalHintText: {
+    flex: 1,
+    fontSize: 11,
+    color: COLORS.accentDark,
+    fontWeight: "600",
+    lineHeight: 15,
   },
   heroSubtitleRow: {
     flexDirection: "row",

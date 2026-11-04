@@ -1,5 +1,5 @@
 // YouConnext - EnterpriseCrearEventoScreen (Alta Ágil de Evento Corporativo)
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -22,13 +22,16 @@ import {
   FileText,
   Tag,
   Link2,
+  Globe,
+  Ticket,
   CheckCircle2,
 } from "lucide-react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { COLORS, SPACING, RADIUS, FONTS, BRAND, SHADOWS } from "../../constants";
 import PressableScale from "../../components/common/PressableScale";
 import { enterpriseService } from "../../services/enterpriseService";
-import { EnterpriseLocationInput } from "../../components/enterprise";
+import { eventService } from "../../services/eventService";
+import { EnterpriseLocationInput, EventImagePicker } from "../../components/enterprise";
 import { useUser } from "../../context/UserContext";
 
 const CATEGORIES = [
@@ -43,14 +46,17 @@ const CATEGORIES = [
 
 const EnterpriseCrearEventoScreen = ({ navigation }) => {
   const { selectedEnterprise } = useUser();
+  const [image, setImage] = useState(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
   const [locationCoords, setLocationCoords] = useState(null);
-  const [capacity, setCapacity] = useState("100");
+  const [capacity, setCapacity] = useState("");
   const [startDate, setStartDate] = useState(new Date(Date.now() + 86400000));
   const [endDate, setEndDate] = useState(new Date(Date.now() + 86400000 + 3600000 * 8));
+  const [availableTags, setAvailableTags] = useState(CATEGORIES);
   const [selectedTags, setSelectedTags] = useState(["Sostenibilidad"]);
+  const [url, setUrl] = useState("");
   const [ticketUrl, setTicketUrl] = useState("");
 
   const [pickerConfig, setPickerConfig] = useState({
@@ -60,6 +66,28 @@ const EnterpriseCrearEventoScreen = ({ navigation }) => {
   });
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
+
+  // Cargar etiquetas dinámicas de la API con fallback a categorías predefinidas
+  useEffect(() => {
+    let isMounted = true;
+    const loadApiTags = async () => {
+      try {
+        const res = await eventService.getTags();
+        const list = res?.tags || res?.data || (Array.isArray(res) ? res : null);
+        if (isMounted && list && Array.isArray(list) && list.length > 0) {
+          const names = list.map((t) => (typeof t === "string" ? t : t.name)).filter(Boolean);
+          const combined = Array.from(new Set([...CATEGORIES, ...names]));
+          setAvailableTags(combined);
+        }
+      } catch (err) {
+        // En caso de fallo o modo sin conexión, se mantienen CATEGORIES
+      }
+    };
+    loadApiTags();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const toggleTag = (tag) => {
     if (selectedTags.includes(tag)) {
@@ -141,10 +169,12 @@ const EnterpriseCrearEventoScreen = ({ navigation }) => {
         location: location.trim(),
         latitude: locationCoords?.latitude,
         longitude: locationCoords?.longitude,
-        capacity: Number(capacity) || 100,
+        capacity: capacity.trim() && !isNaN(Number(capacity)) ? Number(capacity.trim()) : null,
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
         tags: selectedTags,
+        image: image || undefined,
+        url: url.trim() || undefined,
         ticketUrl: ticketUrl.trim() || undefined,
       });
 
@@ -199,6 +229,15 @@ const EnterpriseCrearEventoScreen = ({ navigation }) => {
             <Text style={styles.errorText}>{errorMsg}</Text>
           </View>
         ) : null}
+
+        {/* Selector de Imagen / Portada del Evento */}
+        <EventImagePicker
+          image={image}
+          onChangeImage={setImage}
+          onRemoveImage={() => setImage(null)}
+          label="Portada del evento"
+          sublabel="Banner en formato 16:9 (galería, cámara o enlace web)"
+        />
 
         {/* Nombre del Evento */}
         <Text style={styles.label}>Título del evento *</Text>
@@ -325,12 +364,12 @@ const EnterpriseCrearEventoScreen = ({ navigation }) => {
         />
 
         {/* Aforo Máximo */}
-        <Text style={styles.label}>Aforo estimado (asistentes) *</Text>
+        <Text style={styles.label}>Aforo estimado (asistentes)</Text>
         <View style={styles.inputBox}>
           <Users size={16} color={COLORS.gray400} strokeWidth={2.2} />
           <TextInput
             style={styles.textInput}
-            placeholder="100"
+            placeholder="Ej. 20 (opcional)"
             placeholderTextColor={COLORS.gray400}
             value={capacity}
             onChangeText={setCapacity}
@@ -339,9 +378,12 @@ const EnterpriseCrearEventoScreen = ({ navigation }) => {
         </View>
 
         {/* Etiquetas / Categorías */}
-        <Text style={styles.label}>Categorías del evento</Text>
+        <View style={styles.labelWithIconRow}>
+          <Tag size={14} color={COLORS.gray600} strokeWidth={2.2} />
+          <Text style={styles.labelWithIcon}>Categorías y Etiquetas</Text>
+        </View>
         <View style={styles.tagsWrapper}>
-          {CATEGORIES.map((cat) => {
+          {availableTags.map((cat) => {
             const isSelected = selectedTags.includes(cat);
             return (
               <TouchableOpacity
@@ -377,13 +419,28 @@ const EnterpriseCrearEventoScreen = ({ navigation }) => {
           />
         </View>
 
-        {/* Enlace opcional */}
-        <Text style={styles.label}>Enlace externo o web (opcional)</Text>
+        {/* Web Oficial / Landing Page */}
+        <Text style={styles.label}>Sitio Web Oficial o Landing (opcional)</Text>
         <View style={styles.inputBox}>
-          <Link2 size={16} color={COLORS.gray400} strokeWidth={2.2} />
+          <Globe size={16} color={COLORS.gray400} strokeWidth={2.2} />
           <TextInput
             style={styles.textInput}
-            placeholder="https://empresa.com/evento"
+            placeholder="https://empresa.com/jornada-2026"
+            placeholderTextColor={COLORS.gray400}
+            value={url}
+            onChangeText={setUrl}
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+        </View>
+
+        {/* Enlace para comprar o reservar entradas */}
+        <Text style={styles.label}>Enlace para comprar o reservar entradas (opcional)</Text>
+        <View style={styles.inputBox}>
+          <Ticket size={16} color={COLORS.gray400} strokeWidth={2.2} />
+          <TextInput
+            style={styles.textInput}
+            placeholder="https://entradas.empresa.com/reserva"
             placeholderTextColor={COLORS.gray400}
             value={ticketUrl}
             onChangeText={setTicketUrl}
@@ -464,6 +521,18 @@ const styles = StyleSheet.create({
     color: COLORS.gray800,
     marginTop: 12,
     marginBottom: 6,
+  },
+  labelWithIconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 12,
+    marginBottom: 6,
+  },
+  labelWithIcon: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.gray800,
   },
   inputBox: {
     flexDirection: "row",

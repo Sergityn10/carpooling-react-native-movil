@@ -21,12 +21,15 @@ import {
   FileText,
   Trash2,
   CheckCircle2,
+  Globe,
+  Ticket,
+  Link2,
 } from "lucide-react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { COLORS, SPACING, RADIUS, FONTS, BRAND, SHADOWS } from "../../constants";
 import PressableScale from "../../components/common/PressableScale";
 import { enterpriseService } from "../../services/enterpriseService";
-import { EnterpriseLocationInput } from "../../components/enterprise";
+import { EnterpriseLocationInput, EventImagePicker } from "../../components/enterprise";
 
 const STATUS_OPTIONS = [
   { key: "upcoming", label: "Próximo" },
@@ -37,6 +40,7 @@ const STATUS_OPTIONS = [
 const EnterpriseEditarEventoScreen = ({ navigation, route }) => {
   const event = route?.params?.event || {};
 
+  const [image, setImage] = useState(event.image || null);
   const [name, setName] = useState(event.name || event.title || "");
   const [description, setDescription] = useState(event.description || "");
   const [location, setLocation] = useState(event.location || event.address_line1 || "");
@@ -45,8 +49,12 @@ const EnterpriseEditarEventoScreen = ({ navigation, route }) => {
       ? { latitude: Number(event.latitude), longitude: Number(event.longitude) }
       : null
   );
-  const [capacity, setCapacity] = useState(String(event.capacity || 100));
+  const [capacity, setCapacity] = useState(
+    event.capacity !== undefined && event.capacity !== null ? String(event.capacity) : ""
+  );
   const [status, setStatus] = useState(event.status || "upcoming");
+  const [url, setUrl] = useState(event.url || "");
+  const [ticketUrl, setTicketUrl] = useState(event.ticket_url || event.ticketUrl || "");
   const initialStart = event.start_date || event.start_at || event.startDate;
   const initialEnd = event.end_date || event.end_at || event.endDate;
   const [startDate, setStartDate] = useState(
@@ -121,8 +129,12 @@ const EnterpriseEditarEventoScreen = ({ navigation, route }) => {
         location: location.trim(),
         latitude: locationCoords?.latitude,
         longitude: locationCoords?.longitude,
-        capacity: Number(capacity) || 100,
+        capacity: capacity.trim() && !isNaN(Number(capacity)) ? Number(capacity.trim()) : null,
         status,
+        image: image || null,
+        url: url.trim() || undefined,
+        ticket_url: ticketUrl.trim() || undefined,
+        ticketUrl: ticketUrl.trim() || undefined,
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
         start_date: startDate.toISOString(),
@@ -206,6 +218,15 @@ const EnterpriseEditarEventoScreen = ({ navigation, route }) => {
             <Text style={styles.errorText}>{errorMsg}</Text>
           </View>
         ) : null}
+
+        {/* Portada del Evento */}
+        <EventImagePicker
+          image={image}
+          onChangeImage={setImage}
+          onRemoveImage={() => setImage(null)}
+          label="Portada del evento"
+          sublabel="Banner en formato 16:9 (galería, cámara o enlace web)"
+        />
 
         {/* Estado del Evento */}
         <Text style={styles.label}>Estado del evento</Text>
@@ -363,6 +384,8 @@ const EnterpriseEditarEventoScreen = ({ navigation, route }) => {
           <Users size={16} color={COLORS.gray400} strokeWidth={2.2} />
           <TextInput
             style={styles.textInput}
+            placeholder="Ej. 20 (opcional)"
+            placeholderTextColor={COLORS.gray400}
             value={capacity}
             onChangeText={setCapacity}
             keyboardType="number-pad"
@@ -378,6 +401,36 @@ const EnterpriseEditarEventoScreen = ({ navigation, route }) => {
             onChangeText={setDescription}
             multiline
             numberOfLines={4}
+          />
+        </View>
+
+        {/* Web Oficial / Landing Page */}
+        <Text style={styles.label}>Sitio Web Oficial o Landing (opcional)</Text>
+        <View style={styles.inputBox}>
+          <Globe size={16} color={COLORS.gray400} strokeWidth={2.2} />
+          <TextInput
+            style={styles.textInput}
+            placeholder="https://empresa.com/jornada-2026"
+            placeholderTextColor={COLORS.gray400}
+            value={url}
+            onChangeText={setUrl}
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+        </View>
+
+        {/* Enlace para comprar o reservar entradas */}
+        <Text style={styles.label}>Enlace para comprar o reservar entradas (opcional)</Text>
+        <View style={styles.inputBox}>
+          <Ticket size={16} color={COLORS.gray400} strokeWidth={2.2} />
+          <TextInput
+            style={styles.textInput}
+            placeholder="https://entradas.empresa.com/reserva"
+            placeholderTextColor={COLORS.gray400}
+            value={ticketUrl}
+            onChangeText={setTicketUrl}
+            autoCapitalize="none"
+            keyboardType="url"
           />
         </View>
 

@@ -169,17 +169,32 @@ const ProfileView = ({
     setLoadingWallet(true);
     setWalletError(null);
     try {
-      const [balanceRes, txRes, payoutsRes, linkedRes, stripeRes] =
+      const [cashRes, balanceRes, txRes, payoutsRes, linkedRes, stripeRes] =
         await Promise.allSettled([
+          paymentService.getCashBalance(),
           paymentService.getWalletBalance(),
           paymentService.getWalletTransactions(20, 0),
           paymentService.getWalletPayouts(10, 0),
           paymentService.getLinkedAccounts(),
           paymentService.getStripeConnect(),
         ]);
-      if (balanceRes.status === "fulfilled" && balanceRes.value?.balances) {
+
+      if (cashRes.status === "fulfilled" && cashRes.value) {
+        const val = cashRes.value;
+        let cents = 0;
+        if (val.availableAmount !== undefined && val.availableAmount !== null) {
+          cents =
+            Math.round(
+              parseFloat(String(val.availableAmount).replace(",", ".")) * 100,
+            ) || 0;
+        } else if (val.cashBalance?.available?.[0]?.amount !== undefined) {
+          cents = val.cashBalance.available[0].amount || 0;
+        }
+        setWalletBalance([{ balance_cents: cents, currency: "eur" }]);
+      } else if (balanceRes.status === "fulfilled" && balanceRes.value?.balances) {
         setWalletBalance(balanceRes.value.balances);
       }
+
       if (balanceRes.status === "fulfilled" && balanceRes.value?.cae) {
         setCaeData(balanceRes.value.cae);
       } else {
@@ -213,20 +228,47 @@ const ProfileView = ({
     }
   }, []);
 
+  // Solo cargar datos del monedero si se estuviera usando la vista heredada (no WalletScreen)
+  // WalletScreen gestiona de forma autónoma su propio ciclo de vida y balance
   useEffect(() => {
-    if (currentSubView === "monedero") {
+    if (currentSubView === "monedero-legacy") {
       fetchWalletData();
     }
   }, [currentSubView, fetchWalletData]);
 
+  // Carga ligera del balance para la tarjeta del menú principal (solo una vez al inicio)
   useEffect(() => {
+    let isCancelled = false;
     paymentService
-      .getWalletBalance()
+      .getCashBalance()
       .then((res) => {
-        if (res?.balances) setWalletBalance(res.balances);
-        if (res?.cae) setCaeData(res.cae);
+        if (isCancelled || !res) return;
+        let cents = 0;
+        if (res.availableAmount !== undefined && res.availableAmount !== null) {
+          cents =
+            Math.round(
+              parseFloat(String(res.availableAmount).replace(",", ".")) * 100,
+            ) || 0;
+        } else if (res.cashBalance?.available?.[0]?.amount !== undefined) {
+          cents = res.cashBalance.available[0].amount || 0;
+        }
+        setWalletBalance([{ balance_cents: cents, currency: "eur" }]);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (isCancelled) return;
+        paymentService
+          .getWalletBalance()
+          .then((res) => {
+            if (isCancelled) return;
+            if (res?.balances) setWalletBalance(res.balances);
+            if (res?.cae) setCaeData(res.cae);
+          })
+          .catch(() => {});
+      });
+
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   useEffect(() => {
