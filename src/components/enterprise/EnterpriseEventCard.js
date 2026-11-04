@@ -14,6 +14,7 @@ import {
 import { COLORS, SPACING, RADIUS, FONTS, BRAND, SHADOWS } from "../../constants";
 import PressableScale from "../common/PressableScale";
 import { formatTripDate } from "../../services/dateUtils";
+import { formatImageUri } from "./EventImagePicker";
 
 const EnterpriseEventCard = ({
   event,
@@ -104,8 +105,8 @@ const EnterpriseEventCard = ({
       activeOpacity={0.94}
     >
       {/* Cabecera con imagen / banner o placeholder */}
-      {event.image ? (
-        <Image source={{ uri: event.image }} style={styles.bannerImage} resizeMode="cover" />
+      {formatImageUri(event.image) ? (
+        <Image source={{ uri: formatImageUri(event.image) }} style={styles.bannerImage} resizeMode="cover" />
       ) : null}
 
       <View style={styles.body}>
