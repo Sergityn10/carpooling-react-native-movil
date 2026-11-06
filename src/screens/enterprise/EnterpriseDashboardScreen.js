@@ -186,27 +186,46 @@ const EnterpriseDashboardScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {events.map((item) => (
-          <EnterpriseEventCard
-            key={item.id}
-            event={item}
-            onScanQR={(ev) =>
-              navigation.navigate("EnterpriseQRScanner", {
-                eventId: ev.id,
-                eventTitle: ev.name || ev.title,
-              })
-            }
-            onEdit={(ev) =>
-              navigation.navigate("EnterpriseEditarEvento", { event: ev })
-            }
-            onViewDetail={(ev) =>
-              navigation.navigate("EnterpriseEventDetail", {
-                eventId: ev.id,
-                event: ev,
-              })
-            }
-          />
-        ))}
+        {events.length === 0 ? (
+          <View style={styles.dashboardEmptyCard}>
+            <Calendar size={28} color={COLORS.gray400} strokeWidth={1.8} />
+            <Text style={styles.dashboardEmptyTitle}>
+              Aún no tienes eventos programados
+            </Text>
+            <Text style={styles.dashboardEmptyDesc}>
+              Crea tu primer evento corporativo para activar las rutas compartidas de tu equipo.
+            </Text>
+            <PressableScale
+              style={styles.dashboardEmptyBtn}
+              onPress={() => navigation.navigate("EnterpriseCrearEvento")}
+            >
+              <Plus size={15} color={COLORS.white} strokeWidth={2.6} />
+              <Text style={styles.dashboardEmptyBtnText}>Crear Evento</Text>
+            </PressableScale>
+          </View>
+        ) : (
+          events.map((item) => (
+            <EnterpriseEventCard
+              key={item.id}
+              event={item}
+              onScanQR={(ev) =>
+                navigation.navigate("EnterpriseQRScanner", {
+                  eventId: ev.id,
+                  eventTitle: ev.name || ev.title,
+                })
+              }
+              onEdit={(ev) =>
+                navigation.navigate("EnterpriseEditarEvento", { event: ev })
+              }
+              onViewDetail={(ev) =>
+                navigation.navigate("EnterpriseEventDetail", {
+                  eventId: ev.id,
+                  event: ev,
+                })
+              }
+            />
+          ))
+        )}
 
         <View style={{ height: SPACING.xxl }} />
       </ScrollView>
@@ -374,6 +393,50 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: COLORS.gray500,
     marginTop: 1,
+  },
+  dashboardEmptyCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.card,
+    padding: SPACING.xl,
+    marginHorizontal: SPACING.screenMargin,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    justifyContent: "center",
+    ...SHADOWS.small,
+  },
+  dashboardEmptyTitle: {
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+    fontSize: 15,
+    fontWeight: "700",
+    color: BRAND.black,
+    marginTop: 10,
+    marginBottom: 4,
+    textAlign: "center",
+  },
+  dashboardEmptyDesc: {
+    fontFamily: FONTS.typography?.fonts?.body || "Inter",
+    fontSize: 12,
+    color: COLORS.gray600,
+    textAlign: "center",
+    lineHeight: 18,
+    marginBottom: 14,
+    paddingHorizontal: 12,
+  },
+  dashboardEmptyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: RADIUS.round,
+    gap: 6,
+  },
+  dashboardEmptyBtnText: {
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: COLORS.white,
   },
 });
 

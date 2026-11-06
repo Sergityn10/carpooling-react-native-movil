@@ -25,6 +25,8 @@ import {
   ShieldCheck,
   Check,
   ChevronRight,
+  ArrowLeft,
+  LogOut,
 } from "lucide-react-native";
 import { useUser } from "../context/UserContext";
 import { usePermission } from "../context/PermissionContext";
@@ -32,7 +34,7 @@ import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../constants";
 import { Button } from "../components";
 
 const OnboardingScreen = () => {
-  const { user, actualizarUsuario } = useUser();
+  const { user, actualizarUsuario, cerrarSesion } = useUser();
   const {
     permissionsState,
     requestPermissionWithDisclosure,
@@ -56,16 +58,60 @@ const OnboardingScreen = () => {
   const stepOffset = needsNameStep ? 2 : 1;
   const permissionsStepIndex = needsNameStep ? 4 : 3;
 
+  const handleExitToAuth = () => {
+    Alert.alert(
+      "Volver al inicio",
+      "¿Deseas salir del asistente y volver a la pantalla de inicio? Se cerrará la sesión actual.",
+      [
+        { text: "Continuar aquí", style: "cancel" },
+        {
+          text: "Salir e ir al inicio",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              if (typeof cerrarSesion === "function") {
+                await cerrarSesion();
+              }
+            } catch (err) {
+              console.warn("Error cerrando sesión en onboarding:", err);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleBackStep = () => {
+    if (step === 0) {
+      handleExitToAuth();
+    } else {
+      if (needsNameStep) {
+        if (step === 4) setStep(3);
+        else if (step === 3) setStep(2);
+        else if (step === 2) setStep(1);
+        else if (step === 1) setStep(0);
+      } else {
+        if (step === 3) setStep(2);
+        else if (step === 2) setStep(1);
+        else if (step === 1) setStep(0);
+      }
+    }
+  };
+
   const formatDate = (date) => {
     if (!date) return "";
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d.getTime())) return "";
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   };
 
   const formatDateDisplay = (date) => {
     if (!date) return "Selecciona tu fecha de nacimiento";
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d.getTime())) return "Selecciona tu fecha de nacimiento";
     const months = [
       "enero",
       "febrero",
@@ -80,7 +126,7 @@ const OnboardingScreen = () => {
       "noviembre",
       "diciembre",
     ];
-    return `${date.getDate()} de ${months[date.getMonth()]} de ${date.getFullYear()}`;
+    return `${d.getDate()} de ${months[d.getMonth()]} de ${d.getFullYear()}`;
   };
 
   const onDateChange = useCallback((event, selectedDate) => {
@@ -159,18 +205,20 @@ const OnboardingScreen = () => {
   const handleFinish = async () => {
     setLoading(true);
     try {
-      const cleanedPhone = telefono.replace(/[\s\-+()]/g, "");
+      const cleanedPhone = (telefono || "").replace(/[\s\-+()]/g, "");
       const updateData = {
         fecha_nacimiento: formatDate(fechaNacimiento),
         phone: cleanedPhone,
         onboarding_ended: true,
       };
       if (needsNameStep) {
-        updateData.name = nombre.trim();
-        updateData.surname = apellido.trim();
+        updateData.name = (nombre || "").trim();
+        updateData.surname = (apellido || "").trim();
       }
-      updateData.dni = dni.replace(/[\s\-]/g, "").toUpperCase();
-      await actualizarUsuario(updateData);
+      updateData.dni = (dni || "").replace(/[\s\-]/g, "").toUpperCase();
+      if (typeof actualizarUsuario === "function") {
+        await actualizarUsuario(updateData);
+      }
     } catch (e) {
       const status = e.status;
       const msg = e.message || "";
@@ -222,6 +270,33 @@ const OnboardingScreen = () => {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
+          {/* Top Bar: Volver al inicio y Cerrar sesión */}
+          <View style={styles.topBar}>
+            <TouchableOpacity
+              style={styles.backButtonTop}
+              onPress={handleBackStep}
+              activeOpacity={0.7}
+              accessibilityLabel={step === 0 ? "Volver al inicio" : "Paso anterior"}
+              accessibilityRole="button"
+            >
+              <ArrowLeft size={18} color={COLORS.gray800 || "#0B0F0E"} strokeWidth={2.4} />
+              <Text style={styles.backButtonTopText}>
+                {step === 0 ? "Volver al inicio" : "Atrás"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.logoutButtonTop}
+              onPress={handleExitToAuth}
+              activeOpacity={0.7}
+              accessibilityLabel="Cerrar sesión"
+              accessibilityRole="button"
+            >
+              <LogOut size={14} color="#DC2626" strokeWidth={2.4} />
+              <Text style={styles.logoutButtonTopText}>Cerrar sesión</Text>
+            </TouchableOpacity>
+          </View>
+
           {/* Progress indicator */}
           <View style={styles.progressContainer}>
             {Array.from({ length: totalSteps }).map((_, i) => (
@@ -270,12 +345,20 @@ const OnboardingScreen = () => {
                 />
               </View>
 
-              <Button
-                title="Continuar"
-                onPress={handleNext}
-                disabled={!nombre.trim() || !apellido.trim()}
-                style={styles.button}
-              />
+              <View style={styles.buttonContainer}>
+                <Button
+                  title="Volver"
+                  onPress={handleExitToAuth}
+                  variant="outline"
+                  style={styles.backButton}
+                />
+                <Button
+                  title="Continuar"
+                  onPress={handleNext}
+                  disabled={!nombre.trim() || !apellido.trim()}
+                  style={styles.button}
+                />
+              </View>
             </View>
           )}
 
@@ -319,12 +402,20 @@ const OnboardingScreen = () => {
                   />
                 </View>
               ) : (
-                <Button
-                  title="Continuar"
-                  onPress={handleNext}
-                  disabled={!validateDni(dni)}
-                  style={styles.button}
-                />
+                <View style={styles.buttonContainer}>
+                  <Button
+                    title="Volver"
+                    onPress={handleExitToAuth}
+                    variant="outline"
+                    style={styles.backButton}
+                  />
+                  <Button
+                    title="Continuar"
+                    onPress={handleNext}
+                    disabled={!validateDni(dni)}
+                    style={styles.button}
+                  />
+                </View>
               )}
             </View>
           )}
@@ -584,7 +675,40 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: SPACING.xl,
-    paddingVertical: SPACING.xxl,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.xxl,
+  },
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: SPACING.lg,
+  },
+  backButtonTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+    paddingRight: 10,
+  },
+  backButtonTopText: {
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: COLORS.gray800 || "#0B0F0E",
+  },
+  logoutButtonTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#FEE2E2",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+  },
+  logoutButtonTopText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#DC2626",
   },
   progressContainer: {
     flexDirection: "row",

@@ -8,6 +8,7 @@ import httpClient from "../services/httpClient";
 import travelsHttpClient from "../services/travels/httpClient";
 import notificationsHttpClient from "../services/notifications/httpClient";
 import authService from "../services/authService";
+import { enterpriseService } from "../services/enterpriseService";
 import usuarioService from "../services/usuarioService";
 import userCache from "../services/messages/userCache";
 import { homeCache } from "../services/homeCache";
@@ -253,7 +254,33 @@ export const UserProvider = ({ children }) => {
           const parsedLocalUser = localUserData ? JSON.parse(localUserData) : null;
 
           if (parsedLocalUser?.role === "enterprise" || parsedLocalUser?.identity_type === "LEGAL_ENTITY") {
-            setUser(parsedLocalUser);
+            try {
+              const valRes = await enterpriseService.validateEnterpriseToken();
+              if (valRes?.enterprise) {
+                const ent = valRes.enterprise;
+                const updatedEnterpriseUser = {
+                  ...parsedLocalUser,
+                  id: ent.id || parsedLocalUser.id,
+                  name: ent.name || parsedLocalUser.name,
+                  email: ent.email || parsedLocalUser.email,
+                  img_perfil: ent.logo || parsedLocalUser.img_perfil,
+                  phone: ent.phone || parsedLocalUser.phone,
+                  cif: ent.cif || parsedLocalUser.cif,
+                  location: ent.location || parsedLocalUser.location,
+                  onboarding_ended: ent.onboarding_ended ?? parsedLocalUser.onboarding_ended,
+                  enterprise: ent,
+                };
+                await safeSetItem(STORAGE_KEYS.USER, JSON.stringify(updatedEnterpriseUser));
+                await safeSetItem(STORAGE_KEYS.SELECTED_ENTERPRISE, JSON.stringify(ent));
+                setUser(updatedEnterpriseUser);
+                setSelectedEnterprise(ent);
+              } else {
+                setUser(parsedLocalUser);
+              }
+            } catch (entErr) {
+              console.warn("[UserContext] validateEnterpriseToken aviso, usando sesión local:", entErr?.message);
+              setUser(parsedLocalUser);
+            }
             setIsAuthenticated(true);
             setActiveMode("enterprise");
           } else {
@@ -509,10 +536,120 @@ export const UserProvider = ({ children }) => {
     }
   };
 
+  // Procesar sesión de organización (B2B - docs/api/enterprise_auth.md)
+  const processEnterpriseAuthSession = async (response) => {
+    const token = response.token;
+    if (token) {
+      await tokenStorage.setAuthToken(token);
+      httpClient.setToken(token);
+      travelsHttpClient.setToken(token);
+      notificationsHttpClient.setToken(token);
+    }
+
+    const ent = response.enterprise || {};
+    const normalizedEnterpriseUser = {
+      id: ent.id || response.userId || "enterprise-account",
+      email: ent.email || "",
+      name: ent.name || "Organización",
+      img_perfil: ent.logo || null,
+      phone: ent.phone || null,
+      cif: ent.cif || null,
+      location: ent.location || null,
+      role: "enterprise",
+      classification: "ENTERPRISE",
+      identity_type: "LEGAL_ENTITY",
+      is_corporate_member: true,
+      onboarding_ended: ent.onboarding_ended ?? false,
+      enterprise: ent,
+    };
+
+    const identityObj = {
+      user_id: normalizedEnterpriseUser.id,
+      email: normalizedEnterpriseUser.email,
+      display_name: normalizedEnterpriseUser.name,
+      type: "LEGAL_ENTITY",
+      system_role: "enterprise",
+      avatar: normalizedEnterpriseUser.img_perfil,
+    };
+
+    const permsObj = {
+      can_access_corporate_mode: true,
+      can_access_personal_mode: false,
+      is_enterprise_admin: true,
+    };
+
+    await safeMultiSet([
+      [STORAGE_KEYS.USER, JSON.stringify(normalizedEnterpriseUser)],
+      [STORAGE_KEYS.ACTIVE_MODE, "enterprise"],
+      [STORAGE_KEYS.SELECTED_ENTERPRISE, JSON.stringify(ent)],
+      [STORAGE_KEYS.IDENTITY, JSON.stringify(identityObj)],
+      [STORAGE_KEYS.PERMISSIONS, JSON.stringify(permsObj)],
+      ["@youconnext_enterprise_profile", JSON.stringify(ent)],
+    ]);
+
+    setUser(normalizedEnterpriseUser);
+    setIdentity(identityObj);
+    setPermissions(permsObj);
+    setSelectedEnterprise(ent);
+    setActiveMode("enterprise");
+    setIsAuthenticated(true);
+
+    return normalizedEnterpriseUser;
+  };
+
+  // Iniciar sesión corporativa (Organización - docs/api/enterprise_auth.md)
+  const iniciarSesionOrganizacion = async (email, password) => {
+    try {
+      const response = await enterpriseService.enterpriseLogin({
+        email: email.trim(),
+        password,
+      });
+
+      if (!response?.token) {
+        throw new Error(
+          response?.message || "No se pudo obtener el token de acceso de la organización."
+        );
+      }
+
+      const normalizedUser = await processEnterpriseAuthSession(response);
+      return { ...response, user: normalizedUser };
+    } catch (error) {
+      console.error("[UserContext] Error al iniciar sesión de organización:", error);
+      throw error;
+    }
+  };
+
+  // Crear cuenta de organización (docs/api/enterprise_auth.md)
+  const crearOrganizacion = async (email, password, name) => {
+    try {
+      const response = await enterpriseService.enterpriseRegister({
+        email: email.trim(),
+        password,
+        name: name ? name.trim() : undefined,
+      });
+
+      if (!response?.token) {
+        throw new Error(
+          response?.message || "No se pudo registrar la organización."
+        );
+      }
+
+      const normalizedUser = await processEnterpriseAuthSession(response);
+      return { ...response, user: normalizedUser };
+    } catch (error) {
+      console.error("[UserContext] Error al crear organización:", error);
+      throw error;
+    }
+  };
+
   // Cerrar sesión
   const cerrarSesion = async () => {
     try {
-      await authService.logout();
+      if (activeMode === "enterprise" || user?.role === "enterprise") {
+        await enterpriseService.logoutEnterprise();
+      } else {
+        await authService.logout();
+      }
     } catch (error) {
       console.error("Error al cerrar sesión en API:", error);
     } finally {
@@ -529,8 +666,48 @@ export const UserProvider = ({ children }) => {
     }
   };
 
+  // Actualizar datos de organización / sede corporativa (docs/api/enterprise.md)
+  const actualizarOrganizacion = async (datos) => {
+    try {
+      const enterpriseId =
+        selectedEnterprise?.id || user?.enterprise?.id || user?.id;
+      const updatedEnterprise = await enterpriseService.updateEnterpriseProfile(
+        datos,
+        enterpriseId
+      );
+      const updatedUser = {
+        ...user,
+        ...updatedEnterprise,
+        name: updatedEnterprise.name || user?.name || "Organización",
+        onboarding_ended: updatedEnterprise.onboarding_ended ?? true,
+        enterprise: updatedEnterprise,
+      };
+
+      await safeMultiSet([
+        [STORAGE_KEYS.USER, JSON.stringify(updatedUser)],
+        [STORAGE_KEYS.SELECTED_ENTERPRISE, JSON.stringify(updatedEnterprise)],
+        ["@youconnext_enterprise_profile", JSON.stringify(updatedEnterprise)],
+      ]);
+
+      setUser(updatedUser);
+      setSelectedEnterprise(updatedEnterprise);
+      return updatedUser;
+    } catch (error) {
+      console.error("[UserContext] Error al actualizar organización:", error);
+      throw error;
+    }
+  };
+
   // Actualizar usuario (PATCH /api/users)
   const actualizarUsuario = async (datos) => {
+    if (
+      user?.role === "enterprise" ||
+      activeMode === "enterprise" ||
+      user?.identity_type === "LEGAL_ENTITY"
+    ) {
+      return actualizarOrganizacion(datos);
+    }
+
     try {
       await usuarioService.updateUser(datos);
 
@@ -562,6 +739,7 @@ export const UserProvider = ({ children }) => {
 
   const value = {
     user,
+    setUser,
     loading,
     isAuthenticated,
     activeMode,
@@ -575,6 +753,9 @@ export const UserProvider = ({ children }) => {
     crearUsuario,
     iniciarSesion,
     loginGoogleNative,
+    iniciarSesionOrganizacion,
+    crearOrganizacion,
+    actualizarOrganizacion,
     cerrarSesion,
     actualizarUsuario,
     refreshUser: loadUser,

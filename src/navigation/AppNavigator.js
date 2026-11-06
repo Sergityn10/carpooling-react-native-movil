@@ -49,10 +49,14 @@ import {
   DirectChatScreen,
   EventParticipantsScreen,
   WalletScreen,
+  EnterpriseLoginScreen,
+  EnterpriseRegisterScreen,
+  EnterpriseOnboardingScreen,
   EnterpriseCrearEventoScreen,
   EnterpriseEditarEventoScreen,
   EnterpriseEventDetailScreen,
   EnterpriseQRScannerScreen,
+  EnterpriseProfileEditScreen,
 } from "../screens";
 import EnterpriseNavigator from "./EnterpriseNavigator";
 
@@ -189,6 +193,8 @@ const REDIRECT_SCREEN_MAP = {
   wallet: "Wallet",
   monedero: "Wallet",
   historial: "Historial",
+  "enterprise-login": "EnterpriseLogin",
+  "enterprise-register": "EnterpriseRegister",
 };
 
 const linking = {
@@ -217,6 +223,8 @@ const linking = {
       ViajeEnCurso: "api/trayecto/:id/en-curso",
       Wallet: "wallet",
       Historial: "historial",
+      EnterpriseLogin: "enterprise/login",
+      EnterpriseRegister: "enterprise/register",
     },
   },
   getStateFromPath(path, config) {
@@ -260,6 +268,14 @@ const AppNavigator = () => {
           <Stack.Screen name="Auth" component={AuthScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Register" component={RegisterScreen} />
+          <Stack.Screen
+            name="EnterpriseLogin"
+            component={EnterpriseLoginScreen}
+          />
+          <Stack.Screen
+            name="EnterpriseRegister"
+            component={EnterpriseRegisterScreen}
+          />
         </Stack.Navigator>
       </NavigationContainer>
     );
@@ -274,10 +290,22 @@ const AppNavigator = () => {
       user.onboarding_ended === undefined);
 
   if (needsOnboarding) {
+    const isEnterpriseUser =
+      user?.role === "enterprise" ||
+      user?.identity_type === "LEGAL_ENTITY" ||
+      activeMode === "enterprise";
+
     return (
       <NavigationContainer linking={linking}>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+          {isEnterpriseUser ? (
+            <Stack.Screen
+              name="EnterpriseOnboarding"
+              component={EnterpriseOnboardingScreen}
+            />
+          ) : (
+            <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+          )}
         </Stack.Navigator>
       </NavigationContainer>
     );
@@ -314,6 +342,10 @@ const AppNavigator = () => {
           name="EnterpriseQRScanner"
           component={EnterpriseQRScannerScreen}
           options={{ animation: "slide_from_bottom" }}
+        />
+        <Stack.Screen
+          name="EnterpriseProfileEdit"
+          component={EnterpriseProfileEditScreen}
         />
         <Stack.Screen
           name="EscanearQR"

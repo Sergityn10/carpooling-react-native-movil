@@ -1,69 +1,75 @@
 # Autenticación de Empresas (`/api/enterprise/auth`)
 
-Endpoints para gestión de cuentas de organización/empresa (`role_id: 3`, rol `"enterprise"`), autenticación corporativa, cambio de contraseñas y compatibilidad con el inicio de sesión unificado.
+Endpoints para gestión de cuentas de organización/empresa (`role_id: 3`, rol `"enterprise"`), auto-registro corporativo público, autenticación, cambio de contraseñas y compatibilidad con el inicio de sesión unificado.
 
 > **Nota de Arquitectura:**
-> - Las organizaciones también pueden autenticarse a través del endpoint unificado [`POST /api/auth/unified-login`](auth.md#1-inicio-de-sesion-unificado), el cual clasifica su identidad como `LEGAL_ENTITY` / `ORGANIZATION`.
+> - Las organizaciones disponen de un flujo de acceso y registro totalmente separado e independiente al de los usuarios particulares:
+>   - Registro web: `/enterprise/register`
+>   - Inicio de sesión web: `/enterprise/login`
+>   - Onboarding corporativo: `/enterprise/onboarding`
 > - Para gestionar a los empleados, colaboradores e invitaciones corporativas de la organización, consulta [Gestión de Miembros e Invitaciones](enterprise_members.md).
 > - Para la implementación en la Webapp y App Móvil, consulta la [Guía de Integración Frontend para Empresas](../frontend-enterprise-guide.md).
 
 ---
 
-## 1. Registro de Empresa (Exclusivo Administrador)
+## 1. Auto-Registro Público de Organización / Empresa
 
-**URL:** `POST /api/enterprise/auth/register` (o `POST /api/admin/enterprises`)
+**URL:** `POST /api/enterprise/auth/register`
 
-**Autenticación:** Requerida (Solo Super Administrador de la plataforma).
+**Autenticación:** No requerida (Pública).
 
-**Descripción:** Da de alta una nueva organización corporativa en el sistema. Hashea la contraseña con bcrypt (10 rondas de salt). Registra la empresa con `role_id: 3` (`enterprise`), estado activo y borrado lógico habilitado (`is_deleted: false`).
+**Descripción:** Da de alta una nueva organización corporativa en la plataforma de forma ágil. Para maximizar la facilidad de registro, únicamente se exige **correo corporativo** y **contraseña** (el nombre es opcional en esta fase y puede asignarse en el Onboarding). 
+Tras crearse en base de datos con `onboarding_ended: false`, el servidor inicia sesión inmediatamente, emite el JWT correspondiente y establece la cookie segura `enterprise_access_token`.
 
 **Entrada (body JSON):**
 ```json
 {
-  "name": "Iberdrola S.A.",
-  "email": "movilidad@iberdrola.com",
-  "password": "Password123#",
-  "description": "Líder global en sostenibilidad y movilidad compartida",
-  "location": "Bilbao / Madrid",
-  "phone": "+34910000000",
-  "cif": "A48010611",
-  "website": "https://www.iberdrola.com",
-  "sector": "Energía",
-  "employee_count": 35000,
-  "city": "Madrid",
-  "province": "Madrid",
-  "country": "ES"
+  "email": "movilidad@empresa.com",
+  "password": "Password123!#",
+  "name": "Empresa Opcional S.L."
 }
 ```
 
-**Salida (201):**
+*Nota sobre campos:*
+- `email`: Obligatorio. Formato email corporativo válido y único en el sistema.
+- `password`: Obligatorio. Mínimo 8 caracteres, al menos una mayúscula, una minúscula, un número y un símbolo especial (`@$!%*?&_-#`).
+- `name`: Opcional. Si se omite, se asigna temporalmente el alias del correo hasta que la empresa complete el onboarding.
+
+**Salida (201 Created):**
 ```json
 {
   "status": "Success",
-  "message": "Organización registrada exitosamente por el administrador.",
+  "message": "Organización registrada exitosamente.",
+  "token": "<JWT_access_token>",
+  "role": "enterprise",
   "enterprise": {
     "id": "ent-uuid-999",
-    "name": "Iberdrola S.A.",
-    "email": "movilidad@iberdrola.com",
-    "description": "Líder global en sostenibilidad y movilidad compartida",
-    "location": "Bilbao / Madrid",
-    "phone": "+34910000000",
-    "cif": "A48010611",
-    "website": "https://www.iberdrola.com",
-    "sector": "Energía",
-    "employeeCount": 35000,
-    "role": "enterprise",
-    "isActive": true,
+    "name": "Empresa Opcional S.L.",
+    "email": "movilidad@empresa.com",
+    "description": null,
+    "location": null,
+    "phone": null,
+    "cif": null,
+    "website": null,
+    "logo": null,
+    "contactPerson": null,
+    "sector": null,
+    "employeeCount": null,
+    "country": "ES",
     "verified": false,
-    "createdAt": "2026-10-29T10:00:00.000Z"
+    "onboarding_ended": false,
+    "isActive": true,
+    "role": "enterprise",
+    "createdAt": "2026-11-06T08:30:00.000Z"
   }
 }
 ```
 
+**Cookies establecidas:** `enterprise_access_token` (`httpOnly`, `path: /`).
+
 **Errores:**
-- `400` — Validación de esquema fallida (campos obligatorios ausentes o formato inválido).
-- `403` — Acceso denegado (el solicitante no es Super Administrador).
-- `409` — Ya existe una empresa registrada con ese correo electrónico o CIF.
+- `400` — Validación de esquema fallida (contraseña débil o formato de email incorrecto).
+- `409` — Ya existe una empresa registrada con ese correo electrónico.
 
 ---
 
@@ -78,12 +84,12 @@ Endpoints para gestión de cuentas de organización/empresa (`role_id: 3`, rol `
 **Entrada (body JSON):**
 ```json
 {
-  "email": "movilidad@iberdrola.com",
-  "password": "Password123#"
+  "email": "movilidad@empresa.com",
+  "password": "Password123!#"
 }
 ```
 
-**Salida (200):**
+**Salida (200 OK):**
 ```json
 {
   "status": "Success",
@@ -93,14 +99,19 @@ Endpoints para gestión de cuentas de organización/empresa (`role_id: 3`, rol `
   "enterprise": {
     "id": "ent-uuid-999",
     "name": "Iberdrola S.A.",
-    "email": "movilidad@iberdrola.com",
+    "email": "movilidad@empresa.com",
     "sector": "Energía",
     "location": "Bilbao / Madrid",
+    "onboarding_ended": true,
     "role": "enterprise",
     "isActive": true
   }
 }
 ```
+
+**Regla de Redirección Frontend:**
+- Si `enterprise.onboarding_ended === false` ➔ Redirigir inmediatamente a `/enterprise/onboarding`.
+- Si `enterprise.onboarding_ended === true` ➔ Redirigir al panel principal `/enterprise/dashboard`.
 
 **Errores:**
 - `400` — Validación de esquema fallida.
@@ -109,94 +120,110 @@ Endpoints para gestión de cuentas de organización/empresa (`role_id: 3`, rol `
 
 ---
 
-## 3. Cambio de Contraseña de Empresa
+## 3. Alta Administrativa de Empresas (Solo SuperAdmin)
 
-**URL:** `POST /api/enterprise/auth/change-password`
+**URL:** `POST /api/admin/enterprises`
 
-**Autenticación:** Requerida (`isEnterpriseLoged`).
+**Autenticación:** Requerida (Solo Super Administrador de la plataforma con token Bearer o cookie de admin).
 
-**Descripción:** Permite a la organización actualizar su clave corporativa. Valida la contraseña actual, exige complejidad de seguridad y previene reutilización inmediata.
+**Descripción:** Permite a los administradores de YouConnext crear directamente entidades completas y pre-configuradas con datos de sede, CIF y auditoría.
 
 **Entrada (body JSON):**
 ```json
 {
-  "current_password": "OldPassword123#",
+  "name": "Iberdrola S.A.",
+  "email": "movilidad@iberdrola.com",
+  "password": "Password123!#",
+  "description": "Líder global en sostenibilidad y movilidad compartida",
+  "location": "Bilbao / Madrid",
+  "phone": "+34910000000",
+  "cif": "A48010611",
+  "website": "https://www.iberdrola.com",
+  "sector": "Energía",
+  "employee_count": 35000,
+  "city": "Madrid",
+  "province": "Madrid",
+  "country": "ES"
+}
+```
+
+**Salida (201 Created):** Retorna la entidad creada con código 201.
+
+---
+
+## 4. Cambio de Contraseña de Empresa
+
+**URL:** `PATCH /api/enterprise/auth/change-password`
+
+**Autenticación:** Requerida (`isEnterpriseLoged`).
+
+**Descripción:** Permite a la propia organización actualizar su clave corporativa en sesión. Valida la contraseña actual, exige complejidad de seguridad y previene reutilización inmediata.
+
+**Entrada (body JSON):**
+```json
+{
+  "current_password": "OldPassword123!#",
   "new_password": "NewStrongPassword2026@",
   "confirm_password": "NewStrongPassword2026@"
 }
 ```
 
-**Salida (200):**
+**Salida (200 OK):**
 ```json
 {
   "status": "Success",
-  "message": "Contraseña actualizada exitosamente."
+  "message": "Contraseña modificada correctamente con las directivas de seguridad requeridas."
 }
 ```
 
-**Cookies establecidas:** `enterprise_access_token`.
-
 ---
 
-## 3. Logout de Empresa
+## 5. Logout de Empresa
 
 **URL:** `GET /api/enterprise/auth/logout`
 
 **Autenticación:** No requerida.
 
-**Descripción:** Cierra la sesión de la empresa eliminando la cookie `enterprise_access_token`.
+**Descripción:** Cierra la sesión corporativa eliminando la cookie `enterprise_access_token`.
 
-**Salida (200):**
+**Salida (200 OK):**
 ```json
 {
   "status": "Success",
-  "message": "Logout successful"
+  "message": "Sesión cerrada correctamente."
 }
 ```
 
 ---
 
-## 4. Validar Token de Empresa
+## 6. Validar Token de Empresa
 
 **URL:** `GET /api/enterprise/auth/validate`
 
-**Autenticación:** Cookie `enterprise_access_token` requerida.
+**Autenticación:** Bearer Token o Cookie `enterprise_access_token` requerida.
 
-**Descripción:** Valida el token JWT de la empresa. Devuelve los datos completos de la empresa si el token es válido.
+**Descripción:** Valida la sesión activa de la empresa y devuelve los datos corporativos actualizados, incluyendo el estado de `onboarding_ended`.
 
-**Salida (200):**
+**Salida (200 OK):**
 ```json
 {
   "status": "Success",
-  "message": "Token is valid",
+  "message": "Token válido.",
   "token": "<JWT>",
-  "data": {
-    "id": 1,
-    "name": "Mi Empresa",
+  "role": "enterprise",
+  "enterprise": {
+    "id": "ent-uuid-999",
+    "name": "Mi Empresa S.L.",
     "email": "info@empresa.com",
-    "phone": null,
-    "cif": null,
-    "website": null,
-    "address_line1": null,
-    "address_line2": null,
-    "city": null,
-    "province": null,
-    "postal_code": null,
-    "country": "ES",
-    "verified": 0,
-    "type": "enterprise"
+    "cif": "B12345678",
+    "website": "https://miempresa.com",
+    "description": "Compromiso con el carpooling corporativo",
+    "location": "Cáceres",
+    "onboarding_ended": true,
+    "role": "enterprise"
   }
 }
 ```
 
 **Errores:**
-- `401` — No se proporcionó token o token inválido.
-
----
-
-## Notas generales
-
-- **Cookie:** `enterprise_access_token` — `httpOnly`, `secure` en producción, `sameSite: lax`.
-- **Expiración:** `process.env.JWT_COOKIES_EXPIRATION_TIME` días.
-- **JWT Payload:** `{ email, type: "enterprise", enterprise_id }`.
-- **Middleware de protección:** `enterpriseAuthorization.isEnterpriseLoged` para endpoints que requieren sesión de empresa.
+- `401` — Token no válido, expirado o cuenta inactiva.

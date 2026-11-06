@@ -1,5 +1,6 @@
 // YouConnext - Auth Service
 import httpClient from "./httpClient";
+import enterpriseService from "./enterpriseService";
 
 // Inicio de sesión unificado — POST /api/auth/unified-login
 // Admite Email + Password (auth_type: "auto") o Google OAuth ({ id_token, auth_method: "google" })
@@ -118,6 +119,11 @@ export const authService = {
   refreshToken,
   validateToken,
   loginWithGoogleAndroid,
+  // Métodos específicos para organizaciones (docs/api/enterprise_auth.md)
+  enterpriseLogin: enterpriseService.enterpriseLogin,
+  enterpriseRegister: enterpriseService.enterpriseRegister,
+  validateEnterpriseToken: enterpriseService.validateEnterpriseToken,
+  logoutEnterprise: enterpriseService.logoutEnterprise,
 };
 
 export default authService;

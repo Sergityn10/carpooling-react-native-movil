@@ -1,6 +1,6 @@
-// YouConnext - AuthScreen (Pantalla de bienvenida oficial v2)
-// Estructura negra #0B0F0E, acento verde táctil, tipografía Sora/Inter, iconos Lucide
-import React from "react";
+// YouConnext - AuthScreen (Pantalla de bienvenida y selección de portal v2)
+// Estructura oficial #0B0F0E, selector segmentado táctil, tipografía Sora/Inter, iconos Lucide
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Image,
   Linking,
   StatusBar,
+  TouchableOpacity,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -18,11 +19,21 @@ import {
   Route,
   Ticket,
   BadgeCheck,
+  Building2,
+  QrCode,
+  TrendingUp,
+  User,
+  Briefcase,
 } from "lucide-react-native";
-import { COLORS, SPACING, RADIUS, FONTS, BRAND } from "../constants";
+import { COLORS, SPACING, RADIUS, FONTS, BRAND, SHADOWS } from "../constants";
 import { Button } from "../components";
 
 const AuthScreen = ({ navigation }) => {
+  // Estado para conmutar entre Usuario Particular y Organización B2B
+  const [portalMode, setPortalMode] = useState("user"); // "user" | "enterprise"
+
+  const isEnterprise = portalMode === "enterprise";
+
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       <StatusBar barStyle="light-content" backgroundColor={BRAND.black} />
@@ -31,9 +42,69 @@ const AuthScreen = ({ navigation }) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Cabecera estructurada en negro de marca */}
+        {/* Selector Segmentado de Portal en la cabecera */}
+        <View style={styles.selectorWrapper}>
+          <View style={styles.selectorContainer}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={[
+                styles.selectorTab,
+                !isEnterprise && styles.selectorTabActiveUser,
+              ]}
+              onPress={() => setPortalMode("user")}
+              accessibilityRole="button"
+              accessibilityLabel="Modo Usuario Particular"
+            >
+              <User
+                size={16}
+                color={!isEnterprise ? COLORS.white : COLORS.gray400}
+                strokeWidth={2.4}
+              />
+              <Text
+                style={[
+                  styles.selectorLabel,
+                  !isEnterprise && styles.selectorLabelActive,
+                ]}
+              >
+                Particular
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={[
+                styles.selectorTab,
+                isEnterprise && styles.selectorTabActiveEnterprise,
+              ]}
+              onPress={() => setPortalMode("enterprise")}
+              accessibilityRole="button"
+              accessibilityLabel="Modo Organización o Empresa"
+            >
+              <Building2
+                size={16}
+                color={isEnterprise ? COLORS.white : COLORS.gray400}
+                strokeWidth={2.4}
+              />
+              <Text
+                style={[
+                  styles.selectorLabel,
+                  isEnterprise && styles.selectorLabelActive,
+                ]}
+              >
+                Organización
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Hero Card estructurada en negro de marca */}
         <View style={styles.heroCard}>
-          <View style={styles.ambientGlow} />
+          <View
+            style={[
+              styles.ambientGlow,
+              isEnterprise && styles.ambientGlowEnterprise,
+            ]}
+          />
 
           <View style={styles.logoBadge}>
             <Image
@@ -43,78 +114,154 @@ const AuthScreen = ({ navigation }) => {
             />
           </View>
 
-          <Text style={styles.wordmark}>YouConnext</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.wordmark}>YouConnext</Text>
+            {isEnterprise && (
+              <View style={styles.enterpriseBadge}>
+                <Text style={styles.enterpriseBadgeText}>B2B</Text>
+              </View>
+            )}
+          </View>
+
           <Text style={styles.tagline}>
-            Comparte coche a tus eventos y pueblos. Sencillo, puntual y entre personas de confianza.
+            {isEnterprise
+              ? "Impulsa la movilidad compartida de tu equipo, reduce la huella de CO₂ y gestiona tus eventos institucionales."
+              : "Comparte coche a tus eventos y pueblos. Sencillo, puntual y entre personas de confianza."}
           </Text>
 
-          {/* Tres pilares oficiales con iconos de trazo Lucide (sin emojis) */}
-          <View style={styles.pillarsRow}>
-            <View style={styles.pillarItem}>
-              <View style={styles.pillarIconBadge}>
-                <Route size={16} color={BRAND.green} strokeWidth={2} />
+          {/* Tres pilares oficiales con iconos de trazo Lucide */}
+          {!isEnterprise ? (
+            <View style={styles.pillarsRow}>
+              <View style={styles.pillarItem}>
+                <View style={styles.pillarIconBadge}>
+                  <Route size={16} color={BRAND.green} strokeWidth={2} />
+                </View>
+                <Text style={styles.pillarText}>Ruta directa</Text>
               </View>
-              <Text style={styles.pillarText}>Ruta directa</Text>
-            </View>
 
-            <View style={styles.pillarItem}>
-              <View style={styles.pillarIconBadge}>
-                <Ticket size={16} color={BRAND.accent} strokeWidth={2} />
+              <View style={styles.pillarItem}>
+                <View style={styles.pillarIconBadge}>
+                  <Ticket size={16} color={BRAND.accent} strokeWidth={2} />
+                </View>
+                <Text style={styles.pillarText}>Tus eventos</Text>
               </View>
-              <Text style={styles.pillarText}>Tus eventos</Text>
-            </View>
 
-            <View style={styles.pillarItem}>
-              <View style={styles.pillarIconBadge}>
-                <BadgeCheck size={16} color={BRAND.green} strokeWidth={2} />
+              <View style={styles.pillarItem}>
+                <View style={styles.pillarIconBadge}>
+                  <BadgeCheck size={16} color={BRAND.green} strokeWidth={2} />
+                </View>
+                <Text style={styles.pillarText}>Verificados</Text>
               </View>
-              <Text style={styles.pillarText}>Verificados</Text>
             </View>
-          </View>
+          ) : (
+            <View style={styles.pillarsRow}>
+              <View style={styles.pillarItem}>
+                <View style={styles.pillarIconBadge}>
+                  <Building2 size={16} color={BRAND.green} strokeWidth={2} />
+                </View>
+                <Text style={styles.pillarText}>Gestión B2B</Text>
+              </View>
+
+              <View style={styles.pillarItem}>
+                <View style={styles.pillarIconBadge}>
+                  <QrCode size={16} color={BRAND.accent} strokeWidth={2} />
+                </View>
+                <Text style={styles.pillarText}>Eventos & QR</Text>
+              </View>
+
+              <View style={styles.pillarItem}>
+                <View style={styles.pillarIconBadge}>
+                  <TrendingUp size={16} color={BRAND.green} strokeWidth={2} />
+                </View>
+                <Text style={styles.pillarText}>Métricas CO₂</Text>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Bloque de Acciones: Botones de 48px con radio 12 */}
         <View style={styles.actionsCard}>
-          <Text style={styles.actionsTitle}>Bienvenido a YouConnext</Text>
+          <Text style={styles.actionsTitle}>
+            {isEnterprise
+              ? "Portal de Organizaciones"
+              : "Bienvenido a YouConnext"}
+          </Text>
           <Text style={styles.actionsSubtitle}>
-            Accede a tu cuenta o regístrate en menos de dos minutos.
+            {isEnterprise
+              ? "Accede al panel corporativo o da de alta a tu empresa o institución."
+              : "Accede a tu cuenta o regístrate en menos de dos minutos."}
           </Text>
 
-          <Button
-            title="Iniciar sesión"
-            onPress={() => navigation.navigate("Login")}
-            variant="primary"
-            icon={<LogIn size={18} color={COLORS.white} strokeWidth={2.4} />}
-            style={styles.buttonSpacing}
-          />
+          {!isEnterprise ? (
+            <>
+              <Button
+                title="Iniciar sesión"
+                onPress={() => navigation.navigate("Login")}
+                variant="primary"
+                icon={<LogIn size={18} color={COLORS.white} strokeWidth={2.4} />}
+                style={styles.buttonSpacing}
+              />
 
-          <Button
-            title="Crear cuenta nueva"
-            onPress={() => navigation.navigate("Register")}
-            variant="outline"
-            icon={<UserPlus size={18} color={COLORS.primary} strokeWidth={2.4} />}
-          />
+              <Button
+                title="Crear cuenta nueva"
+                onPress={() => navigation.navigate("Register")}
+                variant="outline"
+                icon={
+                  <UserPlus size={18} color={COLORS.primary} strokeWidth={2.4} />
+                }
+              />
+            </>
+          ) : (
+            <>
+              <Button
+                title="Acceder como Organización"
+                onPress={() => navigation.navigate("EnterpriseLogin")}
+                variant="primary"
+                icon={
+                  <Building2 size={18} color={COLORS.white} strokeWidth={2.4} />
+                }
+                style={styles.buttonSpacing}
+              />
+
+              <Button
+                title="Registrar mi Organización"
+                onPress={() => navigation.navigate("EnterpriseRegister")}
+                variant="outline"
+                icon={
+                  <Briefcase size={18} color={COLORS.primary} strokeWidth={2.4} />
+                }
+              />
+            </>
+          )}
         </View>
 
         {/* Pie de confianza y términos legales */}
         <View style={styles.footer}>
           <View style={styles.trustBadge}>
             <ShieldCheck size={14} color={COLORS.gray400} strokeWidth={2} />
-            <Text style={styles.trustText}>Comunidad con identidad verificada</Text>
+            <Text style={styles.trustText}>
+              {isEnterprise
+                ? "Entorno corporativo seguro con métricas de impacto"
+                : "Comunidad con identidad verificada"}
+            </Text>
           </View>
 
           <Text style={styles.footerText}>
             Al continuar aceptas nuestras{" "}
             <Text
               style={styles.footerLink}
-              onPress={() => Linking.openURL("https://app.youconnext.es/condiciones")}
+              onPress={() =>
+                Linking.openURL("https://app.youconnext.es/condiciones")
+              }
             >
               condiciones de uso
             </Text>
             {" y "}
             <Text
               style={styles.footerLink}
-              onPress={() => Linking.openURL("https://app.youconnext.es/privacidad")}
+              onPress={() =>
+                Linking.openURL("https://app.youconnext.es/privacidad")
+              }
             >
               política de privacidad
             </Text>
@@ -135,8 +282,48 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: "space-between",
     paddingHorizontal: SPACING.screenMargin, // 20px
-    paddingTop: SPACING.lg,
+    paddingTop: SPACING.sm,
     paddingBottom: SPACING.xl,
+  },
+  selectorWrapper: {
+    alignItems: "center",
+    marginBottom: SPACING.md,
+  },
+  selectorContainer: {
+    flexDirection: "row",
+    backgroundColor: "#141A18",
+    borderRadius: RADIUS.button || 12,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: "#2F3A36",
+    width: "100%",
+  },
+  selectorTab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  selectorTabActiveUser: {
+    backgroundColor: BRAND.greenOnLight, // #0B7A3B
+    ...SHADOWS.small,
+  },
+  selectorTabActiveEnterprise: {
+    backgroundColor: "#0D5E34", // Tono corporativo profundo
+    ...SHADOWS.small,
+  },
+  selectorLabel: {
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#8A9994",
+  },
+  selectorLabelActive: {
+    color: COLORS.white,
+    fontWeight: "700",
   },
   heroCard: {
     backgroundColor: BRAND.black,
@@ -162,6 +349,9 @@ const styles = StyleSheet.create({
     borderRadius: 60,
     backgroundColor: "rgba(0, 200, 83, 0.12)",
   },
+  ambientGlowEnterprise: {
+    backgroundColor: "rgba(242, 163, 60, 0.10)", // Glow ámbar corporativo
+  },
   logoBadge: {
     width: 72,
     height: 72,
@@ -177,6 +367,12 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
   },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
   wordmark: {
     fontFamily: FONTS.typography?.fonts?.display || "Sora",
     fontSize: 26,
@@ -184,7 +380,18 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#F2F5F4",
     letterSpacing: -0.5,
-    marginBottom: 6,
+  },
+  enterpriseBadge: {
+    backgroundColor: BRAND.accent, // #F2A33C
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  enterpriseBadgeText: {
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+    fontSize: 11,
+    fontWeight: "800",
+    color: BRAND.black,
   },
   tagline: {
     fontFamily: FONTS.typography?.fonts?.body || "Inter",
@@ -273,6 +480,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.gray600,
     fontWeight: "500",
+    textAlign: "center",
   },
   footerText: {
     fontFamily: FONTS.typography?.fonts?.body || "Inter",
