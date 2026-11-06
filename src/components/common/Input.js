@@ -33,12 +33,15 @@ const Input = ({
   inputStyle,
   containerStyle,
   helperText,
+  multiline = false,
+  numberOfLines,
   ...rest
 }) => {
   const [isFocused, setIsFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   const isPassword = Boolean(secureTextEntry);
+  const isMultiline = Boolean(multiline);
 
   const handleFocus = (e) => {
     setIsFocused(true);
@@ -63,6 +66,7 @@ const Input = ({
       <View
         style={[
           styles.inputWrapper,
+          isMultiline && styles.inputWrapperMultiline,
           { borderColor: getBorderColor() },
           isFocused && styles.inputWrapperFocused,
           Boolean(error) && styles.inputWrapperError,
@@ -71,7 +75,12 @@ const Input = ({
         ]}
       >
         {Icon && (
-          <View style={styles.iconContainer}>
+          <View
+            style={[
+              styles.iconContainer,
+              isMultiline && styles.iconContainerMultiline,
+            ]}
+          >
             <Icon
               size={19}
               color={
@@ -88,7 +97,11 @@ const Input = ({
 
         <TextInput
           ref={inputRef}
-          style={[styles.input, inputStyle]}
+          style={[
+            styles.input,
+            isMultiline && styles.inputMultiline,
+            inputStyle,
+          ]}
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
@@ -103,6 +116,9 @@ const Input = ({
           onBlur={handleBlur}
           editable={editable}
           selectionColor={COLORS.primary}
+          multiline={multiline}
+          numberOfLines={numberOfLines}
+          textAlignVertical={isMultiline ? "top" : "center"}
           {...rest}
         />
 
@@ -182,10 +198,19 @@ const styles = StyleSheet.create({
     backgroundColor: "#F4F7F5",
     borderColor: COLORS.gray200,
   },
+  inputWrapperMultiline: {
+    height: undefined,
+    minHeight: 88,
+    alignItems: "flex-start",
+    paddingVertical: 10,
+  },
   iconContainer: {
     marginRight: 10,
     justifyContent: "center",
     alignItems: "center",
+  },
+  iconContainerMultiline: {
+    paddingTop: 3,
   },
   input: {
     flex: 1,
@@ -194,6 +219,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: BRAND.black,
     paddingVertical: 0,
+  },
+  inputMultiline: {
+    height: undefined,
+    minHeight: 68,
+    textAlignVertical: "top",
+    paddingTop: 0,
+    paddingBottom: 0,
   },
   eyeButton: {
     padding: 6,

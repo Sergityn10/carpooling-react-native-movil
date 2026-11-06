@@ -23,6 +23,8 @@ import {
   ShieldCheck,
   UserPlus,
   AlertCircle,
+  Building2,
+  ArrowRight,
 } from "lucide-react-native";
 import { useUser } from "../context/UserContext";
 import { COLORS, SPACING, RADIUS, FONTS, BRAND, SHADOWS } from "../constants";
@@ -472,6 +474,21 @@ const RegisterScreen = ({ navigation }) => {
               <Text style={styles.toggleLink}>Iniciar sesión</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Puente cruzado: Alta para organizaciones */}
+          <PressableScale
+            style={styles.bridgeCard}
+            onPress={() => navigation.navigate("EnterpriseRegister")}
+          >
+            <View style={styles.bridgeIconBox}>
+              <Building2 size={18} color={COLORS.primary} strokeWidth={2.4} />
+            </View>
+            <View style={styles.bridgeTextBox}>
+              <Text style={styles.bridgeTitle}>¿Deseas registrar una entidad o empresa?</Text>
+              <Text style={styles.bridgeSubtitle}>Alta corporativa en el Portal de Organizaciones</Text>
+            </View>
+            <ArrowRight size={18} color={COLORS.gray400} strokeWidth={2.2} />
+          </PressableScale>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -703,6 +720,41 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: COLORS.primary,
+  },
+  bridgeCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.card,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 12,
+    marginTop: SPACING.lg,
+    ...SHADOWS.small,
+  },
+  bridgeIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.primarySoft || "#E3F4EA",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bridgeTextBox: {
+    flex: 1,
+  },
+  bridgeTitle: {
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+    fontSize: 13,
+    fontWeight: "700",
+    color: BRAND.black,
+    marginBottom: 2,
+  },
+  bridgeSubtitle: {
+    fontFamily: FONTS.typography?.fonts?.body || "Inter",
+    fontSize: 11,
+    color: COLORS.gray600,
   },
 });
 

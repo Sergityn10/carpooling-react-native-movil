@@ -27,6 +27,9 @@ export { default as WalletScreen } from "./WalletScreen";
 
 // Enterprise (Organizaciones B2B)
 export {
+  EnterpriseLoginScreen,
+  EnterpriseRegisterScreen,
+  EnterpriseOnboardingScreen,
   EnterpriseDashboardScreen,
   EnterpriseEventsScreen,
   EnterpriseCrearEventoScreen,
@@ -35,5 +38,6 @@ export {
   EnterpriseQRScannerScreen,
   EnterpriseEmployeesScreen,
   EnterpriseSettingsScreen,
+  EnterpriseProfileEditScreen,
 } from "./enterprise";
 

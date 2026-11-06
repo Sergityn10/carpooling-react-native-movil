@@ -1,5 +1,5 @@
 // YouConnext - EnterpriseSettingsScreen (Ajustes y Perfil Institucional de Empresa)
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -21,11 +21,17 @@ import {
   LogOut,
   ShieldCheck,
   ChevronRight,
-  User,
+  Pencil,
+  Sparkles,
+  CheckCircle2,
+  Users,
+  UserCheck,
+  FileText,
 } from "lucide-react-native";
 import { COLORS, SPACING, RADIUS, FONTS, BRAND, SHADOWS } from "../../constants";
 import { EnterpriseHeader } from "../../components/enterprise";
 import PressableScale from "../../components/common/PressableScale";
+import Button from "../../components/common/Button";
 import { useUser } from "../../context/UserContext";
 import { enterpriseService } from "../../services/enterpriseService";
 
@@ -40,21 +46,75 @@ const EnterpriseSettingsScreen = ({ navigation }) => {
     permissions,
   } = useUser();
 
-  const [profile, setProfile] = useState(selectedEnterprise || {});
+  const [profile, setProfile] = useState(
+    selectedEnterprise || user?.enterprise || {}
+  );
+  const [loadingProfile, setLoadingProfile] = useState(false);
+
+  // Recarga de perfil al montar y al recuperar foco de la pantalla
+  const fetchProfile = useCallback(async () => {
+    try {
+      setLoadingProfile(true);
+      const data = await enterpriseService.getMyEnterpriseProfile();
+      if (data) {
+        setProfile((prev) => ({ ...prev, ...data }));
+      }
+    } catch (err) {
+      console.warn("Error cargando perfil corporativo:", err);
+    } finally {
+      setLoadingProfile(false);
+    }
+  }, []);
 
   useEffect(() => {
-    (async () => {
-      const data = await enterpriseService.getMyEnterpriseProfile();
-      if (data) setProfile(data);
-    })();
-  }, []);
+    fetchProfile();
+    const unsubscribe = navigation?.addListener?.("focus", fetchProfile);
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [navigation, fetchProfile]);
+
+  useEffect(() => {
+    if (selectedEnterprise) {
+      setProfile((prev) => ({ ...prev, ...selectedEnterprise }));
+    }
+  }, [selectedEnterprise]);
+
+  // Cálculo dinámico de completitud de perfil (14 propiedades de base de datos)
+  const profileFields = [
+    { key: "name", label: "Nombre", value: profile.name || selectedEnterprise?.name || user?.name },
+    { key: "location", label: "Campus / Sede", value: profile.location },
+    { key: "description", label: "Descripción / Compromiso", value: profile.description },
+    { key: "cif", label: "CIF", value: profile.cif },
+    { key: "sector", label: "Sector", value: profile.sector },
+    { key: "employee_count", label: "Empleados", value: profile.employee_count || profile.employeeCount },
+    { key: "contact_person", label: "Persona de Contacto", value: profile.contact_person || profile.contactPerson },
+    { key: "phone", label: "Teléfono", value: profile.phone || user?.phone },
+    { key: "website", label: "Sitio Web", value: profile.website },
+    { key: "address_line1", label: "Dirección", value: profile.address_line1 || profile.addressLine1 },
+    { key: "city", label: "Ciudad", value: profile.city },
+    { key: "province", label: "Provincia", value: profile.province },
+    { key: "postal_code", label: "Código Postal", value: profile.postal_code || profile.postalCode },
+    { key: "country", label: "País", value: profile.country },
+  ];
+
+  const filledCount = profileFields.filter(
+    (f) => f.value !== null && f.value !== undefined && String(f.value).trim().length > 0
+  ).length;
+  const totalCount = profileFields.length;
+  const completionPercentage = Math.round((filledCount / totalCount) * 100);
+  const isComplete = completionPercentage === 100;
 
   const handleReturnPersonal = () => {
     switchMode("personal");
   };
 
+  const handleNavigateEdit = () => {
+    navigation.navigate("EnterpriseProfileEdit", { profile });
+  };
+
   const handleLogout = () => {
-    Alert.alert("Cerrar Sesión", "¿Seguro que deseas salir de tu cuenta?", [
+    Alert.alert("Cerrar Sesión", "¿Seguro que deseas salir de tu cuenta corporativa?", [
       { text: "Cancelar", style: "cancel" },
       {
         text: "Sí, salir",
@@ -67,6 +127,17 @@ const EnterpriseSettingsScreen = ({ navigation }) => {
   };
 
   const canSwitchPersonal = permissions?.can_access_personal_mode !== false;
+
+  const formatAddress = () => {
+    const parts = [
+      profile.address_line1 || profile.addressLine1,
+      profile.postal_code || profile.postalCode,
+      profile.city,
+      profile.province,
+    ].filter(Boolean);
+    if (parts.length > 0) return parts.join(", ");
+    return profile.location || "Sin especificar";
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
@@ -103,8 +174,88 @@ const EnterpriseSettingsScreen = ({ navigation }) => {
           </PressableScale>
         )}
 
+        {/* Tarjeta de Completitud y Acceso a Edición de Perfil */}
+        <View style={styles.completionCard}>
+          <View style={styles.completionHeader}>
+            <View style={styles.completionTitleRow}>
+              {isComplete ? (
+                <View style={[styles.badgeIconWrap, { backgroundColor: "#DCFCE7" }]}>
+                  <CheckCircle2 size={18} color={COLORS.primary} strokeWidth={2.5} />
+                </View>
+              ) : (
+                <View style={[styles.badgeIconWrap, { backgroundColor: "#FEF3C7" }]}>
+                  <Sparkles size={18} color={COLORS.accent} strokeWidth={2.4} />
+                </View>
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.completionTitle}>
+                  {isComplete ? "Perfil Institucional Verificado" : "Completa tu Perfil"}
+                </Text>
+                <Text style={styles.completionSubtitle}>
+                  {isComplete
+                    ? "Toda la información técnica y de contacto está al 100%."
+                    : `Faltan ${totalCount - filledCount} datos para completar la ficha de la organización.`}
+                </Text>
+              </View>
+            </View>
+            <View
+              style={[
+                styles.percentageBadge,
+                isComplete && styles.percentageBadgeComplete,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.percentageText,
+                  isComplete && styles.percentageTextComplete,
+                ]}
+              >
+                {completionPercentage}%
+              </Text>
+            </View>
+          </View>
+
+          {/* Barra de Progreso */}
+          <View style={styles.progressTrack}>
+            <View
+              style={[
+                styles.progressFill,
+                {
+                  width: `${Math.max(5, Math.min(100, completionPercentage))}%`,
+                  backgroundColor: isComplete ? COLORS.primary : COLORS.accent,
+                },
+              ]}
+            />
+          </View>
+
+          {/* Botón de Acción Principal */}
+          <Button
+            title={
+              isComplete
+                ? "Editar Perfil Institucional"
+                : "Completar Perfil de Organización"
+            }
+            variant={isComplete ? "outline" : "primary"}
+            size="medium"
+            icon={Pencil}
+            onPress={handleNavigateEdit}
+            style={styles.editActionBtn}
+          />
+        </View>
+
         {/* Datos de la Organización */}
-        <Text style={styles.sectionLabel}>Datos de la Entidad</Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionLabel}>Ficha de la Entidad</Text>
+          <TouchableOpacity
+            style={styles.editInlineBtn}
+            onPress={handleNavigateEdit}
+            activeOpacity={0.7}
+          >
+            <Pencil size={13} color={COLORS.primary} strokeWidth={2.2} />
+            <Text style={styles.editInlineText}>Editar</Text>
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.infoCard}>
           <View style={styles.cardHeader}>
             <View style={styles.orgIconWrap}>
@@ -112,59 +263,154 @@ const EnterpriseSettingsScreen = ({ navigation }) => {
             </View>
             <View style={styles.cardHeaderText}>
               <View style={styles.nameRow}>
-                <Text style={styles.orgName}>
-                  {profile.name || selectedEnterprise?.name || "Empresa YouConnext"}
+                <Text style={styles.orgName} numberOfLines={1}>
+                  {profile.name || selectedEnterprise?.name || user?.name || "Organización"}
                 </Text>
                 <ShieldCheck size={18} color={COLORS.primary} strokeWidth={2.5} />
               </View>
-              <Text style={styles.orgSector}>
-                {profile.sector || "Movilidad Sostenible y RSC"}
+              <Text style={styles.orgSector} numberOfLines={1}>
+                {profile.sector || "Sector sin especificar"}
               </Text>
             </View>
           </View>
 
           <View style={styles.divider} />
 
-          {/* Campos de datos */}
+          {/* Campos de datos mapeados al modelo */}
           <View style={styles.fieldRow}>
             <FileBadge size={16} color={COLORS.gray500} strokeWidth={2.2} />
-            <Text style={styles.fieldLabel}>CIF / Identificador:</Text>
-            <Text style={styles.fieldValue}>{profile.cif || "B-88392104"}</Text>
+            <Text style={styles.fieldLabel}>CIF / NIF:</Text>
+            <Text
+              style={[
+                styles.fieldValue,
+                !profile.cif && styles.fieldValueMuted,
+              ]}
+              numberOfLines={1}
+            >
+              {profile.cif || "Sin especificar"}
+            </Text>
           </View>
 
           <View style={styles.fieldRow}>
             <MapPin size={16} color={COLORS.gray500} strokeWidth={2.2} />
-            <Text style={styles.fieldLabel}>Sede Central:</Text>
-            <Text style={styles.fieldValue} numberOfLines={1}>
-              {profile.address_line1 || "Calle Gran Vía 28, Madrid"}
+            <Text style={styles.fieldLabel}>Sede / Dirección:</Text>
+            <Text
+              style={[
+                styles.fieldValue,
+                !profile.address_line1 && !profile.addressLine1 && styles.fieldValueMuted,
+              ]}
+              numberOfLines={2}
+            >
+              {formatAddress()}
+            </Text>
+          </View>
+
+          <View style={styles.fieldRow}>
+            <Building2 size={16} color={COLORS.gray500} strokeWidth={2.2} />
+            <Text style={styles.fieldLabel}>Campus / Sede:</Text>
+            <Text
+              style={[
+                styles.fieldValue,
+                !profile.location && styles.fieldValueMuted,
+              ]}
+              numberOfLines={1}
+            >
+              {profile.location || "Sin especificar"}
+            </Text>
+          </View>
+
+          <View style={styles.fieldRow}>
+            <UserCheck size={16} color={COLORS.gray500} strokeWidth={2.2} />
+            <Text style={styles.fieldLabel}>Responsable:</Text>
+            <Text
+              style={[
+                styles.fieldValue,
+                !profile.contact_person && !profile.contactPerson && styles.fieldValueMuted,
+              ]}
+              numberOfLines={1}
+            >
+              {profile.contact_person || profile.contactPerson || "Sin especificar"}
             </Text>
           </View>
 
           <View style={styles.fieldRow}>
             <Mail size={16} color={COLORS.gray500} strokeWidth={2.2} />
-            <Text style={styles.fieldLabel}>Contacto:</Text>
-            <Text style={styles.fieldValue}>
-              {profile.email || "sostenibilidad@empresa.com"}
+            <Text style={styles.fieldLabel}>Email Contacto:</Text>
+            <Text
+              style={[
+                styles.fieldValue,
+                !profile.email && !user?.email && styles.fieldValueMuted,
+              ]}
+              numberOfLines={1}
+            >
+              {profile.email || user?.email || "Sin especificar"}
             </Text>
           </View>
 
           <View style={styles.fieldRow}>
             <Phone size={16} color={COLORS.gray500} strokeWidth={2.2} />
             <Text style={styles.fieldLabel}>Teléfono:</Text>
-            <Text style={styles.fieldValue}>{profile.phone || "+34 910 00 00 00"}</Text>
+            <Text
+              style={[
+                styles.fieldValue,
+                !profile.phone && !user?.phone && styles.fieldValueMuted,
+              ]}
+              numberOfLines={1}
+            >
+              {profile.phone || user?.phone || "Sin especificar"}
+            </Text>
           </View>
 
           <View style={styles.fieldRow}>
             <Globe size={16} color={COLORS.gray500} strokeWidth={2.2} />
             <Text style={styles.fieldLabel}>Sitio Web:</Text>
-            <Text style={styles.fieldValue}>
-              {profile.website || "https://youconnext.es"}
+            <Text
+              style={[
+                styles.fieldValue,
+                !profile.website && styles.fieldValueMuted,
+              ]}
+              numberOfLines={1}
+            >
+              {profile.website || "Sin especificar"}
+            </Text>
+          </View>
+
+          <View style={styles.fieldRow}>
+            <Users size={16} color={COLORS.gray500} strokeWidth={2.2} />
+            <Text style={styles.fieldLabel}>Plantilla:</Text>
+            <Text
+              style={[
+                styles.fieldValue,
+                !profile.employee_count && !profile.employeeCount && styles.fieldValueMuted,
+              ]}
+              numberOfLines={1}
+            >
+              {profile.employee_count || profile.employeeCount
+                ? `${profile.employee_count || profile.employeeCount} personas`
+                : "Sin especificar"}
+            </Text>
+          </View>
+
+          {/* Compromiso Sostenible / Descripción */}
+          <View style={styles.descriptionBox}>
+            <View style={styles.descriptionHeader}>
+              <FileText size={15} color={COLORS.primary} strokeWidth={2.2} />
+              <Text style={styles.descriptionTitle}>Compromiso Sostenible</Text>
+            </View>
+            <Text
+              style={[
+                styles.descriptionText,
+                !profile.description && styles.fieldValueMuted,
+              ]}
+            >
+              {profile.description ||
+                "Añade una descripción sobre los valores de movilidad y sostenibilidad de tu entidad."}
             </Text>
           </View>
         </View>
 
         {/* Conmutador de Empresa si tiene múltiples membresías */}
-        {corporateMemberships.length > 1 && (
+        {corporateMemberships && corporateMemberships.length > 1 && (
           <>
             <Text style={styles.sectionLabel}>Tus Organizaciones Vinculadas</Text>
             <View style={styles.membershipsCard}>
@@ -278,12 +524,101 @@ const styles = StyleSheet.create({
     marginTop: 2,
     lineHeight: 15,
   },
+  completionCard: {
+    backgroundColor: COLORS.white,
+    padding: SPACING.cardPadding,
+    borderRadius: RADIUS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: SPACING.md,
+    ...SHADOWS.card,
+  },
+  completionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  completionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+    paddingRight: 8,
+  },
+  badgeIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  completionTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: BRAND.black,
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+  },
+  completionSubtitle: {
+    fontSize: 11,
+    color: COLORS.gray600,
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  percentageBadge: {
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: RADIUS.round,
+  },
+  percentageBadgeComplete: {
+    backgroundColor: "#DCFCE7",
+  },
+  percentageText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: COLORS.accent,
+  },
+  percentageTextComplete: {
+    color: COLORS.primary,
+  },
+  progressTrack: {
+    height: 7,
+    backgroundColor: COLORS.gray100,
+    borderRadius: RADIUS.round,
+    overflow: "hidden",
+    marginBottom: 14,
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: RADIUS.round,
+  },
+  editActionBtn: {
+    marginTop: 2,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 6,
+    marginBottom: 8,
+  },
   sectionLabel: {
     fontSize: 13,
     fontWeight: "700",
     color: BRAND.black,
-    marginTop: 6,
-    marginBottom: 8,
+  },
+  editInlineBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+  },
+  editInlineText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.primary,
   },
   infoCard: {
     backgroundColor: COLORS.white,
@@ -318,10 +653,11 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   orgName: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "800",
     color: BRAND.black,
     fontFamily: FONTS.typography?.fonts?.display || "Sora",
+    flex: 1,
   },
   orgSector: {
     fontSize: 12,
@@ -336,20 +672,49 @@ const styles = StyleSheet.create({
   fieldRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 5,
+    paddingVertical: 6,
     gap: 8,
   },
   fieldLabel: {
     fontSize: 12,
     fontWeight: "600",
     color: COLORS.gray600,
-    width: 110,
+    width: 120,
   },
   fieldValue: {
     fontSize: 12.5,
     fontWeight: "600",
     color: BRAND.black,
     flex: 1,
+  },
+  fieldValueMuted: {
+    color: COLORS.gray400,
+    fontStyle: "italic",
+    fontWeight: "400",
+  },
+  descriptionBox: {
+    backgroundColor: "#F9FAFB",
+    borderRadius: RADIUS.input,
+    padding: 12,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  descriptionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 6,
+  },
+  descriptionTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: BRAND.black,
+  },
+  descriptionText: {
+    fontSize: 12,
+    color: COLORS.gray700,
+    lineHeight: 17,
   },
   membershipsCard: {
     backgroundColor: COLORS.white,

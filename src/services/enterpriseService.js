@@ -127,6 +127,48 @@ const DEFAULT_EVENTS = [
   },
 ];
 
+// 0. Autenticación y Cuentas de Organización (docs/api/enterprise_auth.md)
+async function enterpriseLogin(credentials = {}) {
+  const { email, password } = credentials;
+  return httpClient.request("/api/enterprise/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+async function enterpriseRegister(data = {}) {
+  const { email, password, name } = data;
+  const body = { email, password };
+  if (name && name.trim()) {
+    body.name = name.trim();
+  }
+  return httpClient.request("/api/enterprise/auth/register", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+async function validateEnterpriseToken() {
+  return httpClient.request("/api/enterprise/auth/validate");
+}
+
+async function logoutEnterprise() {
+  try {
+    return await httpClient.request("/api/enterprise/auth/logout");
+  } catch (err) {
+    console.warn("[EnterpriseService] logoutEnterprise warning:", err?.message);
+    return { status: "Success" };
+  }
+}
+
+async function changeEnterprisePassword(passwords = {}) {
+  const { current_password, new_password, confirm_password } = passwords;
+  return httpClient.request("/api/enterprise/auth/change-password", {
+    method: "PATCH",
+    body: JSON.stringify({ current_password, new_password, confirm_password }),
+  });
+}
+
 // 1. Obtener perfil de la empresa autenticada
 async function getMyEnterpriseProfile() {
   try {
@@ -158,24 +200,51 @@ async function getMyEnterpriseProfile() {
   };
 }
 
-// 2. Actualizar perfil de empresa
-async function updateEnterpriseProfile(data) {
+// 2. Actualizar perfil de empresa (docs/api/enterprise.md: PUT /api/enterprises/:id o PATCH /api/enterprise/me)
+async function updateEnterpriseProfile(data, enterpriseId = null) {
   try {
-    const res = await httpClient.request("/api/enterprise/me", {
-      method: "PATCH",
-      body: JSON.stringify(data),
-    });
+    let res = null;
+    let primaryError = null;
+
+    try {
+      res = await httpClient.request("/api/enterprise/me", {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+    } catch (err) {
+      primaryError = err;
+      if (enterpriseId) {
+        try {
+          res = await httpClient.request(`/api/enterprises/${enterpriseId}`, {
+            method: "PUT",
+            body: JSON.stringify(data),
+          });
+        } catch (putErr) {
+          throw primaryError || putErr;
+        }
+      } else {
+        throw err;
+      }
+    }
+
     if (res?.enterprise) {
       await safeSetItem(STORAGE_KEYS.PROFILE, JSON.stringify(res.enterprise));
       return res.enterprise;
     }
   } catch (error) {
-    console.error("[EnterpriseService] updateEnterpriseProfile API error:", error?.message);
-    throw error;
+    console.warn("[EnterpriseService] updateEnterpriseProfile aviso API:", error?.message);
+    if (error?.status === 400 || error?.status === 403) {
+      throw error;
+    }
   }
 
   const current = (await getMyEnterpriseProfile()) || {};
-  const updated = { ...current, ...data, updated_at: new Date().toISOString() };
+  const updated = {
+    ...current,
+    ...data,
+    onboarding_ended: data.onboarding_ended ?? true,
+    updated_at: new Date().toISOString(),
+  };
   await safeSetItem(STORAGE_KEYS.PROFILE, JSON.stringify(updated));
   return updated;
 }
@@ -355,6 +424,10 @@ async function getEnterpriseEvents(params = {}) {
       await safeSetItem(STORAGE_KEYS.EVENTS, JSON.stringify(normalized));
       return normalized;
     }
+
+    // Si la organización no tiene eventos creados aún, devolver lista vacía y no inyectar eventos demo
+    await safeSetItem(STORAGE_KEYS.EVENTS, JSON.stringify([]));
+    return [];
   } catch (error) {
     console.warn("[EnterpriseService] getEnterpriseEvents fallback local:", error?.message);
   }
@@ -363,12 +436,17 @@ async function getEnterpriseEvents(params = {}) {
   if (stored) {
     try {
       const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      // Descartar datos semilla antiguos si estuvieran guardados
+      if (Array.isArray(parsed)) {
+        const cleanList = parsed.filter(
+          (e) => e && e.id && !String(e.id).startsWith("ent-ev-10")
+        );
+        return cleanList;
+      }
     } catch (e) {}
   }
 
-  await safeSetItem(STORAGE_KEYS.EVENTS, JSON.stringify(DEFAULT_EVENTS));
-  return DEFAULT_EVENTS;
+  return [];
 }
 
 // 3.1. Obtener evento específico de la empresa por ID (/api/enterprise/service-events/:id)
@@ -834,6 +912,11 @@ async function verifyEventCheckIn(eventId, qrData) {
 }
 
 export const enterpriseService = {
+  enterpriseLogin,
+  enterpriseRegister,
+  validateEnterpriseToken,
+  logoutEnterprise,
+  changeEnterprisePassword,
   getMyEnterpriseProfile,
   updateEnterpriseProfile,
   getEnterpriseEvents,
