@@ -11,61 +11,6 @@ const STORAGE_KEYS = {
   CHECKINS: "@youconnext_enterprise_checkins",
 };
 
-// Datos semilla de demostración para alta disponibilidad y pruebas
-const DEFAULT_MEMBERS = [
-  {
-    id: "mem-001",
-    name: "Carlos Gómez",
-    email: "carlos.gomez@empresa.com",
-    role: "Manager",
-    corporate_role: "MANAGER",
-    corporate_role_title: "Gestor de Movilidad",
-    department: "Sostenibilidad y RSC",
-    employee_code: "IB-902",
-    status: "Activo",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80",
-    joined_at: "2026-01-15T09:00:00Z",
-  },
-  {
-    id: "mem-002",
-    name: "Elena Ramos",
-    email: "elena.ramos@empresa.com",
-    role: "Admin",
-    corporate_role: "ADMIN",
-    corporate_role_title: "Directora de Operaciones",
-    department: "Operaciones",
-    employee_code: "IB-104",
-    status: "Activo",
-    avatar: "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=200&q=80",
-    joined_at: "2025-11-20T10:30:00Z",
-  },
-  {
-    id: "mem-003",
-    name: "Alejandro Sanz",
-    email: "alejandro.sanz@empresa.com",
-    role: "Empleado",
-    corporate_role: "EMPLOYEE",
-    corporate_role_title: "Ingeniero de Software",
-    department: "Tecnología / IT",
-    employee_code: "IB-433",
-    status: "Activo",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
-    joined_at: "2026-03-01T08:00:00Z",
-  },
-  {
-    id: "mem-004",
-    name: "Lucía Morales",
-    email: "lucia.morales@empresa.com",
-    role: "Empleado",
-    corporate_role: "EMPLOYEE",
-    corporate_role_title: "Coordinadora de Personas",
-    department: "Recursos Humanos",
-    employee_code: "IB-552",
-    status: "Pendiente",
-    avatar: null,
-    joined_at: "2026-10-10T14:15:00Z",
-  },
-];
 
 const DEFAULT_EVENTS = [
   {
@@ -136,6 +81,16 @@ async function enterpriseLogin(credentials = {}) {
   });
 }
 
+// Autenticación con Google para Organizaciones (docs/exploracion-mapa/intergracion-frontend.md Secc. 1.1)
+// POST /api/enterprise/auth/google — Recibe id_token y method ("auto" | "login" | "register")
+// Retorna: { status, message, token, enterprise, is_new }
+async function enterpriseGoogleAuth(id_token, method = "auto") {
+  return httpClient.request("/api/enterprise/auth/google", {
+    method: "POST",
+    body: JSON.stringify({ id_token, method }),
+  });
+}
+
 async function enterpriseRegister(data = {}) {
   const { email, password, name } = data;
   const body = { email, password };
@@ -173,31 +128,29 @@ async function changeEnterprisePassword(passwords = {}) {
 async function getMyEnterpriseProfile() {
   try {
     const res = await httpClient.request("/api/enterprise/me");
-    if (res?.enterprise) {
-      await safeSetItem(STORAGE_KEYS.PROFILE, JSON.stringify(res.enterprise));
-      return res.enterprise;
+    const enterpriseData =
+      res?.enterprise || res?.data || (res?.id || res?.name ? res : null);
+    if (enterpriseData) {
+      await safeSetItem(STORAGE_KEYS.PROFILE, JSON.stringify(enterpriseData));
+      return enterpriseData;
     }
   } catch (error) {
-    console.warn("[EnterpriseService] getMyEnterpriseProfile fallo, usando datos en cache:", error?.message);
+    console.warn(
+      "[EnterpriseService] getMyEnterpriseProfile fallo, usando datos en cache:",
+      error?.message
+    );
   }
 
-  const cached = await AsyncStorage.getItem(STORAGE_KEYS.PROFILE);
-  if (cached) {
-    return JSON.parse(cached);
+  try {
+    const cached = await AsyncStorage.getItem(STORAGE_KEYS.PROFILE);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch (parseErr) {
+    console.warn("[EnterpriseService] Error parseando perfil en cache:", parseErr?.message);
   }
 
-  return {
-    id: "ent-01",
-    name: "Empresa YouConnext",
-    cif: "B12345678",
-    email: "corporativo@youconnext.es",
-    phone: "+34 910 123 456",
-    address_line1: "Calle Gran Vía 28",
-    city: "Madrid",
-    country: "ES",
-    sector: "Movilidad & Sostenibilidad",
-    verified: 1,
-  };
+  return null;
 }
 
 // 2. Actualizar perfil de empresa (docs/api/enterprise.md: PUT /api/enterprises/:id o PATCH /api/enterprise/me)
@@ -828,27 +781,89 @@ async function getEnterpriseEventsMetrics() {
 
 // 8. Directorio de miembros y empleados
 async function getEnterpriseMembers(enterpriseId) {
+  try {
+    const endpoint = enterpriseId
+      ? `/api/enterprise/${enterpriseId}/members`
+      : `/api/enterprise/members`;
+    const res = await httpClient.request(endpoint);
+    const membersData =
+      res?.members ||
+      res?.data ||
+      (Array.isArray(res) ? res : null);
+
+    if (Array.isArray(membersData)) {
+      const normalized = membersData
+        .filter((m) => m && m.id && !String(m.id).startsWith("mem-00"))
+        .map((m) => {
+          const user = m.user || {};
+          const fullName =
+            [user.name, user.surname].filter(Boolean).join(" ").trim() ||
+            m.name ||
+            user.email ||
+            m.email ||
+            "Colaborador";
+          let normalizedRole = "Empleado";
+          const rawRole = (m.role || "").toUpperCase();
+          if (rawRole === "ADMIN") normalizedRole = "Admin";
+          else if (rawRole === "MANAGER") normalizedRole = "Manager";
+          else normalizedRole = m.role || "Empleado";
+
+          return {
+            id: String(m.id),
+            name: fullName,
+            email: user.email || m.email || "",
+            role: normalizedRole,
+            corporate_role: m.corporate_role || rawRole || "EMPLOYEE",
+            corporate_role_title: m.corporate_role_title || "",
+            department: m.department || "General",
+            employee_code: m.employee_code || m.employeeCode || "",
+            status: m.status === "ACTIVE" ? "Activo" : (m.status || "Activo"),
+            avatar: user.photo || m.avatar || null,
+            joined_at: m.joined_at || m.createdAt || new Date().toISOString(),
+          };
+        });
+      await safeSetItem(STORAGE_KEYS.MEMBERS, JSON.stringify(normalized));
+      return normalized;
+    }
+  } catch (error) {
+    console.warn("[EnterpriseService] getEnterpriseMembers API aviso:", error?.message);
+  }
+
   const stored = await AsyncStorage.getItem(STORAGE_KEYS.MEMBERS);
   if (stored) {
     try {
       const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      // Descartar placeholders y datos semilla antiguos si estuvieran guardados
+      if (Array.isArray(parsed)) {
+        const cleanList = parsed.filter(
+          (m) => m && m.id && !String(m.id).startsWith("mem-00")
+        );
+        return cleanList;
+      }
     } catch (e) {}
   }
 
-  await safeSetItem(STORAGE_KEYS.MEMBERS, JSON.stringify(DEFAULT_MEMBERS));
-  return DEFAULT_MEMBERS;
+  // Si la organización no tiene miembros aún, devolver lista vacía y no inyectar placeholders
+  await safeSetItem(STORAGE_KEYS.MEMBERS, JSON.stringify([]));
+  return [];
 }
 
 // 9. Invitar a nuevo colaborador o gestor
 async function inviteEnterpriseMember(enterpriseId, { name, email, role, department, employeeCode }) {
+  const corporateRole = (role || "EMPLOYEE").toUpperCase();
+  const newMemberId = "mem-" + Date.now();
   const newMember = {
-    id: "mem-" + Date.now(),
+    id: newMemberId,
     name: name.trim(),
     email: email.trim().toLowerCase(),
     role: role || "Empleado",
-    corporate_role: (role || "EMPLOYEE").toUpperCase(),
-    corporate_role_title: role === "Admin" ? "Administrador Corporativo" : role === "Manager" ? "Coordinador de Movilidad" : "Empleado Corporativo",
+    corporate_role: corporateRole,
+    corporate_role_title:
+      role === "Admin"
+        ? "Administrador Corporativo"
+        : role === "Manager"
+        ? "Coordinador de Movilidad"
+        : "Empleado Corporativo",
     department: department || "General",
     employee_code: employeeCode || `EMP-${Math.floor(100 + Math.random() * 900)}`,
     status: "Activo",
@@ -856,8 +871,36 @@ async function inviteEnterpriseMember(enterpriseId, { name, email, role, departm
     joined_at: new Date().toISOString(),
   };
 
+  const payload = {
+    email: email.trim().toLowerCase(),
+    role: corporateRole,
+    department: department || "General",
+  };
+  if (employeeCode && employeeCode.trim()) {
+    payload.employee_code = employeeCode.trim();
+  }
+
+  try {
+    const endpoint = enterpriseId
+      ? `/api/enterprise/${enterpriseId}/members/invite`
+      : `/api/enterprise/members/invite`;
+    const res = await httpClient.request(endpoint, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    if (res?.invitation || res?.member) {
+      const apiItem = res.invitation || res.member;
+      newMember.id = String(apiItem.id || newMember.id);
+    }
+  } catch (error) {
+    console.warn("[EnterpriseService] inviteEnterpriseMember API aviso:", error?.message);
+  }
+
   const members = await getEnterpriseMembers(enterpriseId);
-  const updated = [newMember, ...members];
+  const cleanMembers = members.filter(
+    (m) => m && m.id && !String(m.id).startsWith("mem-00")
+  );
+  const updated = [newMember, ...cleanMembers.filter((m) => String(m.id) !== String(newMember.id))];
   await safeSetItem(STORAGE_KEYS.MEMBERS, JSON.stringify(updated));
   return newMember;
 }
@@ -914,6 +957,7 @@ async function verifyEventCheckIn(eventId, qrData) {
 export const enterpriseService = {
   enterpriseLogin,
   enterpriseRegister,
+  enterpriseGoogleAuth,
   validateEnterpriseToken,
   logoutEnterprise,
   changeEnterprisePassword,

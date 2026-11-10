@@ -122,6 +122,7 @@ export const authService = {
   // Métodos específicos para organizaciones (docs/api/enterprise_auth.md)
   enterpriseLogin: enterpriseService.enterpriseLogin,
   enterpriseRegister: enterpriseService.enterpriseRegister,
+  enterpriseGoogleAuth: enterpriseService.enterpriseGoogleAuth,
   validateEnterpriseToken: enterpriseService.validateEnterpriseToken,
   logoutEnterprise: enterpriseService.logoutEnterprise,
 };

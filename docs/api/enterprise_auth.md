@@ -227,3 +227,47 @@ Tras crearse en base de datos con `onboarding_ended: false`, el servidor inicia 
 
 **Errores:**
 - `401` — Token no válido, expirado o cuenta inactiva.
+
+---
+
+## 7. Login y Registro Corporativo con Google (`/api/enterprise/auth/google`)
+
+**URL:** `POST /api/enterprise/auth/google`
+
+**Autenticación:** No requerida.
+
+**Descripción:** Autentica o crea una cuenta de entidad jurídica / empresa (`role_id: 3`, rol `"enterprise"`) usando el token de Google (`id_token`) obtenido desde el cliente Web o SDK Móvil. Si la empresa no existe en el sistema, se crea automáticamente una nueva organización (`role: "enterprise"`, `onboarding_ended: false`, `is_new: true`). Si ya existe, valida que esté activa e inicia su sesión corporativa.
+
+**Entrada (body JSON):**
+```json
+{
+  "id_token": "<google_id_token>",
+  "method": "auto" // Opcional: "auto" (default), "login", "register"
+}
+```
+
+**Salida (200 OK / 201 Created):**
+```json
+{
+  "status": "Success",
+  "message": "Autenticación corporativa exitosa.",
+  "token": "<JWT_enterprise_access_token>",
+  "role": "enterprise",
+  "enterprise": {
+    "id": "ent-uuid-999",
+    "name": "Mi Empresa S.L.",
+    "email": "movilidad@empresa.com",
+    "onboarding_ended": false,
+    "role": "enterprise",
+    "isActive": true
+  },
+  "is_new": true
+}
+```
+
+**Cookies establecidas:** `enterprise_access_token` (`httpOnly`, `path: /`).
+
+**Regla de Redirección Frontend / Móvil:**
+- Si `enterprise.onboarding_ended === false` ➔ Redirigir a `/enterprise/onboarding` (Wizard de Sede en 3 pasos).
+- Si `enterprise.onboarding_ended === true` ➔ Redirigir a `/enterprise/dashboard` (Panel corporativo).
+

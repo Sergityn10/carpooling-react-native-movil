@@ -14,6 +14,11 @@ export { default as PulseDot } from "./common/PulseDot";
 export { default as PermissionDisclosureSheet } from "./common/PermissionDisclosureSheet";
 export { default as PermissionBlockedSheet } from "./common/PermissionBlockedSheet";
 
+// Auth
+export { default as AuthTypeSwitcher } from "./auth/AuthTypeSwitcher";
+export { default as GoogleSignInButton } from "./auth/GoogleSignInButton";
+export { default as AuthDivider } from "./auth/AuthDivider";
+
 // Payments & Wallet
 export { default as MovementCard } from "./payments/MovementCard";
 

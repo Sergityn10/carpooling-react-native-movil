@@ -11,6 +11,7 @@ import {
   Image,
   Alert,
   StatusBar,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -109,7 +110,13 @@ const EnterpriseEmployeesScreen = ({ navigation }) => {
 
       <EnterpriseHeader
         title="Directorio del Equipo"
-        subtitle={`${members.length} colaboradores vinculados`}
+        subtitle={
+          members.length === 0
+            ? "Sin colaboradores aún"
+            : members.length === 1
+            ? "1 colaborador vinculado"
+            : `${members.length} colaboradores vinculados`
+        }
         onSwitchPersonal={() => switchMode("personal")}
         rightAction={
           <PressableScale
@@ -172,73 +179,117 @@ const EnterpriseEmployeesScreen = ({ navigation }) => {
           })}
         </View>
 
-        {/* Lista de Colaboradores */}
-        <View style={styles.membersList}>
-          {filteredMembers.map((member) => {
-            const roleStyle = getRoleColor(member.role);
-            const initial = (member.name || "U").charAt(0).toUpperCase();
+        {/* Lista o Estado Vacío de Colaboradores */}
+        {loading && !refreshing ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={styles.loadingText}>Cargando colaboradores...</Text>
+          </View>
+        ) : filteredMembers.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Users size={40} color={COLORS.gray400} strokeWidth={1.8} />
+            <Text style={styles.emptyTitle}>
+              {members.length === 0
+                ? "No hay colaboradores vinculados"
+                : "Sin resultados de búsqueda"}
+            </Text>
+            <Text style={styles.emptySubtitle}>
+              {members.length === 0
+                ? "Aún no has incorporado colaboradores a la organización. Pulsa 'Invitar' para sumar el primer miembro a tu equipo."
+                : searchQuery
+                ? `No se encontraron colaboradores que coincidan con "${searchQuery}".`
+                : "No se encontraron colaboradores para el filtro de rol seleccionado."}
+            </Text>
+            {members.length === 0 ? (
+              <PressableScale
+                style={styles.emptyBtn}
+                onPress={() => setShowInviteModal(true)}
+                scaleTo={0.98}
+              >
+                <UserPlus size={16} color={COLORS.white} strokeWidth={2.6} />
+                <Text style={styles.emptyBtnText}>Invitar Colaborador</Text>
+              </PressableScale>
+            ) : (
+              <PressableScale
+                style={styles.emptyResetBtn}
+                onPress={() => {
+                  setSearchQuery("");
+                  setSelectedFilter("Todos");
+                }}
+                scaleTo={0.98}
+              >
+                <Text style={styles.emptyResetBtnText}>Restablecer filtros</Text>
+              </PressableScale>
+            )}
+          </View>
+        ) : (
+          <View style={styles.membersList}>
+            {filteredMembers.map((member) => {
+              const roleStyle = getRoleColor(member.role);
+              const initial = (member.name || "U").charAt(0).toUpperCase();
 
-            return (
-              <View key={member.id} style={styles.memberCard}>
-                <View style={styles.memberAvatarBox}>
-                  {member.avatar ? (
-                    <Image source={{ uri: member.avatar }} style={styles.memberAvatar} />
-                  ) : (
-                    <View style={styles.memberInitialBox}>
-                      <Text style={styles.memberInitialText}>{initial}</Text>
-                    </View>
-                  )}
-                </View>
+              return (
+                <View key={member.id} style={styles.memberCard}>
+                  <View style={styles.memberAvatarBox}>
+                    {member.avatar ? (
+                      <Image source={{ uri: member.avatar }} style={styles.memberAvatar} />
+                    ) : (
+                      <View style={styles.memberInitialBox}>
+                        <Text style={styles.memberInitialText}>{initial}</Text>
+                      </View>
+                    )}
+                  </View>
 
-                <View style={styles.memberDetails}>
-                  <View style={styles.memberNameRow}>
-                    <Text style={styles.memberName} numberOfLines={1}>
-                      {member.name}
-                    </Text>
-                    <View
-                      style={[
-                        styles.roleBadge,
-                        { backgroundColor: roleStyle.bg },
-                      ]}
-                    >
-                      {getRoleIcon(member.role)}
-                      <Text
-                        style={[styles.roleBadgeText, { color: roleStyle.text }]}
-                      >
-                        {member.role || "Empleado"}
+                  <View style={styles.memberDetails}>
+                    <View style={styles.memberNameRow}>
+                      <Text style={styles.memberName} numberOfLines={1}>
+                        {member.name}
                       </Text>
+                      <View
+                        style={[
+                          styles.roleBadge,
+                          { backgroundColor: roleStyle.bg },
+                        ]}
+                      >
+                        {getRoleIcon(member.role)}
+                        <Text
+                          style={[styles.roleBadgeText, { color: roleStyle.text }]}
+                        >
+                          {member.role || "Empleado"}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Text style={styles.memberEmail} numberOfLines={1}>
+                      {member.email}
+                    </Text>
+
+                    <View style={styles.memberMetaRow}>
+                      <Text style={styles.deptText}>
+                        {member.department || "General"}
+                      </Text>
+                      {member.employee_code ? (
+                        <Text style={styles.codeText}>• {member.employee_code}</Text>
+                      ) : null}
+                      <View
+                        style={[
+                          styles.statusDot,
+                          {
+                            backgroundColor:
+                              member.status === "Activo"
+                                ? COLORS.primary
+                                : BRAND.accent,
+                          },
+                        ]}
+                      />
+                      <Text style={styles.statusText}>{member.status || "Activo"}</Text>
                     </View>
                   </View>
-
-                  <Text style={styles.memberEmail} numberOfLines={1}>
-                    {member.email}
-                  </Text>
-
-                  <View style={styles.memberMetaRow}>
-                    <Text style={styles.deptText}>
-                      {member.department || "General"}
-                    </Text>
-                    {member.employee_code ? (
-                      <Text style={styles.codeText}>• {member.employee_code}</Text>
-                    ) : null}
-                    <View
-                      style={[
-                        styles.statusDot,
-                        {
-                          backgroundColor:
-                            member.status === "Activo"
-                              ? COLORS.primary
-                              : BRAND.accent,
-                        },
-                      ]}
-                    />
-                    <Text style={styles.statusText}>{member.status || "Activo"}</Text>
-                  </View>
                 </View>
-              </View>
-            );
-          })}
-        </View>
+              );
+            })}
+          </View>
+        )}
 
         <View style={{ height: SPACING.xxl }} />
       </ScrollView>
@@ -422,6 +473,73 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: COLORS.gray500,
     fontWeight: "500",
+  },
+  loadingContainer: {
+    paddingVertical: SPACING.xxl,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 13,
+    color: COLORS.gray500,
+    fontWeight: "500",
+  },
+  emptyContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.card,
+    padding: SPACING.xl,
+    marginHorizontal: SPACING.screenMargin,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: SPACING.sm,
+    ...SHADOWS.card,
+  },
+  emptyTitle: {
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+    fontSize: 16,
+    fontWeight: "700",
+    color: BRAND.black,
+    marginTop: 12,
+    marginBottom: 6,
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    fontFamily: FONTS.typography?.fonts?.body || "Inter",
+    fontSize: 13,
+    color: COLORS.gray600,
+    textAlign: "center",
+    lineHeight: 18,
+    marginBottom: 16,
+    paddingHorizontal: 12,
+  },
+  emptyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: RADIUS.control,
+    gap: 6,
+  },
+  emptyBtnText: {
+    fontFamily: FONTS.typography?.fonts?.display || "Sora",
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.white,
+  },
+  emptyResetBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    backgroundColor: COLORS.gray100,
+    borderRadius: RADIUS.control,
+  },
+  emptyResetBtnText: {
+    fontSize: 12.5,
+    fontWeight: "600",
+    color: COLORS.gray700,
   },
 });
 

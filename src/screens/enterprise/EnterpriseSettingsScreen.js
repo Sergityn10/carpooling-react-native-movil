@@ -70,7 +70,7 @@ const EnterpriseSettingsScreen = ({ navigation }) => {
     fetchProfile();
     const unsubscribe = navigation?.addListener?.("focus", fetchProfile);
     return () => {
-      if (unsubscribe) unsubscribe();
+      if (typeof unsubscribe === "function") unsubscribe();
     };
   }, [navigation, fetchProfile]);
 
@@ -80,22 +80,54 @@ const EnterpriseSettingsScreen = ({ navigation }) => {
     }
   }, [selectedEnterprise]);
 
+  // Perfil sanitizado contra valores nulos o indefinidos
+  const safeProfile =
+    typeof profile === "object" && profile !== null ? profile : {};
+
   // Cálculo dinámico de completitud de perfil (14 propiedades de base de datos)
   const profileFields = [
-    { key: "name", label: "Nombre", value: profile.name || selectedEnterprise?.name || user?.name },
-    { key: "location", label: "Campus / Sede", value: profile.location },
-    { key: "description", label: "Descripción / Compromiso", value: profile.description },
-    { key: "cif", label: "CIF", value: profile.cif },
-    { key: "sector", label: "Sector", value: profile.sector },
-    { key: "employee_count", label: "Empleados", value: profile.employee_count || profile.employeeCount },
-    { key: "contact_person", label: "Persona de Contacto", value: profile.contact_person || profile.contactPerson },
-    { key: "phone", label: "Teléfono", value: profile.phone || user?.phone },
-    { key: "website", label: "Sitio Web", value: profile.website },
-    { key: "address_line1", label: "Dirección", value: profile.address_line1 || profile.addressLine1 },
-    { key: "city", label: "Ciudad", value: profile.city },
-    { key: "province", label: "Provincia", value: profile.province },
-    { key: "postal_code", label: "Código Postal", value: profile.postal_code || profile.postalCode },
-    { key: "country", label: "País", value: profile.country },
+    {
+      key: "name",
+      label: "Nombre",
+      value: safeProfile.name || selectedEnterprise?.name || user?.name,
+    },
+    { key: "location", label: "Campus / Sede", value: safeProfile.location },
+    {
+      key: "description",
+      label: "Descripción / Compromiso",
+      value: safeProfile.description,
+    },
+    { key: "cif", label: "CIF", value: safeProfile.cif },
+    { key: "sector", label: "Sector", value: safeProfile.sector },
+    {
+      key: "employee_count",
+      label: "Empleados",
+      value: safeProfile.employee_count || safeProfile.employeeCount,
+    },
+    {
+      key: "contact_person",
+      label: "Persona de Contacto",
+      value: safeProfile.contact_person || safeProfile.contactPerson,
+    },
+    {
+      key: "phone",
+      label: "Teléfono",
+      value: safeProfile.phone || user?.phone,
+    },
+    { key: "website", label: "Sitio Web", value: safeProfile.website },
+    {
+      key: "address_line1",
+      label: "Dirección",
+      value: safeProfile.address_line1 || safeProfile.addressLine1,
+    },
+    { key: "city", label: "Ciudad", value: safeProfile.city },
+    { key: "province", label: "Provincia", value: safeProfile.province },
+    {
+      key: "postal_code",
+      label: "Código Postal",
+      value: safeProfile.postal_code || safeProfile.postalCode,
+    },
+    { key: "country", label: "País", value: safeProfile.country },
   ];
 
   const filledCount = profileFields.filter(
@@ -130,13 +162,13 @@ const EnterpriseSettingsScreen = ({ navigation }) => {
 
   const formatAddress = () => {
     const parts = [
-      profile.address_line1 || profile.addressLine1,
-      profile.postal_code || profile.postalCode,
-      profile.city,
-      profile.province,
+      safeProfile.address_line1 || safeProfile.addressLine1,
+      safeProfile.postal_code || safeProfile.postalCode,
+      safeProfile.city,
+      safeProfile.province,
     ].filter(Boolean);
     if (parts.length > 0) return parts.join(", ");
-    return profile.location || "Sin especificar";
+    return safeProfile.location || "Sin especificar";
   };
 
   return (
@@ -237,7 +269,13 @@ const EnterpriseSettingsScreen = ({ navigation }) => {
             }
             variant={isComplete ? "outline" : "primary"}
             size="medium"
-            icon={Pencil}
+            icon={
+              <Pencil
+                size={16}
+                color={isComplete ? COLORS.primary : COLORS.white}
+                strokeWidth={2.4}
+              />
+            }
             onPress={handleNavigateEdit}
             style={styles.editActionBtn}
           />
@@ -264,12 +302,12 @@ const EnterpriseSettingsScreen = ({ navigation }) => {
             <View style={styles.cardHeaderText}>
               <View style={styles.nameRow}>
                 <Text style={styles.orgName} numberOfLines={1}>
-                  {profile.name || selectedEnterprise?.name || user?.name || "Organización"}
+                  {safeProfile.name || selectedEnterprise?.name || user?.name || "Organización"}
                 </Text>
                 <ShieldCheck size={18} color={COLORS.primary} strokeWidth={2.5} />
               </View>
               <Text style={styles.orgSector} numberOfLines={1}>
-                {profile.sector || "Sector sin especificar"}
+                {safeProfile.sector || "Sector sin especificar"}
               </Text>
             </View>
           </View>
@@ -283,11 +321,11 @@ const EnterpriseSettingsScreen = ({ navigation }) => {
             <Text
               style={[
                 styles.fieldValue,
-                !profile.cif && styles.fieldValueMuted,
+                !safeProfile.cif && styles.fieldValueMuted,
               ]}
               numberOfLines={1}
             >
-              {profile.cif || "Sin especificar"}
+              {safeProfile.cif || "Sin especificar"}
             </Text>
           </View>
 
@@ -297,7 +335,7 @@ const EnterpriseSettingsScreen = ({ navigation }) => {
             <Text
               style={[
                 styles.fieldValue,
-                !profile.address_line1 && !profile.addressLine1 && styles.fieldValueMuted,
+                !safeProfile.address_line1 && !safeProfile.addressLine1 && styles.fieldValueMuted,
               ]}
               numberOfLines={2}
             >
@@ -311,11 +349,11 @@ const EnterpriseSettingsScreen = ({ navigation }) => {
             <Text
               style={[
                 styles.fieldValue,
-                !profile.location && styles.fieldValueMuted,
+                !safeProfile.location && styles.fieldValueMuted,
               ]}
               numberOfLines={1}
             >
-              {profile.location || "Sin especificar"}
+              {safeProfile.location || "Sin especificar"}
             </Text>
           </View>
 
@@ -325,11 +363,11 @@ const EnterpriseSettingsScreen = ({ navigation }) => {
             <Text
               style={[
                 styles.fieldValue,
-                !profile.contact_person && !profile.contactPerson && styles.fieldValueMuted,
+                !safeProfile.contact_person && !safeProfile.contactPerson && styles.fieldValueMuted,
               ]}
               numberOfLines={1}
             >
-              {profile.contact_person || profile.contactPerson || "Sin especificar"}
+              {safeProfile.contact_person || safeProfile.contactPerson || "Sin especificar"}
             </Text>
           </View>
 
@@ -339,11 +377,11 @@ const EnterpriseSettingsScreen = ({ navigation }) => {
             <Text
               style={[
                 styles.fieldValue,
-                !profile.email && !user?.email && styles.fieldValueMuted,
+                !safeProfile.email && !user?.email && styles.fieldValueMuted,
               ]}
               numberOfLines={1}
             >
-              {profile.email || user?.email || "Sin especificar"}
+              {safeProfile.email || user?.email || "Sin especificar"}
             </Text>
           </View>
 
@@ -353,11 +391,11 @@ const EnterpriseSettingsScreen = ({ navigation }) => {
             <Text
               style={[
                 styles.fieldValue,
-                !profile.phone && !user?.phone && styles.fieldValueMuted,
+                !safeProfile.phone && !user?.phone && styles.fieldValueMuted,
               ]}
               numberOfLines={1}
             >
-              {profile.phone || user?.phone || "Sin especificar"}
+              {safeProfile.phone || user?.phone || "Sin especificar"}
             </Text>
           </View>
 
@@ -367,11 +405,11 @@ const EnterpriseSettingsScreen = ({ navigation }) => {
             <Text
               style={[
                 styles.fieldValue,
-                !profile.website && styles.fieldValueMuted,
+                !safeProfile.website && styles.fieldValueMuted,
               ]}
               numberOfLines={1}
             >
-              {profile.website || "Sin especificar"}
+              {safeProfile.website || "Sin especificar"}
             </Text>
           </View>
 
@@ -381,12 +419,12 @@ const EnterpriseSettingsScreen = ({ navigation }) => {
             <Text
               style={[
                 styles.fieldValue,
-                !profile.employee_count && !profile.employeeCount && styles.fieldValueMuted,
+                !safeProfile.employee_count && !safeProfile.employeeCount && styles.fieldValueMuted,
               ]}
               numberOfLines={1}
             >
-              {profile.employee_count || profile.employeeCount
-                ? `${profile.employee_count || profile.employeeCount} personas`
+              {safeProfile.employee_count || safeProfile.employeeCount
+                ? `${safeProfile.employee_count || safeProfile.employeeCount} personas`
                 : "Sin especificar"}
             </Text>
           </View>
@@ -400,10 +438,10 @@ const EnterpriseSettingsScreen = ({ navigation }) => {
             <Text
               style={[
                 styles.descriptionText,
-                !profile.description && styles.fieldValueMuted,
+                !safeProfile.description && styles.fieldValueMuted,
               ]}
             >
-              {profile.description ||
+              {safeProfile.description ||
                 "Añade una descripción sobre los valores de movilidad y sostenibilidad de tu entidad."}
             </Text>
           </View>

@@ -104,7 +104,7 @@ export const UserProvider = ({ children }) => {
   }, [isAuthenticated, user?.id]);
 
   // Normalizar datos de login unificado
-  const processUnifiedAuthResponse = async (response) => {
+  const processUnifiedAuthResponse = async (response, options = {}) => {
     const token = response.token;
     const refreshToken = response.refreshToken;
 
@@ -124,6 +124,7 @@ export const UserProvider = ({ children }) => {
     const legalEntity = response.legal_entity;
     const naturalPerson = response.natural_person;
     const initialMode = response.initial_mode;
+    const preferredMode = options?.preferredMode;
 
     const memberships = naturalPerson?.memberships ||
       (naturalPerson?.primary_membership ? [naturalPerson.primary_membership] : []);
@@ -136,6 +137,7 @@ export const UserProvider = ({ children }) => {
           sector: legalEntity.sector,
           location: legalEntity.location,
           verified: legalEntity.verified,
+          onboarding_ended: legalEntity.onboarding_ended ?? response.onboarding_ended,
         }
       : naturalPerson?.primary_membership || (memberships.length > 0 ? memberships[0] : null);
 
@@ -146,7 +148,9 @@ export const UserProvider = ({ children }) => {
       modeToSet = "enterprise";
     } else {
       const savedMode = await AsyncStorage.getItem(STORAGE_KEYS.ACTIVE_MODE);
-      if (savedMode === "enterprise" && resPermissions.can_access_corporate_mode) {
+      if (preferredMode === "enterprise" && resPermissions.can_access_corporate_mode) {
+        modeToSet = "enterprise";
+      } else if (savedMode === "enterprise" && resPermissions.can_access_corporate_mode) {
         modeToSet = "enterprise";
       } else if (initialMode === "enterprise" && resPermissions.can_access_corporate_mode) {
         modeToSet = "enterprise";
@@ -154,6 +158,12 @@ export const UserProvider = ({ children }) => {
         modeToSet = "personal";
       }
     }
+
+    const computedOnboardingEnded =
+      response.enterprise?.onboarding_ended ??
+      legalEntity?.onboarding_ended ??
+      response.onboarding_ended ??
+      (resIdentity.type === "LEGAL_ENTITY" ? false : 1);
 
     // Construir objeto user normalizado
     let normalizedUser = {
@@ -168,7 +178,8 @@ export const UserProvider = ({ children }) => {
       classification: resIdentity.classification || "REGULAR_USER",
       identity_type: resIdentity.type || (resIdentity.system_role === "enterprise" ? "LEGAL_ENTITY" : "NATURAL_PERSON"),
       is_corporate_member: Boolean(naturalPerson?.is_corporate_member || memberships.length > 0 || legalEntity),
-      onboarding_ended: response.onboarding_ended ?? 1,
+      onboarding_ended: computedOnboardingEnded,
+      enterprise: chosenEnterprise || legalEntity || response.enterprise || null,
     };
 
     // Intentar enriquecer datos con usuarioService si es persona física
@@ -201,6 +212,12 @@ export const UserProvider = ({ children }) => {
         STORAGE_KEYS.SELECTED_ENTERPRISE,
         JSON.stringify(chosenEnterprise),
       ]);
+      if (resIdentity.type === "LEGAL_ENTITY" || modeToSet === "enterprise") {
+        storagePairs.push([
+          "@youconnext_enterprise_profile",
+          JSON.stringify(chosenEnterprise),
+        ]);
+      }
     }
 
     await safeMultiSet(storagePairs);
@@ -498,8 +515,18 @@ export const UserProvider = ({ children }) => {
       });
 
       if (response?.identity) {
-        const normalizedUser = await processUnifiedAuthResponse(response);
-        return { token: response.token, userId: response.identity.user_id, user: normalizedUser };
+        const normalizedUser = await processUnifiedAuthResponse(response, options);
+        return {
+          token: response.token,
+          userId: response.identity.user_id,
+          user: normalizedUser,
+          identity: response.identity,
+          permissions: response.permissions,
+          initial_mode: response.initial_mode,
+          isCorporate:
+            response.identity?.type === "LEGAL_ENTITY" ||
+            Boolean(response.permissions?.can_access_corporate_mode),
+        };
       }
 
       // Fallback legacy
@@ -529,7 +556,7 @@ export const UserProvider = ({ children }) => {
       }
 
       await saveSession(userData, token);
-      return { token, userId, user: userData };
+      return { token, userId, user: userData, isCorporate: false };
     } catch (error) {
       console.error("Error al iniciar sesión con Google:", error);
       throw error;
@@ -595,6 +622,36 @@ export const UserProvider = ({ children }) => {
     setIsAuthenticated(true);
 
     return normalizedEnterpriseUser;
+  };
+
+  // Autenticación con Google para Organizaciones (docs/exploracion-mapa/intergracion-frontend.md Secc. 1.1)
+  const loginGoogleEnterprise = async (idToken, method = "auto") => {
+    try {
+      const response = await enterpriseService.enterpriseGoogleAuth(
+        idToken,
+        method
+      );
+
+      if (!response?.token) {
+        throw new Error(
+          response?.message ||
+            "No se pudo autenticar la organización con Google."
+        );
+      }
+
+      const normalizedUser = await processEnterpriseAuthSession(response);
+      return {
+        ...response,
+        user: normalizedUser,
+        isCorporate: true,
+      };
+    } catch (error) {
+      console.error(
+        "[UserContext] Error al autenticar organización con Google:",
+        error
+      );
+      throw error;
+    }
   };
 
   // Iniciar sesión corporativa (Organización - docs/api/enterprise_auth.md)
@@ -753,6 +810,7 @@ export const UserProvider = ({ children }) => {
     crearUsuario,
     iniciarSesion,
     loginGoogleNative,
+    loginGoogleEnterprise,
     iniciarSesionOrganizacion,
     crearOrganizacion,
     actualizarOrganizacion,

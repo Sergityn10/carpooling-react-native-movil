@@ -26,7 +26,7 @@ import {
   Briefcase,
 } from "lucide-react-native";
 import { COLORS, SPACING, RADIUS, FONTS, BRAND, SHADOWS } from "../constants";
-import { Button } from "../components";
+import { Button, AuthTypeSwitcher } from "../components";
 
 const AuthScreen = ({ navigation }) => {
   // Estado para conmutar entre Usuario Particular y Organización B2B
@@ -42,61 +42,6 @@ const AuthScreen = ({ navigation }) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Selector Segmentado de Portal en la cabecera */}
-        <View style={styles.selectorWrapper}>
-          <View style={styles.selectorContainer}>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              style={[
-                styles.selectorTab,
-                !isEnterprise && styles.selectorTabActiveUser,
-              ]}
-              onPress={() => setPortalMode("user")}
-              accessibilityRole="button"
-              accessibilityLabel="Modo Usuario Particular"
-            >
-              <User
-                size={16}
-                color={!isEnterprise ? COLORS.white : COLORS.gray400}
-                strokeWidth={2.4}
-              />
-              <Text
-                style={[
-                  styles.selectorLabel,
-                  !isEnterprise && styles.selectorLabelActive,
-                ]}
-              >
-                Particular
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              activeOpacity={0.85}
-              style={[
-                styles.selectorTab,
-                isEnterprise && styles.selectorTabActiveEnterprise,
-              ]}
-              onPress={() => setPortalMode("enterprise")}
-              accessibilityRole="button"
-              accessibilityLabel="Modo Organización o Empresa"
-            >
-              <Building2
-                size={16}
-                color={isEnterprise ? COLORS.white : COLORS.gray400}
-                strokeWidth={2.4}
-              />
-              <Text
-                style={[
-                  styles.selectorLabel,
-                  isEnterprise && styles.selectorLabelActive,
-                ]}
-              >
-                Organización
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
         {/* Hero Card estructurada en negro de marca */}
         <View style={styles.heroCard}>
           <View
@@ -122,6 +67,15 @@ const AuthScreen = ({ navigation }) => {
               </View>
             )}
           </View>
+
+          {/* Conmutador por debajo del título */}
+          <AuthTypeSwitcher
+            activeType={portalMode}
+            onChangeType={setPortalMode}
+            theme="dark"
+            showHelperText={false}
+            style={styles.heroSwitcher}
+          />
 
           <Text style={styles.tagline}>
             {isEnterprise
@@ -282,54 +236,21 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: "space-between",
     paddingHorizontal: SPACING.screenMargin, // 20px
-    paddingTop: SPACING.sm,
-    paddingBottom: SPACING.xl,
+    paddingTop: SPACING.xs,
+    paddingBottom: SPACING.md,
   },
-  selectorWrapper: {
-    alignItems: "center",
-    marginBottom: SPACING.md,
-  },
-  selectorContainer: {
-    flexDirection: "row",
-    backgroundColor: "#141A18",
-    borderRadius: RADIUS.button || 12,
-    padding: 4,
-    borderWidth: 1,
-    borderColor: "#2F3A36",
+  heroSwitcher: {
     width: "100%",
-  },
-  selectorTab: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  selectorTabActiveUser: {
-    backgroundColor: BRAND.greenOnLight, // #0B7A3B
-    ...SHADOWS.small,
-  },
-  selectorTabActiveEnterprise: {
-    backgroundColor: "#0D5E34", // Tono corporativo profundo
-    ...SHADOWS.small,
-  },
-  selectorLabel: {
-    fontFamily: FONTS.typography?.fonts?.display || "Sora",
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#8A9994",
-  },
-  selectorLabelActive: {
-    color: COLORS.white,
-    fontWeight: "700",
+    maxWidth: 320,
+    alignSelf: "center",
+    marginTop: 4,
+    marginBottom: 12,
   },
   heroCard: {
     backgroundColor: BRAND.black,
     borderRadius: RADIUS.card, // 16px
-    paddingVertical: SPACING.xl,
-    paddingHorizontal: SPACING.lg,
+    paddingVertical: 18,
+    paddingHorizontal: SPACING.md,
     alignItems: "center",
     overflow: "hidden",
     position: "relative",
@@ -353,19 +274,19 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(242, 163, 60, 0.10)", // Glow ámbar corporativo
   },
   logoBadge: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     backgroundColor: "#141A18",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "#2F3A36",
-    marginBottom: SPACING.sm,
+    marginBottom: 6,
   },
   logoImage: {
-    width: 48,
-    height: 48,
+    width: 36,
+    height: 36,
   },
   titleRow: {
     flexDirection: "row",
@@ -375,8 +296,8 @@ const styles = StyleSheet.create({
   },
   wordmark: {
     fontFamily: FONTS.typography?.fonts?.display || "Sora",
-    fontSize: 26,
-    lineHeight: 32,
+    fontSize: 24,
+    lineHeight: 30,
     fontWeight: "800",
     color: "#F2F5F4",
     letterSpacing: -0.5,
@@ -395,38 +316,38 @@ const styles = StyleSheet.create({
   },
   tagline: {
     fontFamily: FONTS.typography?.fonts?.body || "Inter",
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
     color: "#A7B2AE",
     textAlign: "center",
     paddingHorizontal: 8,
-    marginBottom: SPACING.lg,
+    marginBottom: 10,
   },
   pillarsRow: {
     flexDirection: "row",
     justifyContent: "center",
     gap: 12,
     width: "100%",
-    paddingTop: 4,
+    paddingTop: 2,
   },
   pillarItem: {
     alignItems: "center",
     flex: 1,
   },
   pillarIconBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: "#1D2522",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "#2F3A36",
-    marginBottom: 6,
+    marginBottom: 4,
   },
   pillarText: {
     fontFamily: FONTS.typography?.fonts?.body || "Inter",
-    fontSize: 11,
+    fontSize: 10.5,
     lineHeight: 14,
     fontWeight: "600",
     color: "#D0D9D5",
@@ -435,10 +356,10 @@ const styles = StyleSheet.create({
   actionsCard: {
     backgroundColor: COLORS.white,
     borderRadius: RADIUS.card, // 16px
-    padding: SPACING.lg,
+    padding: 14,
     borderWidth: 1,
     borderColor: COLORS.border,
-    marginVertical: SPACING.lg,
+    marginVertical: 10,
     shadowColor: BRAND.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -447,23 +368,23 @@ const styles = StyleSheet.create({
   },
   actionsTitle: {
     fontFamily: FONTS.typography?.fonts?.display || "Sora",
-    fontSize: 18,
-    lineHeight: 24,
+    fontSize: 17,
+    lineHeight: 22,
     fontWeight: "700",
     color: BRAND.black,
     textAlign: "center",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   actionsSubtitle: {
     fontFamily: FONTS.typography?.fonts?.body || "Inter",
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12.5,
+    lineHeight: 17,
     color: COLORS.gray600,
     textAlign: "center",
-    marginBottom: SPACING.lg,
+    marginBottom: 12,
   },
   buttonSpacing: {
-    marginBottom: 12,
+    marginBottom: 10,
   },
   footer: {
     alignItems: "center",
