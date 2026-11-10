@@ -14,7 +14,6 @@ import {
   StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import {
   Mail,
   Lock,
@@ -28,34 +27,42 @@ import {
 } from "lucide-react-native";
 import { useUser } from "../context/UserContext";
 import { COLORS, SPACING, RADIUS, FONTS, BRAND, SHADOWS } from "../constants";
-import { Button, Input, GoogleIcon, PressableScale } from "../components";
+import {
+  Button,
+  Input,
+  PressableScale,
+  AuthTypeSwitcher,
+  GoogleSignInButton,
+  AuthDivider,
+} from "../components";
+import { useGoogleAuth } from "../hooks";
 
-const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-
-GoogleSignin.configure({
-  webClientId: GOOGLE_WEB_CLIENT_ID,
-  offlineAccess: false,
-});
-
-const RegisterScreen = ({ navigation }) => {
-  const { crearUsuario, loginGoogleNative } = useUser();
-  const [email, setEmail] = useState("");
+const RegisterScreen = ({ navigation, route }) => {
+  const { crearUsuario } = useUser();
+  const {
+    signInWithGoogle,
+    loading: googleLoading,
+    isAvailable: googleAvailable,
+  } = useGoogleAuth({
+    preferredMode: "personal",
+    method: "register",
+  });
+  const initialEmail = route?.params?.initialEmail || "";
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState(null);
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [acceptPrivacy, setAcceptPrivacy] = useState(false);
-  const [googleAvailable, setGoogleAvailable] = useState(true);
 
   const passwordRef = useRef(null);
 
   useEffect(() => {
-    GoogleSignin.hasPlayServices()
-      .then((hasServices) => setGoogleAvailable(Boolean(hasServices)))
-      .catch(() => setGoogleAvailable(false));
-  }, []);
+    if (route?.params?.initialEmail) {
+      setEmail(route.params.initialEmail);
+    }
+  }, [route?.params?.initialEmail]);
 
   // Comprobación de requisitos de contraseña
   const passwordChecks = {
@@ -146,32 +153,22 @@ const RegisterScreen = ({ navigation }) => {
       return;
     }
 
-    setGoogleLoading(true);
-    try {
-      try {
-        await GoogleSignin.signOut();
-      } catch {}
+    setFormError(null);
+    const res = await signInWithGoogle({
+      consents: {
+        acceptTerms: true,
+        acceptPrivacy: true,
+        acceptMarketing: false,
+      },
+    });
 
-      await GoogleSignin.signIn();
-      const tokens = await GoogleSignin.getTokens();
-      const idToken = tokens.idToken;
-
-      if (!idToken) {
-        Alert.alert("Google Sign-In", "No se pudo obtener la sesión de Google.");
-        setGoogleLoading(false);
-        return;
-      }
-
-      await loginGoogleNative(idToken, "register");
-    } catch (error) {
-      if (error.code !== "12501") {
-        Alert.alert(
-          "Error de registro",
-          error.message || "No se pudo registrar la cuenta con Google."
-        );
-      }
-    } finally {
-      setGoogleLoading(false);
+    if (res?.success) {
+      Alert.alert(
+        "¡Bienvenido a YouConnext!",
+        "Tu cuenta ha sido creada con éxito."
+      );
+    } else if (res?.error) {
+      setFormError(res.error);
     }
   };
 
@@ -208,6 +205,16 @@ const RegisterScreen = ({ navigation }) => {
               Únete a YouConnext para compartir viajes diarios, universitarios y eventos.
             </Text>
           </View>
+
+          {/* Selector Inmediato de Rol: Particular vs Organización */}
+          <AuthTypeSwitcher
+            activeType="user"
+            onChangeType={(type) => {
+              if (type === "enterprise") {
+                navigation.replace("EnterpriseRegister", { initialEmail: email });
+              }
+            }}
+          />
 
           {/* Tarjeta de Formulario con radio 16 */}
           <View style={styles.formCard}>
@@ -442,24 +449,17 @@ const RegisterScreen = ({ navigation }) => {
             />
 
             {/* Separador */}
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>o regístrate con</Text>
-              <View style={styles.dividerLine} />
-            </View>
+            <AuthDivider text="o regístrate con" />
 
             {/* Botón Google */}
             {googleAvailable && (
-              <PressableScale
-                style={styles.googleButton}
+              <GoogleSignInButton
                 onPress={handleGoogleAuth}
+                loading={googleLoading}
                 disabled={googleLoading || loading}
-              >
-                <GoogleIcon size={20} />
-                <Text style={styles.googleButtonText}>
-                  {googleLoading ? "Conectando..." : "Registrarme con Google"}
-                </Text>
-              </PressableScale>
+                text="Registrarme con Google"
+                accessibilityLabel="Registrarme con Google"
+              />
             )}
           </View>
 
@@ -474,21 +474,6 @@ const RegisterScreen = ({ navigation }) => {
               <Text style={styles.toggleLink}>Iniciar sesión</Text>
             </TouchableOpacity>
           </View>
-
-          {/* Puente cruzado: Alta para organizaciones */}
-          <PressableScale
-            style={styles.bridgeCard}
-            onPress={() => navigation.navigate("EnterpriseRegister")}
-          >
-            <View style={styles.bridgeIconBox}>
-              <Building2 size={18} color={COLORS.primary} strokeWidth={2.4} />
-            </View>
-            <View style={styles.bridgeTextBox}>
-              <Text style={styles.bridgeTitle}>¿Deseas registrar una entidad o empresa?</Text>
-              <Text style={styles.bridgeSubtitle}>Alta corporativa en el Portal de Organizaciones</Text>
-            </View>
-            <ArrowRight size={18} color={COLORS.gray400} strokeWidth={2.2} />
-          </PressableScale>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

@@ -13,7 +13,6 @@ import {
   StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import {
   Mail,
   Lock,
@@ -25,32 +24,40 @@ import {
 } from "lucide-react-native";
 import { useUser } from "../context/UserContext";
 import { COLORS, SPACING, RADIUS, FONTS, BRAND, SHADOWS } from "../constants";
-import { Button, Input, GoogleIcon, PressableScale } from "../components";
+import {
+  Button,
+  Input,
+  PressableScale,
+  AuthTypeSwitcher,
+  GoogleSignInButton,
+  AuthDivider,
+} from "../components";
+import { useGoogleAuth } from "../hooks";
 
-const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-
-GoogleSignin.configure({
-  webClientId: GOOGLE_WEB_CLIENT_ID,
-  offlineAccess: false,
-});
-
-const LoginScreen = ({ navigation }) => {
-  const { iniciarSesion, loginGoogleNative } = useUser();
-  const [email, setEmail] = useState("");
+const LoginScreen = ({ navigation, route }) => {
+  const { iniciarSesion } = useUser();
+  const {
+    signInWithGoogle,
+    loading: googleLoading,
+    isAvailable: googleAvailable,
+  } = useGoogleAuth({
+    preferredMode: "personal",
+    method: "login",
+  });
+  const initialEmail = route?.params?.initialEmail || "";
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState(null);
-  const [googleAvailable, setGoogleAvailable] = useState(true);
 
   const passwordRef = useRef(null);
 
   useEffect(() => {
-    GoogleSignin.hasPlayServices()
-      .then((hasServices) => setGoogleAvailable(Boolean(hasServices)))
-      .catch(() => setGoogleAvailable(false));
-  }, []);
+    if (route?.params?.initialEmail) {
+      setEmail(route.params.initialEmail);
+    }
+  }, [route?.params?.initialEmail]);
 
   const getFieldError = (field, value) => {
     if (field === "email") {
@@ -99,32 +106,10 @@ const LoginScreen = ({ navigation }) => {
   };
 
   const handleGoogleAuth = async () => {
-    setGoogleLoading(true);
-    try {
-      try {
-        await GoogleSignin.signOut();
-      } catch {}
-
-      await GoogleSignin.signIn();
-      const tokens = await GoogleSignin.getTokens();
-      const idToken = tokens.idToken;
-
-      if (!idToken) {
-        Alert.alert("Google Sign-In", "No se pudo obtener la sesión de Google.");
-        setGoogleLoading(false);
-        return;
-      }
-
-      await loginGoogleNative(idToken, "login");
-    } catch (error) {
-      if (error.code !== "12501") {
-        Alert.alert(
-          "Error de autenticación",
-          error.message || "No se pudo completar el acceso con Google."
-        );
-      }
-    } finally {
-      setGoogleLoading(false);
+    setFormError(null);
+    const res = await signInWithGoogle();
+    if (res?.error) {
+      setFormError(res.error);
     }
   };
 
@@ -167,6 +152,16 @@ const LoginScreen = ({ navigation }) => {
               Te damos la bienvenida de nuevo a YouConnext. Accede para reservar tu plaza o compartir tu coche.
             </Text>
           </View>
+
+          {/* Selector Inmediato de Rol: Particular vs Organización */}
+          <AuthTypeSwitcher
+            activeType="user"
+            onChangeType={(type) => {
+              if (type === "enterprise") {
+                navigation.replace("EnterpriseLogin", { initialEmail: email });
+              }
+            }}
+          />
 
           {/* Tarjeta de Formulario con radio 16 y sombra suave */}
           <View style={styles.formCard}>
@@ -241,24 +236,17 @@ const LoginScreen = ({ navigation }) => {
             />
 
             {/* Separador elegante */}
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>o entra con</Text>
-              <View style={styles.dividerLine} />
-            </View>
+            <AuthDivider text="o entra con" />
 
             {/* Botón de Google */}
             {googleAvailable && (
-              <PressableScale
-                style={styles.googleButton}
+              <GoogleSignInButton
                 onPress={handleGoogleAuth}
+                loading={googleLoading}
                 disabled={googleLoading || loading}
-              >
-                <GoogleIcon size={20} />
-                <Text style={styles.googleButtonText}>
-                  {googleLoading ? "Conectando..." : "Continuar con Google"}
-                </Text>
-              </PressableScale>
+                text="Continuar con Google"
+                accessibilityLabel="Continuar con Google"
+              />
             )}
           </View>
 
@@ -273,21 +261,6 @@ const LoginScreen = ({ navigation }) => {
               <Text style={styles.toggleLink}>Crear cuenta gratis</Text>
             </TouchableOpacity>
           </View>
-
-          {/* Puente cruzado: Acceso para organizaciones */}
-          <PressableScale
-            style={styles.bridgeCard}
-            onPress={() => navigation.navigate("EnterpriseLogin")}
-          >
-            <View style={styles.bridgeIconBox}>
-              <Building2 size={18} color={COLORS.primary} strokeWidth={2.4} />
-            </View>
-            <View style={styles.bridgeTextBox}>
-              <Text style={styles.bridgeTitle}>¿Accedes como empresa o entidad?</Text>
-              <Text style={styles.bridgeSubtitle}>Accede al Portal de Organizaciones</Text>
-            </View>
-            <ArrowRight size={18} color={COLORS.gray400} strokeWidth={2.2} />
-          </PressableScale>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

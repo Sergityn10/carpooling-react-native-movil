@@ -1,6 +1,6 @@
 // YouConnext - EnterpriseLoginScreen (Acceso para Organizaciones y Empresas v2)
 // Estructura oficial, foco interactivo, validaciones corporativas (docs/api/enterprise_auth.md)
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -23,12 +23,36 @@ import {
   User,
 } from "lucide-react-native";
 import { useUser } from "../../context/UserContext";
-import { COLORS, SPACING, RADIUS, FONTS, BRAND, SHADOWS } from "../../constants";
-import { Button, Input, PressableScale } from "../../components";
+import {
+  COLORS,
+  SPACING,
+  RADIUS,
+  FONTS,
+  BRAND,
+  SHADOWS,
+} from "../../constants";
+import {
+  Button,
+  Input,
+  PressableScale,
+  AuthTypeSwitcher,
+  GoogleSignInButton,
+  AuthDivider,
+} from "../../components";
+import { useGoogleAuth } from "../../hooks";
 
-const EnterpriseLoginScreen = ({ navigation }) => {
+const EnterpriseLoginScreen = ({ navigation, route }) => {
   const { iniciarSesionOrganizacion } = useUser();
-  const [email, setEmail] = useState("");
+  const {
+    signInWithGoogle,
+    loading: googleLoading,
+    isAvailable: googleAvailable,
+  } = useGoogleAuth({
+    target: "enterprise",
+    method: "auto",
+  });
+  const initialEmail = route?.params?.initialEmail || "";
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -36,9 +60,16 @@ const EnterpriseLoginScreen = ({ navigation }) => {
 
   const passwordRef = useRef(null);
 
+  useEffect(() => {
+    if (route?.params?.initialEmail) {
+      setEmail(route.params.initialEmail);
+    }
+  }, [route?.params?.initialEmail]);
+
   const getFieldError = (field, value) => {
     if (field === "email") {
-      if (!value.trim()) return "Introduce el correo institucional de la organización.";
+      if (!value.trim())
+        return "Introduce el correo institucional de la organización.";
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()))
         return "El formato de correo no es válido (ej: movilidad@empresa.com).";
     }
@@ -59,7 +90,7 @@ const EnterpriseLoginScreen = ({ navigation }) => {
       password: getFieldError("password", password),
     };
     const cleaned = Object.fromEntries(
-      Object.entries(newErrors).filter(([, v]) => Boolean(v))
+      Object.entries(newErrors).filter(([, v]) => Boolean(v)),
     );
     setErrors(cleaned);
     return Object.keys(cleaned).length === 0;
@@ -82,11 +113,19 @@ const EnterpriseLoginScreen = ({ navigation }) => {
     }
   };
 
+  const handleGoogleLogin = async () => {
+    setFormError(null);
+    const res = await signInWithGoogle();
+    if (res?.error) {
+      setFormError(res.error);
+    }
+  };
+
   const handleForgotPassword = () => {
     Alert.alert(
       "Recuperar Acceso Corporativo",
       "Para restablecer la contraseña institucional, contacta con el administrador de tu entidad o con soporte B2B (empresas@youconnext.es).",
-      [{ text: "Entendido" }]
+      [{ text: "Entendido" }],
     );
   };
 
@@ -123,9 +162,20 @@ const EnterpriseLoginScreen = ({ navigation }) => {
           <View style={styles.header}>
             <Text style={styles.title}>Acceso Corporativo</Text>
             <Text style={styles.subtitle}>
-              Inicia sesión con la cuenta de tu empresa, institución o sede para gestionar la movilidad compartida de tu equipo.
+              Inicia sesión con la cuenta de tu empresa, institución o sede para
+              gestionar la movilidad compartida de tu equipo.
             </Text>
           </View>
+
+          {/* Selector Inmediato de Rol: Particular vs Organización */}
+          <AuthTypeSwitcher
+            activeType="enterprise"
+            onChangeType={(type) => {
+              if (type === "user") {
+                navigation.replace("Login", { initialEmail: email });
+              }
+            }}
+          />
 
           {/* Tarjeta de Formulario */}
           <View style={styles.formCard}>
@@ -144,7 +194,8 @@ const EnterpriseLoginScreen = ({ navigation }) => {
               value={email}
               onChangeText={(text) => {
                 setEmail(text);
-                if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
+                if (errors.email)
+                  setErrors((prev) => ({ ...prev, email: undefined }));
                 if (formError) setFormError(null);
               }}
               onBlur={() => handleBlur("email", email)}
@@ -194,14 +245,40 @@ const EnterpriseLoginScreen = ({ navigation }) => {
               onPress={handleSubmit}
               variant="primary"
               loading={loading}
-              icon={<Building2 size={18} color={COLORS.white} strokeWidth={2.4} />}
+              icon={
+                <Building2 size={18} color={COLORS.white} strokeWidth={2.4} />
+              }
               style={styles.submitButton}
             />
+
+            {/* Separador elegante */}
+            <AuthDivider text="o accede con" />
+
+            {/* Botón de Google Corporativo */}
+            {googleAvailable && (
+              <GoogleSignInButton
+                onPress={handleGoogleLogin}
+                loading={googleLoading}
+                disabled={loading || googleLoading}
+                text="Continuar con Google Corporativo"
+                variant="corporate"
+                accessibilityLabel="Continuar con Google Corporativo"
+              />
+            )}
+
+            {/* Microtexto informativo corporativo */}
+            <View style={styles.corporateHintContainer}>
+              <Text style={styles.corporateHintText}>
+                Acceso unificado para cuentas institucionales de Google Workspace vinculadas a tu organización.
+              </Text>
+            </View>
           </View>
 
           {/* Enlace alternativo a registro corporativo */}
           <View style={styles.toggleFooter}>
-            <Text style={styles.toggleText}>¿Tu entidad todavía no está registrada?</Text>
+            <Text style={styles.toggleText}>
+              ¿Tu entidad todavía no está registrada?
+            </Text>
             <TouchableOpacity
               onPress={() => navigation.navigate("EnterpriseRegister")}
               activeOpacity={0.7}
@@ -210,21 +287,6 @@ const EnterpriseLoginScreen = ({ navigation }) => {
               <Text style={styles.toggleLink}>Registrar mi Organización</Text>
             </TouchableOpacity>
           </View>
-
-          {/* Puente cruzado: Acceso para particulares */}
-          <PressableScale
-            style={styles.bridgeCard}
-            onPress={() => navigation.navigate("Login")}
-          >
-            <View style={styles.bridgeIconBox}>
-              <User size={18} color={COLORS.primary} strokeWidth={2.4} />
-            </View>
-            <View style={styles.bridgeTextBox}>
-              <Text style={styles.bridgeTitle}>¿Eres un usuario o conductor particular?</Text>
-              <Text style={styles.bridgeSubtitle}>Accede al portal de viajes personales</Text>
-            </View>
-            <ArrowRight size={18} color={COLORS.gray400} strokeWidth={2.2} />
-          </PressableScale>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -395,6 +457,18 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.typography?.fonts?.body || "Inter",
     fontSize: 11,
     color: COLORS.gray600,
+  },
+  corporateHintContainer: {
+    marginTop: SPACING.sm,
+    paddingHorizontal: SPACING.xs,
+    alignItems: "center",
+  },
+  corporateHintText: {
+    fontFamily: FONTS.typography?.fonts?.body || "Inter",
+    fontSize: 11,
+    color: COLORS.gray500,
+    textAlign: "center",
+    lineHeight: 16,
   },
 });
 

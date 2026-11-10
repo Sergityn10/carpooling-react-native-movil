@@ -89,6 +89,39 @@ const Button = ({
     return COLORS.white;
   };
 
+  const renderIcon = (iconProp, isRight = false) => {
+    if (!iconProp) return null;
+
+    const iconColor =
+      variant === "outline" || variant === "ghost"
+        ? COLORS.primary
+        : variant === "accent"
+        ? BRAND.black
+        : COLORS.white;
+
+    let rendered = null;
+    if (React.isValidElement(iconProp)) {
+      rendered = iconProp;
+    } else if (typeof iconProp === "function") {
+      const IconComp = iconProp;
+      rendered = (
+        <IconComp
+          size={size === "small" ? 16 : 18}
+          color={iconColor}
+          strokeWidth={2.2}
+        />
+      );
+    }
+
+    if (!rendered) return null;
+
+    return (
+      <View style={isRight ? styles.iconRight : styles.iconLeft}>
+        {rendered}
+      </View>
+    );
+  };
+
   return (
     <PressableScale
       style={[...getButtonStyle(), style]}
@@ -101,9 +134,9 @@ const Button = ({
         <ActivityIndicator color={getSpinnerColor()} size="small" />
       ) : (
         <View style={styles.contentRow}>
-          {icon && <View style={styles.iconLeft}>{icon}</View>}
+          {renderIcon(icon, false)}
           <Text style={[...getTextStyle(), textStyle]}>{title}</Text>
-          {iconRight && <View style={styles.iconRight}>{iconRight}</View>}
+          {renderIcon(iconRight, true)}
         </View>
       )}
     </PressableScale>

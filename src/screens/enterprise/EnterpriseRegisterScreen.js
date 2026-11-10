@@ -1,6 +1,6 @@
 // YouConnext - EnterpriseRegisterScreen (Auto-registro de Organizaciones v2)
 // Registro ágil corporativo (email corporativo, contraseña segura, nombre de entidad)
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -27,13 +27,37 @@ import {
   User,
 } from "lucide-react-native";
 import { useUser } from "../../context/UserContext";
-import { COLORS, SPACING, RADIUS, FONTS, BRAND, SHADOWS } from "../../constants";
-import { Button, Input, PressableScale } from "../../components";
+import {
+  COLORS,
+  SPACING,
+  RADIUS,
+  FONTS,
+  BRAND,
+  SHADOWS,
+} from "../../constants";
+import {
+  Button,
+  Input,
+  PressableScale,
+  AuthTypeSwitcher,
+  GoogleSignInButton,
+  AuthDivider,
+} from "../../components";
+import { useGoogleAuth } from "../../hooks";
 
-const EnterpriseRegisterScreen = ({ navigation }) => {
+const EnterpriseRegisterScreen = ({ navigation, route }) => {
   const { crearOrganizacion } = useUser();
+  const {
+    signInWithGoogle,
+    loading: googleLoading,
+    isAvailable: googleAvailable,
+  } = useGoogleAuth({
+    target: "enterprise",
+    method: "register",
+  });
+  const initialEmail = route?.params?.initialEmail || "";
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -43,6 +67,12 @@ const EnterpriseRegisterScreen = ({ navigation }) => {
 
   const emailRef = useRef(null);
   const passwordRef = useRef(null);
+
+  useEffect(() => {
+    if (route?.params?.initialEmail) {
+      setEmail(route.params.initialEmail);
+    }
+  }, [route?.params?.initialEmail]);
 
   // Validación de contraseña corporativa según directivas de docs/api/enterprise_auth.md:
   // Mínimo 8 caracteres, al menos una mayúscula, una minúscula, un número y un símbolo especial (@$!%*?&_-#)
@@ -79,11 +109,13 @@ const EnterpriseRegisterScreen = ({ navigation }) => {
     }
 
     if (!password.trim()) {
-      newErrors.password = "Introduce una contraseña para la cuenta corporativa.";
+      newErrors.password =
+        "Introduce una contraseña para la cuenta corporativa.";
     } else if (password.length < 8) {
       newErrors.password = "La contraseña debe tener al menos 8 caracteres.";
     } else if (!passwordChecks.hasUpper || !passwordChecks.hasLower) {
-      newErrors.password = "Incluye al menos una letra mayúscula y una minúscula.";
+      newErrors.password =
+        "Incluye al menos una letra mayúscula y una minúscula.";
     } else if (!passwordChecks.hasNumber) {
       newErrors.password = "Incluye al menos un número (0-9).";
     } else if (!passwordChecks.hasSpecial) {
@@ -94,7 +126,8 @@ const EnterpriseRegisterScreen = ({ navigation }) => {
       newErrors.terms = "Debes aceptar las condiciones corporativas.";
     }
     if (!acceptPrivacy) {
-      newErrors.privacy = "Debes aceptar la política de privacidad de YouConnext.";
+      newErrors.privacy =
+        "Debes aceptar la política de privacidad de YouConnext.";
     }
 
     setErrors(newErrors);
@@ -110,15 +143,44 @@ const EnterpriseRegisterScreen = ({ navigation }) => {
       await crearOrganizacion(email.trim(), password, name.trim());
       Alert.alert(
         "¡Organización Registrada!",
-        "Tu cuenta corporativa ha sido creada exitosamente. Te damos la bienvenida a YouConnext B2B."
+        "Tu cuenta corporativa ha sido creada exitosamente. Te damos la bienvenida a YouConnext B2B.",
       );
     } catch (error) {
       setFormError(
         error?.message ||
-          "No se pudo completar el registro de la organización. Comprueba si el correo ya pertenece a otra entidad."
+          "No se pudo completar el registro de la organización. Comprueba si el correo ya pertenece a otra entidad.",
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleRegister = async () => {
+    setFormError(null);
+    if (!acceptTerms || !acceptPrivacy) {
+      Alert.alert(
+        "Acepta las condiciones",
+        "Por favor, marca las casillas de condiciones corporativas y política de privacidad para continuar con Google.",
+        [{ text: "Entendido" }],
+      );
+      return;
+    }
+
+    const res = await signInWithGoogle({
+      consents: {
+        acceptTerms: true,
+        acceptPrivacy: true,
+        acceptMarketing: false,
+      },
+    });
+
+    if (res?.success) {
+      Alert.alert(
+        "¡Bienvenida a YouConnext B2B!",
+        "Tu cuenta corporativa ha sido vinculada y configurada exitosamente.",
+      );
+    } else if (res?.error) {
+      setFormError(res.error);
     }
   };
 
@@ -157,9 +219,20 @@ const EnterpriseRegisterScreen = ({ navigation }) => {
           <View style={styles.header}>
             <Text style={styles.title}>Registra tu Organización</Text>
             <Text style={styles.subtitle}>
-              Crea la cuenta institucional para coordinar eventos sostenibles, gestionar carpooling de empleados y medir el CO₂ ahorrado.
+              Crea la cuenta institucional para coordinar eventos sostenibles,
+              gestionar carpooling de empleados y medir el CO₂ ahorrado.
             </Text>
           </View>
+
+          {/* Selector Inmediato de Rol: Particular vs Organización */}
+          <AuthTypeSwitcher
+            activeType="enterprise"
+            onChangeType={(type) => {
+              if (type === "user") {
+                navigation.replace("Register", { initialEmail: email });
+              }
+            }}
+          />
 
           {/* Formulario */}
           <View style={styles.formCard}>
@@ -190,7 +263,8 @@ const EnterpriseRegisterScreen = ({ navigation }) => {
               value={email}
               onChangeText={(text) => {
                 setEmail(text);
-                if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
+                if (errors.email)
+                  setErrors((prev) => ({ ...prev, email: undefined }));
                 if (formError) setFormError(null);
               }}
               error={errors.email}
@@ -226,8 +300,12 @@ const EnterpriseRegisterScreen = ({ navigation }) => {
             {password.length > 0 && (
               <View style={styles.strengthBox}>
                 <View style={styles.strengthHeader}>
-                  <Text style={styles.strengthTitle}>Seguridad de la contraseña:</Text>
-                  <Text style={[styles.strengthValue, { color: strength.color }]}>
+                  <Text style={styles.strengthTitle}>
+                    Seguridad de la contraseña:
+                  </Text>
+                  <Text
+                    style={[styles.strengthValue, { color: strength.color }]}
+                  >
                     {strength.label}
                   </Text>
                 </View>
@@ -254,7 +332,9 @@ const EnterpriseRegisterScreen = ({ navigation }) => {
                   <View style={styles.reqRow}>
                     <Check
                       size={14}
-                      color={passwordChecks.length ? BRAND.green : COLORS.gray400}
+                      color={
+                        passwordChecks.length ? BRAND.green : COLORS.gray400
+                      }
                     />
                     <Text
                       style={[
@@ -399,14 +479,33 @@ const EnterpriseRegisterScreen = ({ navigation }) => {
               onPress={handleSubmit}
               variant="primary"
               loading={loading}
-              icon={<Briefcase size={18} color={COLORS.white} strokeWidth={2.4} />}
+              icon={
+                <Briefcase size={18} color={COLORS.white} strokeWidth={2.4} />
+              }
               style={styles.submitButton}
             />
+
+            {/* Separador elegante */}
+            <AuthDivider text="o registra tu entidad con" />
+
+            {/* Botón de Google para Alta Corporativa */}
+            {googleAvailable && (
+              <GoogleSignInButton
+                onPress={handleGoogleRegister}
+                loading={googleLoading}
+                disabled={loading || googleLoading}
+                text="Registrar Organización con Google"
+                variant="corporate"
+                accessibilityLabel="Registrar Organización con Google"
+              />
+            )}
           </View>
 
           {/* Enlace alternativo a login corporativo */}
           <View style={styles.toggleFooter}>
-            <Text style={styles.toggleText}>¿Tu organización ya tiene cuenta?</Text>
+            <Text style={styles.toggleText}>
+              ¿Tu organización ya tiene cuenta?
+            </Text>
             <TouchableOpacity
               onPress={() => navigation.navigate("EnterpriseLogin")}
               activeOpacity={0.7}
@@ -415,23 +514,6 @@ const EnterpriseRegisterScreen = ({ navigation }) => {
               <Text style={styles.toggleLink}>Inicia sesión corporativa</Text>
             </TouchableOpacity>
           </View>
-
-          {/* Puente cruzado a registro particular */}
-          <PressableScale
-            style={styles.bridgeCard}
-            onPress={() => navigation.navigate("Register")}
-          >
-            <View style={styles.bridgeIconBox}>
-              <User size={18} color={COLORS.primary} strokeWidth={2.4} />
-            </View>
-            <View style={styles.bridgeTextBox}>
-              <Text style={styles.bridgeTitle}>¿Deseas registrarte como particular?</Text>
-              <Text style={styles.bridgeSubtitle}>
-                Crea una cuenta para compartir u ofrecer plazas en tus viajes
-              </Text>
-            </View>
-            <ArrowRight size={18} color={COLORS.gray400} strokeWidth={2.2} />
-          </PressableScale>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

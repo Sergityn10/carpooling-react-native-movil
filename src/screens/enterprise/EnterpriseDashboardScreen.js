@@ -36,31 +36,32 @@ const EnterpriseDashboardScreen = ({ navigation }) => {
   const [kpis, setKpis] = useState({
     co2EvitadoKg: 948.5,
     viajesMes: 142,
-    empleadosActivos: 76,
+    empleadosActivos: 0,
     ahorroEstimadoEur: 1240,
   });
 
   const loadData = useCallback(async () => {
     try {
-      const [eventsData, metricsData] = await Promise.all([
+      const [eventsData, metricsData, membersData] = await Promise.all([
         enterpriseService.getEnterpriseEvents(),
         enterpriseService.getEnterpriseEventsMetrics(),
+        enterpriseService.getEnterpriseMembers(selectedEnterprise?.id),
       ]);
       setEvents(eventsData.slice(0, 3)); // Mostrar los 3 más relevantes
-      if (metricsData) {
-        setKpis((prev) => ({
-          ...prev,
-          co2EvitadoKg: metricsData.totalCo2Saved || prev.co2EvitadoKg,
-          viajesMes: (metricsData.totalCarpoolRoutes * 4) || prev.viajesMes,
-        }));
-      }
+      const membersCount = Array.isArray(membersData) ? membersData.length : 0;
+      setKpis((prev) => ({
+        ...prev,
+        co2EvitadoKg: metricsData?.totalCo2Saved || prev.co2EvitadoKg,
+        viajesMes: (metricsData?.totalCarpoolRoutes * 4) || prev.viajesMes,
+        empleadosActivos: membersCount,
+      }));
     } catch (e) {
       console.warn("Error al cargar dashboard de empresa:", e?.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [selectedEnterprise?.id]);
 
   useEffect(() => {
     loadData();
