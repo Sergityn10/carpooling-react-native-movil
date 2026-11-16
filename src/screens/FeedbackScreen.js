@@ -401,10 +401,28 @@ export const FeedbackScreen = ({ navigation }) => {
     }
   };
 
-  // Renderizador del Badge de Estado según el Ciclo de Vida
+  // Renderizador del Badge de Estado según el Ciclo de Vida (Robusto ante textos largos)
   const renderStatusBadge = (status) => {
     const statusMeta =
       FEEDBACK_STATUS_META[status] || FEEDBACK_STATUS_META.submitted;
+
+    const renderStatusIcon = () => {
+      switch (status) {
+        case FEEDBACK_STATUS.SUBMITTED:
+          return <Clock size={11} color={statusMeta.color} strokeWidth={2.4} />;
+        case FEEDBACK_STATUS.RECEIVED:
+          return <Inbox size={11} color={statusMeta.color} strokeWidth={2.4} />;
+        case FEEDBACK_STATUS.IN_PROGRESS:
+          return <Wrench size={11} color={statusMeta.color} strokeWidth={2.4} />;
+        case FEEDBACK_STATUS.PENDING_VERIFICATION:
+          return <Sparkles size={11} color={statusMeta.color} strokeWidth={2.4} />;
+        case FEEDBACK_STATUS.RESOLVED:
+          return <CheckCircle2 size={11} color={statusMeta.color} strokeWidth={2.5} />;
+        case FEEDBACK_STATUS.DISCARDED:
+        default:
+          return <XCircle size={11} color={statusMeta.color} strokeWidth={2.4} />;
+      }
+    };
 
     return (
       <View
@@ -416,7 +434,12 @@ export const FeedbackScreen = ({ navigation }) => {
           },
         ]}
       >
-        <Text style={[styles.statusBadgeText, { color: statusMeta.color }]}>
+        {renderStatusIcon()}
+        <Text
+          style={[styles.statusBadgeText, { color: statusMeta.color }]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
           {statusMeta.label}
         </Text>
       </View>
@@ -436,6 +459,10 @@ export const FeedbackScreen = ({ navigation }) => {
       : "📌";
     const categoryLabel = categoryObj?.label || item.category || "General";
 
+    const isExpanded = Boolean(expandedCards[item.id]);
+    const messageLines = (item.message || "").split(/\r\n|\r|\n/).length;
+    const isLongMessage = (item.message || "").length > 130 || messageLines > 3;
+
     return (
       <View
         style={[
@@ -444,25 +471,53 @@ export const FeedbackScreen = ({ navigation }) => {
           isResolved && styles.cardResolved,
         ]}
       >
-        {/* Cabecera de la tarjeta: Categoría y Estado */}
+        {/* Cabecera de la tarjeta: Categoría (con flexShrink) y Badge de Estado (fijo y auto-ajustable) */}
         <View style={styles.cardHeaderRow}>
           <View style={styles.categoryPill}>
             <Text style={styles.categoryPillIcon}>{categoryIcon}</Text>
-            <Text style={styles.categoryPillLabel}>{categoryLabel}</Text>
+            <Text
+              style={styles.categoryPillLabel}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {categoryLabel}
+            </Text>
           </View>
           {renderStatusBadge(item.status)}
         </View>
 
-        {/* Título y Fecha */}
+        {/* Título */}
         {item.title ? (
           <Text style={styles.cardTitle}>{item.title}</Text>
         ) : null}
-        <Text style={styles.cardDate}>
-          {formatDate(item.created_at)}
+
+        {/* Fecha con icono */}
+        <View style={styles.cardDateRow}>
+          <Clock size={11} color={COLORS.gray400} strokeWidth={2} />
+          <Text style={styles.cardDate}>{formatDate(item.created_at)}</Text>
+        </View>
+
+        {/* Mensaje original con soporte expandible si es muy largo */}
+        <Text
+          style={styles.cardMessage}
+          numberOfLines={isExpanded ? undefined : 3}
+          ellipsizeMode="tail"
+        >
+          {item.message}
         </Text>
 
-        {/* Mensaje original */}
-        <Text style={styles.cardMessage}>{item.message}</Text>
+        {isLongMessage && (
+          <TouchableOpacity
+            onPress={() => toggleExpandCard(item.id)}
+            hitSlop={8}
+            style={styles.expandTextBtn}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.expandTextBtnText}>
+              {isExpanded ? "Mostrar menos ↑" : "Leer mensaje completo ↓"}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* Nota del Administrador / Equipo técnico si existe */}
         {item.admin_notes ? (
@@ -479,35 +534,39 @@ export const FeedbackScreen = ({ navigation }) => {
         {isPendingVerification && (
           <View style={styles.actionPromptCard}>
             <View style={styles.actionPromptTop}>
-              <Sparkles size={18} color="#C2410C" strokeWidth={2.4} />
+              <Sparkles size={16} color="#B45309" strokeWidth={2.4} />
               <Text style={styles.actionPromptTitle}>
                 ¡Cambio técnico desplegado!
               </Text>
             </View>
             <Text style={styles.actionPromptSubtitle}>
               Hemos aplicado una corrección para tu reporte. Por favor, pruébala
-              y dinos si ya te funciona correctamente:
+              en la app y dinos si ya te funciona correctamente:
             </Text>
 
             <View style={styles.actionButtonsRow}>
               <TouchableOpacity
                 style={styles.confirmBtn}
                 onPress={() => handleOpenConfirm(item)}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
                 accessibilityRole="button"
               >
-                <Check size={16} color={COLORS.white} strokeWidth={2.6} />
-                <Text style={styles.confirmBtnText}>Sí, está resuelto</Text>
+                <Check size={15} color={COLORS.white} strokeWidth={2.6} />
+                <Text style={styles.confirmBtnText} numberOfLines={1}>
+                  Sí, está resuelto
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.rejectBtn}
                 onPress={() => handleOpenReject(item)}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
                 accessibilityRole="button"
               >
-                <X size={15} color="#C2410C" strokeWidth={2.4} />
-                <Text style={styles.rejectBtnText}>Aún sigue fallando</Text>
+                <X size={14} color="#B45309" strokeWidth={2.4} />
+                <Text style={styles.rejectBtnText} numberOfLines={1}>
+                  Aún sigue fallando
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -516,11 +575,22 @@ export const FeedbackScreen = ({ navigation }) => {
         {/* Estado Resuelto Confirmado */}
         {isResolved && (
           <View style={styles.resolvedConfirmedBox}>
-            <CheckCircle2 size={16} color={COLORS.primary} strokeWidth={2.5} />
-            <Text style={styles.resolvedConfirmedText}>
-              Problema verificado y resuelto con éxito por ti
-              {item.resolved_at ? ` (${formatDate(item.resolved_at)})` : ""}.
-            </Text>
+            <CheckCircle2 size={16} color={COLORS.primary} strokeWidth={2.5} style={styles.resolvedIcon} />
+            <View style={styles.resolvedTextCol}>
+              <Text style={styles.resolvedConfirmedTitle}>
+                Solución confirmada por ti
+              </Text>
+              <Text style={styles.resolvedConfirmedDate}>
+                {item.resolved_at
+                  ? `Verificado el ${formatDate(item.resolved_at)}`
+                  : "Incidencia resuelta"}
+              </Text>
+              {item.user_resolution_comment ? (
+                <Text style={styles.resolvedUserComment}>
+                  "{item.user_resolution_comment}"
+                </Text>
+              ) : null}
+            </View>
           </View>
         )}
       </View>
@@ -1235,6 +1305,7 @@ const styles = StyleSheet.create({
     padding: SPACING.md + 2,
     borderWidth: 1,
     borderColor: COLORS.border,
+    overflow: "hidden",
     ...SHADOWS.sm,
   },
   cardPendingVerification: {
@@ -1249,58 +1320,92 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 8,
+    gap: 8,
+    marginBottom: 10,
+    width: "100%",
   },
   categoryPill: {
+    flexShrink: 1,
+    maxWidth: "52%",
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: COLORS.gray50,
     borderRadius: RADIUS.full,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4.5,
     gap: 5,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
   categoryPillIcon: {
     fontSize: 13,
   },
   categoryPillLabel: {
     fontFamily: FONTS.interMedium,
-    fontSize: 12,
+    fontSize: 11.5,
     color: COLORS.gray700,
+    flexShrink: 1,
   },
   statusBadge: {
+    flexShrink: 0,
+    maxWidth: "48%",
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 9,
-    paddingVertical: 4,
+    paddingVertical: 4.5,
     borderRadius: RADIUS.full,
     borderWidth: 1,
+    gap: 4.5,
   },
   statusBadgeText: {
     fontFamily: FONTS.interSemiBold,
     fontSize: 11,
+    lineHeight: 14,
+    flexShrink: 1,
   },
   cardTitle: {
     fontFamily: FONTS.soraBold,
     fontSize: 15,
     color: COLORS.gray900,
+    lineHeight: 20,
     marginBottom: 4,
+    flexWrap: "wrap",
+  },
+  cardDateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 8,
   },
   cardDate: {
     fontFamily: FONTS.interRegular,
     fontSize: 11,
-    color: COLORS.gray400,
-    marginBottom: 8,
+    color: COLORS.gray500,
   },
   cardMessage: {
     fontFamily: FONTS.interRegular,
     fontSize: 13.5,
     color: COLORS.gray700,
-    lineHeight: 19,
+    lineHeight: 20,
+  },
+  expandTextBtn: {
+    alignSelf: "flex-start",
+    paddingVertical: 3,
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  expandTextBtnText: {
+    fontFamily: FONTS.interSemiBold,
+    fontSize: 12,
+    color: COLORS.primaryDark,
   },
   adminNotesBox: {
-    backgroundColor: COLORS.primarySoft,
+    backgroundColor: "#F4FAF6",
     borderRadius: RADIUS.md,
-    padding: SPACING.sm + 2,
-    marginTop: SPACING.sm + 2,
+    padding: 12,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: "#D6E2DB",
     borderLeftWidth: 3,
     borderLeftColor: COLORS.primary,
   },
@@ -1308,10 +1413,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    marginBottom: 3,
+    marginBottom: 4,
   },
   adminNotesTitle: {
-    fontFamily: FONTS.interSemiBold,
+    fontFamily: FONTS.soraSemiBold,
     fontSize: 11.5,
     color: COLORS.primaryDark,
   },
@@ -1319,15 +1424,17 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.interRegular,
     fontSize: 12.5,
     color: COLORS.gray800,
-    lineHeight: 17,
+    lineHeight: 18,
   },
   actionPromptCard: {
-    backgroundColor: "#FFF7ED",
+    backgroundColor: "#FFFBEB",
     borderRadius: RADIUS.md,
-    padding: SPACING.md,
-    marginTop: SPACING.md,
+    padding: 12,
+    marginTop: 12,
     borderWidth: 1,
-    borderColor: "#FDBA74",
+    borderColor: "#FDE68A",
+    borderLeftWidth: 3,
+    borderLeftColor: "#F59E0B",
   },
   actionPromptTop: {
     flexDirection: "row",
@@ -1337,35 +1444,37 @@ const styles = StyleSheet.create({
   },
   actionPromptTitle: {
     fontFamily: FONTS.soraBold,
-    fontSize: 13.5,
-    color: "#C2410C",
+    fontSize: 13,
+    color: "#B45309",
   },
   actionPromptSubtitle: {
     fontFamily: FONTS.interRegular,
-    fontSize: 12.5,
+    fontSize: 12,
     color: COLORS.gray700,
     lineHeight: 17,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   actionButtonsRow: {
     flexDirection: "row",
-    gap: SPACING.sm,
+    alignItems: "center",
+    gap: 8,
   },
   confirmBtn: {
-    flex: 1.2,
+    flex: 1.1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: COLORS.primary,
     paddingVertical: 9,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     borderRadius: RADIUS.md,
-    gap: 6,
+    gap: 5,
   },
   confirmBtnText: {
     fontFamily: FONTS.soraSemiBold,
-    fontSize: 12.5,
+    fontSize: 12,
     color: COLORS.white,
+    flexShrink: 1,
   },
   rejectBtn: {
     flex: 1,
@@ -1373,34 +1482,55 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: "#FB923C",
+    borderWidth: 1.2,
+    borderColor: "#F59E0B",
     paddingVertical: 9,
     paddingHorizontal: 8,
     borderRadius: RADIUS.md,
-    gap: 5,
+    gap: 4,
   },
   rejectBtnText: {
-    fontFamily: FONTS.interMedium,
-    fontSize: 12,
-    color: "#C2410C",
+    fontFamily: FONTS.interSemiBold,
+    fontSize: 11.5,
+    color: "#B45309",
+    flexShrink: 1,
   },
   resolvedConfirmedBox: {
     flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: COLORS.primarySoft,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    alignItems: "flex-start",
+    backgroundColor: "#F0FDF4",
+    padding: 12,
     borderRadius: RADIUS.md,
-    marginTop: SPACING.sm + 2,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: "#DCFCE7",
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primary,
     gap: 8,
   },
-  resolvedConfirmedText: {
+  resolvedIcon: {
+    marginTop: 2,
+  },
+  resolvedTextCol: {
     flex: 1,
-    fontFamily: FONTS.interMedium,
-    fontSize: 12,
+  },
+  resolvedConfirmedTitle: {
+    fontFamily: FONTS.soraBold,
+    fontSize: 12.5,
     color: COLORS.primaryDark,
-    lineHeight: 16,
+    marginBottom: 2,
+  },
+  resolvedConfirmedDate: {
+    fontFamily: FONTS.interRegular,
+    fontSize: 11,
+    color: COLORS.gray600,
+  },
+  resolvedUserComment: {
+    fontFamily: FONTS.interRegular,
+    fontSize: 12,
+    color: COLORS.gray700,
+    marginTop: 4,
+    fontStyle: "italic",
   },
   modalOverlay: {
     flex: 1,

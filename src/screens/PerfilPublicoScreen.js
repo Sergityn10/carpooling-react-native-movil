@@ -193,7 +193,6 @@ const PerfilPublicoScreen = ({ route, navigation }) => {
   const stats = reservaStats || {};
   const comentarios = stats.comentarios || {};
   const trayectos = stats.trayectos || {};
-  const cae = stats.cae || {};
   const cars = profile.cars || [];
 
   const getCommentatorName = (commentatorId) => {

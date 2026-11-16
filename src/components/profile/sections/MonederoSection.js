@@ -57,7 +57,6 @@ const TAB_RETIRADAS = "retiradas";
 const MonederoSection = ({
   walletBalance,
   walletBalanceEuros,
-  caeData,
   loadingWallet,
   walletError,
   walletTransactions = [],
@@ -84,15 +83,13 @@ const MonederoSection = ({
     walletBalance && walletBalance.length > 0
       ? walletBalance[0].balance_cents / 100
       : 0;
-  const caeDisponible = caeData?.disponible ?? 0;
-  const caeRevision = caeData?.en_revision ?? 0;
 
   const pendingTxAmount = walletTransactions
     .filter((tx) => tx.status === "pending" || tx.type === "pending")
     .reduce((sum, tx) => sum + (tx.amount || 0) / 100, 0);
 
-  const disponibleTotal = walletEuros + caeDisponible;
-  const revisionTotal = caeRevision + pendingTxAmount;
+  const disponibleTotal = walletEuros;
+  const revisionTotal = pendingTxAmount;
 
   // Filtrado de movimientos ordenados por fecha
   const filteredMovements = useMemo(() => {
@@ -203,15 +200,6 @@ const MonederoSection = ({
                     {formatEuros(walletEuros)} €
                   </Text>
                 </View>
-
-                {caeDisponible > 0 && (
-                  <View style={styles.walletBreakdownCard}>
-                    <Text style={styles.walletBreakdownCardLabel}>Bono CAE</Text>
-                    <Text style={styles.walletBreakdownCardValue}>
-                      {formatEuros(caeDisponible)} €
-                    </Text>
-                  </View>
-                )}
 
                 {revisionTotal > 0 && (
                   <View style={styles.walletBreakdownCard}>

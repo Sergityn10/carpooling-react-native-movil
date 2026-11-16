@@ -21,7 +21,6 @@ import {
   Building2,
   ArrowLeftRight,
   Star,
-  Zap,
   ChevronRight,
   ScrollText,
   ShieldCheck,
@@ -34,31 +33,6 @@ import styles from "../profileStyles";
 import GradientBackground from "../../common/GradientBackground";
 import PressableScale from "../../common/PressableScale";
 import { useUser } from "../../../context/UserContext";
-
-const getBonoInfo = (user) => {
-  const cc = user.completitud_cae;
-  const comp = user.completitud;
-
-  if (cc && cc.porcentaje_total < 100 && cc.campos_faltantes?.length > 0) {
-    return {
-      show: true,
-      title: "Mi Bono Energético",
-      subtitle: `${cc.campos_faltantes.length} pasos para poder generar CAEs`,
-    };
-  }
-  if (
-    comp &&
-    comp.porcentaje_total < 100 &&
-    comp.campos_faltantes?.length > 0
-  ) {
-    return {
-      show: true,
-      title: "Mi Bono Energético",
-      subtitle: `${comp.campos_faltantes.length} pasos restantes para completar tu perfil`,
-    };
-  }
-  return { show: false };
-};
 
 // Filas del menú con íconos neutrales limpios para evitar saturación de color
 const MenuRow = ({ icon: Icon, label, badge, onPress, isLast = false }) => (
@@ -98,7 +72,6 @@ const MainMenuSection = ({
   const displayName = `${user?.name || user?.nombre || "Usuario"} ${user?.surname || user?.apellidos || ""}`.trim();
   const initial = (user?.name || user?.nombre || "U").charAt(0).toUpperCase();
   const locationText = [user?.ciudad, user?.provincia].filter(Boolean).join(", ");
-  const bono = getBonoInfo(user);
 
   const hasEnterprise = Boolean(
     user?.is_corporate_member ||
@@ -268,24 +241,6 @@ const MainMenuSection = ({
         </View>
       </PressableScale>
 
-      {/* Tarjeta de Notificación del Bono Energético */}
-      {bono.show && (
-        <TouchableOpacity
-          style={styles.bonoCard}
-          onPress={() => onNavigate("bono-energetico")}
-          activeOpacity={0.85}
-        >
-          <View style={styles.bonoIconWrapper}>
-            <Zap size={20} color={COLORS.white} strokeWidth={2.5} />
-          </View>
-          <View style={styles.bonoCardContent}>
-            <Text style={styles.bonoCardTitle}>{bono.title}</Text>
-            <Text style={styles.bonoCardSubtitle}>{bono.subtitle}</Text>
-          </View>
-          <ChevronRight size={18} color={COLORS.warning} strokeWidth={2.5} />
-        </TouchableOpacity>
-      )}
-
       {/* Estadísticas de 3 Columnas */}
       <View style={styles.statsCardBlock}>
         <View style={styles.statsCol}>
@@ -300,20 +255,22 @@ const MainMenuSection = ({
 
         <View style={styles.statsCol}>
           <Text style={styles.statsValueNumber}>
-            {(publicStats.kwh_generated || 0).toFixed(1)}
+            {publicStats.passengers_transported || 0}
           </Text>
-          <Text style={styles.statsColLabel}>kWh</Text>
-          <Text style={styles.statsColSublabel}>generados</Text>
+          <Text style={styles.statsColLabel}>Pasajeros</Text>
+          <Text style={styles.statsColSublabel}>compartidos</Text>
         </View>
 
         <View style={styles.statsDividerLine} />
 
         <View style={styles.statsCol}>
           <Text style={styles.statsValueNumber}>
-            {(publicStats.eur_generated || 0).toFixed(1)}€
+            {publicStats.rating_average != null
+              ? `${publicStats.rating_average.toFixed(1)} ★`
+              : "—"}
           </Text>
-          <Text style={styles.statsColLabel}>Ahorro</Text>
-          <Text style={styles.statsColSublabel}>acumulado</Text>
+          <Text style={styles.statsColLabel}>Valoración</Text>
+          <Text style={styles.statsColSublabel}>media</Text>
         </View>
       </View>
 
@@ -386,12 +343,6 @@ const MainMenuSection = ({
           icon={Star}
           label="Valoraciones y opiniones"
           onPress={() => navigation.navigate("Opiniones")}
-        />
-        <MenuRow
-          icon={Zap}
-          label="Mi Bono Energético (CAEs)"
-          badge="Ahorro"
-          onPress={() => onNavigate("bono-energetico")}
         />
         <MenuRow
           icon={Wallet}
