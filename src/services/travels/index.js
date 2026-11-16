@@ -7,3 +7,4 @@ export { preferenciaService } from "./preferenciaService";
 export { ubicacionTravelService } from "./ubicacionService";
 export { combustibleService } from "./combustibleService";
 export { rutaFrecuenteService } from "./rutaFrecuenteService";
+export { alertaService } from "./alertaService";

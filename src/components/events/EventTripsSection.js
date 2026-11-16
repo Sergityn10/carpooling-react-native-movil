@@ -16,6 +16,8 @@ import {
   LocateFixed,
   X,
   SlidersHorizontal,
+  BellRing,
+  CheckCircle2,
 } from "lucide-react-native";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../../constants";
 import { ViajeCard } from "../index";
@@ -35,6 +37,8 @@ const EventTripsSection = ({
   loadingNearby = false,
   activeTab = "ida",
   onTabChange,
+  hasEventAlert = false,
+  onAlertPress = null,
 }) => {
   const trayectos = activeTab === "ida" ? trayectosIda : trayectosVuelta;
   const previewTrips = trayectos.slice(0, 3);
@@ -65,14 +69,50 @@ const EventTripsSection = ({
           <Text style={styles.resetFilterBtnText}>Ver todos los viajes</Text>
         </TouchableOpacity>
       ) : (
-        <TouchableOpacity
-          style={styles.emptyCreateBtn}
-          onPress={onCrearViaje}
-          activeOpacity={0.88}
-        >
-          <Car size={16} color={COLORS.white} strokeWidth={2.5} />
-          <Text style={styles.emptyCreateBtnText}>Ofrecer plazas</Text>
-        </TouchableOpacity>
+        <View style={styles.emptyActionsCol}>
+          <TouchableOpacity
+            style={styles.emptyCreateBtn}
+            onPress={onCrearViaje}
+            activeOpacity={0.88}
+          >
+            <Car size={16} color={COLORS.white} strokeWidth={2.5} />
+            <Text style={styles.emptyCreateBtnText}>Ofrecer plazas</Text>
+          </TouchableOpacity>
+          {onAlertPress && (
+            <TouchableOpacity
+              style={[
+                styles.emptyAlertBtn,
+                hasEventAlert && styles.emptyAlertBtnActive,
+              ]}
+              onPress={onAlertPress}
+              activeOpacity={0.85}
+            >
+              {hasEventAlert ? (
+                <CheckCircle2
+                  size={15}
+                  color={COLORS.primaryDark}
+                  strokeWidth={2.4}
+                />
+              ) : (
+                <BellRing
+                  size={15}
+                  color={COLORS.accentDark}
+                  strokeWidth={2.4}
+                />
+              )}
+              <Text
+                style={[
+                  styles.emptyAlertBtnText,
+                  hasEventAlert && styles.emptyAlertBtnTextActive,
+                ]}
+              >
+                {hasEventAlert
+                  ? "Alerta de viajes activa"
+                  : "Avisarme de viajes a este evento"}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       )}
     </View>
   );
@@ -227,6 +267,52 @@ const EventTripsSection = ({
           )}
         </TouchableOpacity>
       </View>
+
+      {onAlertPress && (
+        <TouchableOpacity
+          style={[
+            styles.alertStrip,
+            hasEventAlert && styles.alertStripActive,
+          ]}
+          onPress={onAlertPress}
+          activeOpacity={0.85}
+        >
+          <View style={styles.alertStripLeft}>
+            {hasEventAlert ? (
+              <CheckCircle2
+                size={16}
+                color={COLORS.primaryDark}
+                strokeWidth={2.4}
+              />
+            ) : (
+              <BellRing
+                size={16}
+                color={COLORS.accentDark}
+                strokeWidth={2.4}
+              />
+            )}
+            <Text
+              style={[
+                styles.alertStripText,
+                hasEventAlert && styles.alertStripTextActive,
+              ]}
+              numberOfLines={1}
+            >
+              {hasEventAlert
+                ? "Alerta activa para este evento"
+                : "Avisarme de nuevos viajes a este evento"}
+            </Text>
+          </View>
+          <Text
+            style={[
+              styles.alertStripAction,
+              hasEventAlert && styles.alertStripActionActive,
+            ]}
+          >
+            {hasEventAlert ? "Gestionar" : "Activar"}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {/* Lista / Previsualización */}
       {loading || loadingNearby ? (
@@ -501,6 +587,73 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sm,
     lineHeight: 20,
     fontWeight: "800",
+    color: COLORS.primaryDark,
+  },
+  emptyActionsCol: {
+    alignItems: "center",
+    gap: SPACING.sm,
+  },
+  emptyAlertBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: COLORS.accentSoft,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm + 1,
+    borderWidth: 1,
+    borderColor: "rgba(242, 163, 60, 0.35)",
+  },
+  emptyAlertBtnActive: {
+    backgroundColor: COLORS.primarySoft,
+    borderColor: "rgba(11, 122, 59, 0.25)",
+  },
+  emptyAlertBtnText: {
+    fontSize: FONTS.xs + 1,
+    fontWeight: "800",
+    color: COLORS.accentDark,
+  },
+  emptyAlertBtnTextActive: {
+    color: COLORS.primaryDark,
+  },
+  alertStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: COLORS.accentSoft,
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm + 2,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: "rgba(242, 163, 60, 0.35)",
+    gap: SPACING.sm,
+  },
+  alertStripActive: {
+    backgroundColor: COLORS.primarySoft,
+    borderColor: "rgba(11, 122, 59, 0.25)",
+  },
+  alertStripLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.xs + 2,
+    flex: 1,
+  },
+  alertStripText: {
+    flex: 1,
+    fontSize: FONTS.xs + 1,
+    fontWeight: "700",
+    color: COLORS.accentDark,
+  },
+  alertStripTextActive: {
+    color: COLORS.primaryDark,
+  },
+  alertStripAction: {
+    fontSize: FONTS.xs + 1,
+    fontWeight: "800",
+    color: COLORS.accentDark,
+  },
+  alertStripActionActive: {
     color: COLORS.primaryDark,
   },
 });

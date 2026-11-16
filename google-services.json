@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "362306982695-2ho839kcn93onpivc75g82pd8ftk1ht0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "app.youconnext",
+            "certificate_hash": "5881a03473a66f86c3acb43c4334fe551f6d7adf"
+          }
+        },
+        {
           "client_id": "362306982695-2jn0c0udj5ifefhgiem9cbi6kad53uoe.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
@@ -43,6 +51,14 @@
           "android_info": {
             "package_name": "app.youconnext",
             "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "362306982695-qbkeas0uiapmltr2hiu9nudbh6umn1pr.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "app.youconnext",
+            "certificate_hash": "22e88d4e95d33699e99b7e078239a966f930c8da"
           }
         },
         {

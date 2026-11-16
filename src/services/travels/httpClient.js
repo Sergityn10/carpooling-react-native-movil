@@ -196,20 +196,26 @@ class TravelsHttpClient {
         if (response.status === 401 && this.onUnauthorized) {
           this.onUnauthorized();
         }
+        const buildHttpError = (message) => {
+          const err = new Error(message);
+          err.status = response.status;
+          err.data = data;
+          return err;
+        };
         if (data && typeof data === "object") {
           const msg = data.message || data.error;
           if (typeof msg === "string") {
-            throw new Error(msg);
+            throw buildHttpError(msg);
           }
           if (msg && typeof msg === "object") {
-            throw new Error(JSON.stringify(msg));
+            throw buildHttpError(JSON.stringify(msg));
           }
           if (data.errors) {
-            throw new Error(JSON.stringify(data.errors));
+            throw buildHttpError(JSON.stringify(data.errors));
           }
-          throw new Error(JSON.stringify(data));
+          throw buildHttpError(JSON.stringify(data));
         }
-        throw new Error(
+        throw buildHttpError(
           typeof data === "string" && data ? data : "Error en la peticion",
         );
       }

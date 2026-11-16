@@ -26,6 +26,8 @@ import {
   ScrollText,
   ShieldCheck,
   HelpCircle,
+  BellRing,
+  MessageSquarePlus,
 } from "lucide-react-native";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../../../constants";
 import styles from "../profileStyles";
@@ -403,6 +405,12 @@ const MainMenuSection = ({
       <Text style={styles.menuSectionLabel}>Configuración y Privacidad</Text>
       <View style={styles.menuItemsBlock}>
         <MenuRow
+          icon={BellRing}
+          label="Alertas de trayectos"
+          badge="Avisos"
+          onPress={() => navigation.navigate("MisAlertas")}
+        />
+        <MenuRow
           icon={ShieldCheck}
           label="Permisos y privacidad de datos"
           badge="Control"
@@ -414,6 +422,12 @@ const MainMenuSection = ({
       {/* Sección: Legal y Ayuda */}
       <Text style={styles.menuSectionLabel}>Legal y Ayuda</Text>
       <View style={styles.menuItemsBlock}>
+        <MenuRow
+          icon={MessageSquarePlus}
+          label="Danos tu opinión"
+          badge="Feedback"
+          onPress={() => navigation.navigate("Feedback")}
+        />
         <MenuRow
           icon={HelpCircle}
           label="Centro de ayuda"

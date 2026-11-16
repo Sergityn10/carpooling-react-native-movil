@@ -10,6 +10,7 @@ import {
   TextInput,
   Keyboard,
   ScrollView,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -24,6 +25,7 @@ import {
   Ticket,
   Users,
   Map,
+  BellRing,
 } from "lucide-react-native";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../constants";
 import {
@@ -34,11 +36,19 @@ import {
   CarouselSkeleton,
   AnimatedCardEntrance,
   MapaExploracionView,
+  CrearAlertaModal,
 } from "../components";
 import { trayectoService } from "../services/travels/trayectoService";
+import { alertaService } from "../services/travels/alertaService";
 import { enrichTripsWithDriverProfiles } from "../utils";
+import { TIPO_ALERTA, extractCityName } from "../utils/alertaUtils";
 import { eventService } from "../services/eventService";
 import { useUser } from "../context/UserContext";
+import { usePermission } from "../context/PermissionContext";
+import {
+  getNotificationPushStatus,
+  enablePushNotificationsForUser,
+} from "../services/notifications/pushRegistration";
 
 const TAB_MAPA = "mapa";
 const TAB_TRAYECTOS = "trayectos";
@@ -46,6 +56,7 @@ const TAB_EVENTOS = "eventos";
 
 const SearchTrayectosScreen = ({ navigation, route }) => {
   const { user } = useUser();
+  const { requestPermissionWithDisclosure } = usePermission();
   const initialParams = route.params?.searchParams || null;
   const initialTab = route.params?.tab || (initialParams ? TAB_TRAYECTOS : TAB_MAPA);
 
@@ -55,6 +66,9 @@ const SearchTrayectosScreen = ({ navigation, route }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [sheetVisible, setSheetVisible] = useState(false);
+  const [alertModalVisible, setAlertModalVisible] = useState(false);
+  const [existingAlertas, setExistingAlertas] = useState([]);
+  const [notificationsGranted, setNotificationsGranted] = useState(true);
 
   // Eventos state
   const [eventSearch, setEventSearch] = useState("");
@@ -130,6 +144,26 @@ const SearchTrayectosScreen = ({ navigation, route }) => {
 
   const handleViajePress = (viaje) => {
     navigation.navigate("ViajeDetalle", { viaje });
+  };
+
+  const handleOpenDestinationAlert = async () => {
+    const [status, list] = await Promise.all([
+      getNotificationPushStatus(),
+      alertaService.obtenerMisAlertas().catch(() => []),
+    ]);
+    setNotificationsGranted(Boolean(status?.granted));
+    setExistingAlertas(Array.isArray(list) ? list : []);
+    setAlertModalVisible(true);
+  };
+
+  const handleActivatePushFromSearch = async () => {
+    const { granted } = await enablePushNotificationsForUser({
+      requestPermissionWithDisclosure,
+      userId: user?.id,
+    });
+    if (granted) {
+      setNotificationsGranted(true);
+    }
   };
 
   // --- Eventos ---
@@ -215,16 +249,33 @@ const SearchTrayectosScreen = ({ navigation, route }) => {
         />
       );
     }
+    const destCity = extractCityName(
+      searchParams.destPlace || searchParams.destination,
+    );
     return (
-      <EmptyState
-        icon={MapPin}
-        tint={COLORS.primary}
-        tintSoft={COLORS.primarySoft}
-        title="Sin trayectos encontrados"
-        subtitle="No se encontraron viajes para esta búsqueda. Prueba cambiando la fecha u origen."
-        actionLabel="Modificar búsqueda"
-        onActionPress={() => setSheetVisible(true)}
-      />
+      <View style={styles.emptyWithAlertWrapper}>
+        <EmptyState
+          icon={MapPin}
+          tint={COLORS.primary}
+          tintSoft={COLORS.primarySoft}
+          title="Sin trayectos encontrados"
+          subtitle="No se encontraron viajes para esta búsqueda. Prueba cambiando la fecha u origen, o crea una alerta para que te avisemos."
+          actionLabel="Modificar búsqueda"
+          onActionPress={() => setSheetVisible(true)}
+        />
+        {Boolean(destCity) && (
+          <TouchableOpacity
+            style={styles.createAlertCta}
+            onPress={handleOpenDestinationAlert}
+            activeOpacity={0.85}
+          >
+            <BellRing size={16} color={COLORS.primaryDark} strokeWidth={2.4} />
+            <Text style={styles.createAlertCtaText} numberOfLines={1}>
+              Crear alerta para {destCity}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
     );
   };
 
@@ -530,6 +581,32 @@ const SearchTrayectosScreen = ({ navigation, route }) => {
         onSearch={handleSearch}
         initialParams={searchParams}
       />
+
+      {/* Modal contextual de Alerta por Destino */}
+      <CrearAlertaModal
+        visible={alertModalVisible}
+        onClose={() => setAlertModalVisible(false)}
+        existingAlertas={existingAlertas}
+        initialTipo={TIPO_ALERTA.DESTINO}
+        initialDestino={extractCityName(
+          searchParams?.destPlace || searchParams?.destination,
+        )}
+        notificationsGranted={notificationsGranted}
+        onRequestNotifications={handleActivatePushFromSearch}
+        onCreated={(created) => {
+          Alert.alert(
+            "Alerta creada",
+            `Te avisaremos cuando se publique un trayecto hacia ${created?.destino || "ese destino"}.`,
+            [
+              { text: "Cerrar", style: "cancel" },
+              {
+                text: "Ver mis alertas",
+                onPress: () => navigation.navigate("MisAlertas"),
+              },
+            ],
+          );
+        }}
+      />
     </SafeAreaView>
   );
 };
@@ -695,6 +772,27 @@ const styles = StyleSheet.create({
   },
   skeletonContainer: {
     paddingTop: SPACING.sm,
+  },
+  emptyWithAlertWrapper: {
+    gap: SPACING.md,
+  },
+  createAlertCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: SPACING.xs + 2,
+    backgroundColor: COLORS.primarySoft,
+    borderWidth: 1,
+    borderColor: "rgba(11, 122, 59, 0.25)",
+    borderRadius: RADIUS.full,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+  },
+  createAlertCtaText: {
+    fontSize: FONTS.sm,
+    fontWeight: "800",
+    color: COLORS.primaryDark,
+    flexShrink: 1,
   },
 });
 

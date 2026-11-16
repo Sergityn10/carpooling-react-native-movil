@@ -48,10 +48,17 @@ import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from "../constants";
 import { eventService } from "../services/eventService";
 import { trayectoService } from "../services/travels/trayectoService";
+import { alertaService } from "../services/travels/alertaService";
 import { usuarioService } from "../services/usuarioService";
 import { reverseGeocode } from "../services/googlePlaces";
 import { parseTripDate } from "../services/dateUtils";
 import { useUser } from "../context/UserContext";
+import { usePermission } from "../context/PermissionContext";
+import {
+  getNotificationPushStatus,
+  enablePushNotificationsForUser,
+} from "../services/notifications/pushRegistration";
+import { TIPO_ALERTA } from "../utils/alertaUtils";
 import {
   EventHeroImage,
   EventInfoSection,
@@ -61,6 +68,7 @@ import {
   EventLinks,
   EventTripsSection,
   EventAllTripsModal,
+  CrearAlertaModal,
 } from "../components";
 import { messageService } from "../services/messages/messageService";
 import {
@@ -99,8 +107,12 @@ const EventDetailScreen = ({ route, navigation }) => {
   const [isNearbyActive, setIsNearbyActive] = useState(false);
   const mapRef = useRef(null);
   const [eventAddress, setEventAddress] = useState(null);
+  const [existingAlertas, setExistingAlertas] = useState([]);
+  const [alertModalVisible, setAlertModalVisible] = useState(false);
+  const [notificationsGranted, setNotificationsGranted] = useState(true);
 
   const { user } = useUser();
+  const { requestPermissionWithDisclosure } = usePermission();
   const insets = useSafeAreaInsets();
   const sheetHeight = useRef(new Animated.Value(COLLAPSED_HEIGHT)).current;
   const currentHeightRef = useRef(COLLAPSED_HEIGHT);
@@ -300,15 +312,31 @@ const EventDetailScreen = ({ route, navigation }) => {
     }
   }, [fetchEvent, passedEvent, eventId]);
 
+  const fetchEventAlertStatus = useCallback(async () => {
+    try {
+      const list = await alertaService.obtenerMisAlertas();
+      setExistingAlertas(Array.isArray(list) ? list : []);
+    } catch {
+      // Silencioso en pantalla de detalle de evento
+    }
+  }, []);
+
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
       if (eventId) {
         fetchTrayectos();
         fetchParticipants();
+        fetchEventAlertStatus();
       }
     });
     return unsubscribe;
-  }, [navigation, eventId, fetchTrayectos, fetchParticipants]);
+  }, [
+    navigation,
+    eventId,
+    fetchTrayectos,
+    fetchParticipants,
+    fetchEventAlertStatus,
+  ]);
 
   const handleJoin = async () => {
     if (!eventId || joining) return;
@@ -527,6 +555,36 @@ const EventDetailScreen = ({ route, navigation }) => {
   const handleVerTodosViajes = (tab = "ida") => {
     setAllTripsModalTab(tab);
     setShowAllTripsModal(true);
+  };
+
+  const eventAlert = React.useMemo(
+    () =>
+      existingAlertas.find(
+        (a) =>
+          a?.tipo === TIPO_ALERTA.EVENTO &&
+          String(a?.eventoId || "") === String(eventId || ""),
+      ) || null,
+    [existingAlertas, eventId],
+  );
+
+  const handleEventAlertPress = async () => {
+    if (eventAlert) {
+      navigation.navigate("MisAlertas");
+      return;
+    }
+    const status = await getNotificationPushStatus();
+    setNotificationsGranted(Boolean(status?.granted));
+    setAlertModalVisible(true);
+  };
+
+  const handleActivatePushFromEvent = async () => {
+    const { granted } = await enablePushNotificationsForUser({
+      requestPermissionWithDisclosure,
+      userId: user?.id,
+    });
+    if (granted) {
+      setNotificationsGranted(true);
+    }
   };
 
   const animateSheet = (toHeight) => {
@@ -1158,6 +1216,8 @@ const EventDetailScreen = ({ route, navigation }) => {
               setIsNearbyActive(false);
               setNearbyTrips(null);
             }}
+            hasEventAlert={Boolean(eventAlert)}
+            onAlertPress={handleEventAlertPress}
           />
         </ScrollView>
       </Animated.View>
@@ -1177,6 +1237,33 @@ const EventDetailScreen = ({ route, navigation }) => {
         onResetFiltroCerca={handleResetFiltros}
         onViajePress={handleViajePress}
         onCrearViaje={handleCrearViaje}
+      />
+
+      {/* Modal contextual para crear alerta de viajes hacia el evento */}
+      <CrearAlertaModal
+        visible={alertModalVisible}
+        onClose={() => setAlertModalVisible(false)}
+        existingAlertas={existingAlertas}
+        initialTipo={TIPO_ALERTA.EVENTO}
+        initialEvent={event}
+        notificationsGranted={notificationsGranted}
+        onRequestNotifications={handleActivatePushFromEvent}
+        onCreated={(created) => {
+          if (created) {
+            setExistingAlertas((prev) => [created, ...prev]);
+          }
+          Alert.alert(
+            "Alerta activada",
+            `Te avisaremos cuando se publiquen viajes hacia ${event?.name || "este evento"}.`,
+            [
+              { text: "Cerrar", style: "cancel" },
+              {
+                text: "Ver mis alertas",
+                onPress: () => navigation.navigate("MisAlertas"),
+              },
+            ],
+          );
+        }}
       />
     </View>
   );
