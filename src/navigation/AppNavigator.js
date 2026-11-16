@@ -2,6 +2,7 @@
 import React from "react";
 import {
   NavigationContainer,
+  createNavigationContainerRef,
   getStateFromPath,
 } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -23,6 +24,8 @@ import {
 } from "lucide-react-native";
 import { COLORS, BRAND, FONTS, SHADOWS, RADIUS } from "../constants";
 import { useUser } from "../context/UserContext";
+import { useTripAlertNotifications } from "../hooks";
+import { TripAlertBanner } from "../components";
 import {
   HomeScreen,
   PerfilScreen,
@@ -37,6 +40,7 @@ import {
   ViajeEnCursoScreen,
   OnboardingScreen,
   MisUbicacionesScreen,
+  MisAlertasScreen,
   EventDetailScreen,
   MisEventosScreen,
   MisPlanesScreen,
@@ -57,6 +61,7 @@ import {
   EnterpriseEventDetailScreen,
   EnterpriseQRScannerScreen,
   EnterpriseProfileEditScreen,
+  FeedbackScreen,
 } from "../screens";
 import EnterpriseNavigator from "./EnterpriseNavigator";
 
@@ -217,14 +222,16 @@ const linking = {
       ViajeDetalle: {
         path: "api/trayecto/:id",
         parse: {
-          id: (id) => Number(id),
+          id: (id) => (/^\d+$/.test(String(id)) ? Number(id) : id),
         },
       },
       ViajeEnCurso: "api/trayecto/:id/en-curso",
+      MisAlertas: "alertas",
       Wallet: "wallet",
       Historial: "historial",
       EnterpriseLogin: "enterprise/login",
       EnterpriseRegister: "enterprise/register",
+      Feedback: "feedback",
     },
   },
   getStateFromPath(path, config) {
@@ -232,6 +239,11 @@ const linking = {
     if (pathPart === "/redirect") {
       const params = new URLSearchParams(queryPart);
       const to = params.get("to");
+      if (to === "alertas" || to === "mis-alertas") {
+        return {
+          routes: [{ name: "MisAlertas" }],
+        };
+      }
       const screenName = REDIRECT_SCREEN_MAP[to] || "Home";
       return {
         routes: [
@@ -248,9 +260,37 @@ const linking = {
   },
 };
 
+const navigationRef = createNavigationContainerRef();
+
 // Navegación principal de la app
 const AppNavigator = () => {
   const { user, isAuthenticated, loading, activeMode } = useUser();
+  const [isNavReady, setIsNavReady] = React.useState(false);
+
+  const needsOnboarding =
+    user &&
+    (user.onboarding_ended === 0 ||
+      user.onboarding_ended === false ||
+      user.onboarding_ended === "0" ||
+      user.onboarding_ended === null ||
+      user.onboarding_ended === undefined);
+
+  const notificationsEnabled = Boolean(
+    isAuthenticated && !loading && !needsOnboarding,
+  );
+
+  React.useEffect(() => {
+    if (!notificationsEnabled) {
+      setIsNavReady(false);
+    }
+  }, [notificationsEnabled]);
+
+  const { activeAlertToast, dismissAlertToast, openAlertTrip } =
+    useTripAlertNotifications({
+      navigationRef,
+      isNavigationReady: isNavReady,
+      enabled: notificationsEnabled,
+    });
 
   if (loading) {
     return <LoadingScreen />;
@@ -281,14 +321,6 @@ const AppNavigator = () => {
     );
   }
 
-  const needsOnboarding =
-    user &&
-    (user.onboarding_ended === 0 ||
-      user.onboarding_ended === false ||
-      user.onboarding_ended === "0" ||
-      user.onboarding_ended === null ||
-      user.onboarding_ended === undefined);
-
   if (needsOnboarding) {
     const isEnterpriseUser =
       user?.role === "enterprise" ||
@@ -312,7 +344,12 @@ const AppNavigator = () => {
   }
 
   return (
-    <NavigationContainer linking={linking}>
+    <View style={{ flex: 1 }}>
+      <NavigationContainer
+        ref={navigationRef}
+        linking={linking}
+        onReady={() => setIsNavReady(true)}
+      >
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
@@ -367,6 +404,7 @@ const AppNavigator = () => {
         />
         <Stack.Screen name="Perfil" component={PerfilScreen} />
         <Stack.Screen name="MisUbicaciones" component={MisUbicacionesScreen} />
+        <Stack.Screen name="MisAlertas" component={MisAlertasScreen} />
         <Stack.Screen name="EventDetalle" component={EventDetailScreen} />
         <Stack.Screen name="EventParticipants" component={EventParticipantsScreen} />
         <Stack.Screen name="MisEventos" component={MisEventosScreen} />
@@ -383,9 +421,16 @@ const AppNavigator = () => {
         <Stack.Screen name="Wallet" component={WalletScreen} />
         <Stack.Screen name="Historial" component={WalletScreen} />
         <Stack.Screen name="Estadisticas" component={HomeScreen} />
-        <Stack.Screen name="Ajustes" component={HomeScreen} />
+        <Stack.Screen name="Ajustes" component={MisAlertasScreen} />
+        <Stack.Screen name="Feedback" component={FeedbackScreen} />
       </Stack.Navigator>
     </NavigationContainer>
+    <TripAlertBanner
+      alert={activeAlertToast}
+      onPress={openAlertTrip}
+      onDismiss={dismissAlertToast}
+    />
+  </View>
   );
 };
 

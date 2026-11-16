@@ -171,7 +171,7 @@ const EnterpriseDashboardScreen = ({ navigation }) => {
               {kpis.ahorroEstimadoEur} €
             </Text>
             <Text style={styles.kpiLabel}>Ahorro Estimado</Text>
-            <Text style={styles.kpiHint}>En combustible y CAEs</Text>
+            <Text style={styles.kpiHint}>En combustible y trayectos</Text>
           </View>
         </View>
 

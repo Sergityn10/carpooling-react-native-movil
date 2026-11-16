@@ -64,7 +64,11 @@ import {
 } from "../utils";
 
 const ViajeDetalleScreen = ({ route, navigation }) => {
-  const { viaje: viajeInicial, id: idDirecto } = route.params || {};
+  const {
+    viaje: viajeInicial,
+    id: idDirecto,
+    fromAlertNotification = false,
+  } = route.params || {};
   const targetId = idDirecto || viajeInicial?.id;
   const { user } = useUser();
   const insets = useSafeAreaInsets();
@@ -181,7 +185,10 @@ const ViajeDetalleScreen = ({ route, navigation }) => {
       }
     } catch (error) {
       console.log("Error al cargar detalle:", error);
-      Alert.alert("Error", "No se pudo obtener el detalle de este trayecto.");
+      setViaje(null);
+      if (!fromAlertNotification) {
+        Alert.alert("Error", "No se pudo obtener el detalle de este trayecto.");
+      }
     } finally {
       setLoading(false);
     }
@@ -664,14 +671,26 @@ const ViajeDetalleScreen = ({ route, navigation }) => {
           </View>
           <Text style={styles.emptyTitle}>Trayecto no disponible</Text>
           <Text style={styles.emptySubtitle}>
-            No se pudo cargar la información de este trayecto o ya no está activo.
+            {fromAlertNotification
+              ? "Este trayecto de tu alerta ya no está activo o ha sido cancelado por el conductor."
+              : "No se pudo cargar la información de este trayecto o ya no está activo."}
           </Text>
           <TouchableOpacity
             style={styles.emptyButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => navigation.navigate("SearchTrayectos", { tab: "trayectos" })}
           >
-            <Text style={styles.emptyButtonText}>Volver atrás</Text>
+            <Text style={styles.emptyButtonText}>Buscar otros trayectos</Text>
           </TouchableOpacity>
+          {fromAlertNotification && (
+            <TouchableOpacity
+              style={styles.emptySecondaryButton}
+              onPress={() => navigation.navigate("MisAlertas")}
+            >
+              <Text style={styles.emptySecondaryButtonText}>
+                Gestionar mis alertas
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </SafeAreaView>
     );
@@ -772,6 +791,41 @@ const ViajeDetalleScreen = ({ route, navigation }) => {
           { paddingBottom: estaCompletado ? insets.bottom + 24 : insets.bottom + 110 },
         ]}
       >
+        {(estadoViaje === "cancelado" ||
+          (!esConductor && !reservaExistente && plazasDisponibles <= 0)) && (
+          <View style={styles.unavailableNoticeBanner}>
+            <AlertCircle size={18} color={COLORS.accentDark} strokeWidth={2.3} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.unavailableNoticeTitle}>
+                {estadoViaje === "cancelado"
+                  ? "Este trayecto ha sido cancelado"
+                  : "Este trayecto ya no tiene plazas libres"}
+              </Text>
+              <Text style={styles.unavailableNoticeSubtitle}>
+                {fromAlertNotification
+                  ? "Otro pasajero reservó las últimas plazas o el viaje cambió de estado."
+                  : "Puedes explorar otros trayectos disponibles hacia tu destino."}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.unavailableNoticeBtn}
+              onPress={() =>
+                navigation.navigate("SearchTrayectos", {
+                  tab: "trayectos",
+                  searchParams: {
+                    origin: "",
+                    destination: viaje?.destino || "",
+                    date: "",
+                    passengers: 1,
+                  },
+                })
+              }
+            >
+              <Text style={styles.unavailableNoticeBtnText}>Buscar</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* HERO ROUTE CARD */}
         <View style={styles.heroRouteCard}>
           <View style={styles.timelineRow}>
@@ -2051,6 +2105,48 @@ const styles = StyleSheet.create({
   emptyButtonText: {
     fontSize: FONTS.sm,
     fontWeight: "700",
+    color: COLORS.white,
+  },
+  emptySecondaryButton: {
+    marginTop: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm + 2,
+  },
+  emptySecondaryButtonText: {
+    fontSize: FONTS.sm,
+    fontWeight: "700",
+    color: COLORS.primaryDark,
+  },
+  unavailableNoticeBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    backgroundColor: COLORS.accentSoft,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: "rgba(242, 163, 60, 0.35)",
+  },
+  unavailableNoticeTitle: {
+    fontSize: FONTS.xs + 1,
+    fontWeight: "800",
+    color: COLORS.accentDark,
+  },
+  unavailableNoticeSubtitle: {
+    fontSize: 11,
+    color: COLORS.gray700,
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  unavailableNoticeBtn: {
+    backgroundColor: COLORS.accentDark,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs + 3,
+    borderRadius: RADIUS.full,
+  },
+  unavailableNoticeBtnText: {
+    fontSize: FONTS.xs,
+    fontWeight: "800",
     color: COLORS.white,
   },
 });

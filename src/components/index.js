@@ -74,6 +74,11 @@ export { default as EventLinks } from "./events/EventLinks";
 export { default as EventTripsSection } from "./events/EventTripsSection";
 export { default as EventAllTripsModal } from "./events/EventAllTripsModal";
 
+// Trip Alerts
+export { default as AlertaCard } from "./alerts/AlertaCard";
+export { default as CrearAlertaModal } from "./alerts/CrearAlertaModal";
+export { default as TripAlertBanner } from "./alerts/TripAlertBanner";
+
 // Enterprise (Organizaciones B2B)
 export {
   EnterpriseHeader,

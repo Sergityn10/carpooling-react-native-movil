@@ -20,7 +20,6 @@ import HistorialSection from "./sections/HistorialSection";
 import VehiculosSection from "./sections/VehiculosSection";
 import MonederoSection from "./sections/MonederoSection";
 import WalletScreen from "../../screens/WalletScreen";
-import BonoEnergeticoSection from "./sections/BonoEnergeticoSection";
 import PermisosPrivacidadSection from "./sections/PermisosPrivacidadSection";
 
 const ProfileView = ({
@@ -62,8 +61,8 @@ const ProfileView = ({
   const [errorViajes, setErrorViajes] = useState(null);
   const [publicStats, setPublicStats] = useState({
     completed_trips: 0,
-    kwh_generated: 0,
-    eur_generated: 0,
+    passengers_transported: 0,
+    rating_average: null,
   });
   const [resumingPagoId, setResumingPagoId] = useState(null);
   const [expandedViajeId, setExpandedViajeId] = useState(null);
@@ -104,7 +103,6 @@ const ProfileView = ({
   const [uploadingImage, setUploadingImage] = useState(false);
   const [stripeConnectStatus, setStripeConnectStatus] = useState(null);
   const [stripeOnboardingLoading, setStripeOnboardingLoading] = useState(false);
-  const [caeData, setCaeData] = useState(null);
 
   // Sincronizar formData cuando el user del contexto se actualiza
   // Solo dependemos de campos primitivos para evitar loops
@@ -195,11 +193,6 @@ const ProfileView = ({
         setWalletBalance(balanceRes.value.balances);
       }
 
-      if (balanceRes.status === "fulfilled" && balanceRes.value?.cae) {
-        setCaeData(balanceRes.value.cae);
-      } else {
-        setCaeData(null);
-      }
       if (txRes.status === "fulfilled" && txRes.value?.transactions) {
         setWalletTransactions(txRes.value.transactions);
       }
@@ -261,7 +254,6 @@ const ProfileView = ({
           .then((res) => {
             if (isCancelled) return;
             if (res?.balances) setWalletBalance(res.balances);
-            if (res?.cae) setCaeData(res.cae);
           })
           .catch(() => {});
       });
@@ -279,12 +271,13 @@ const ProfileView = ({
         const stats = res?.data || res || {};
         const trayectos = stats.trayectos || {};
         const reservas = stats.reservas || {};
-        const cae = stats.cae || {};
         setPublicStats({
           completed_trips:
             (trayectos.finalizados ?? 0) + (reservas.completadas ?? 0),
-          kwh_generated: cae.kwh_generados ?? 0,
-          eur_generated: cae.eur_generados ?? 0,
+          passengers_transported: stats.economia?.pasajeros_transportados ?? 0,
+          rating_average: stats.comentarios?.rating_promedio
+            ? stats.comentarios.rating_promedio / 2
+            : null,
         });
       })
       .catch((err) => {
@@ -1015,14 +1008,6 @@ const ProfileView = ({
               Calendar,
             )}
           </ScrollView>
-        );
-      case "bono-energetico":
-        return (
-          <BonoEnergeticoSection
-            user={user}
-            onNavigate={setCurrentSubView}
-            onBack={handleBackToMenu}
-          />
         );
       case "monedero":
         return (

@@ -12,6 +12,7 @@ export { default as SearchTrayectosScreen } from "./SearchTrayectosScreen";
 export { default as ViajeEnCursoScreen } from "./ViajeEnCursoScreen";
 export { default as OnboardingScreen } from "./OnboardingScreen";
 export { default as MisUbicacionesScreen } from "./MisUbicacionesScreen";
+export { default as MisAlertasScreen } from "./MisAlertasScreen";
 export { default as EventDetailScreen } from "./EventDetailScreen";
 export { default as MisEventosScreen } from "./MisEventosScreen";
 export { default as MisPlanesScreen } from "./MisPlanesScreen";
@@ -24,6 +25,10 @@ export { default as ChatDetailScreen } from "./ChatDetailScreen";
 export { default as DirectChatScreen } from "./DirectChatScreen";
 export { default as EventParticipantsScreen } from "./EventParticipantsScreen";
 export { default as WalletScreen } from "./WalletScreen";
+export { default as FeedbackScreen } from "./FeedbackScreen";
+
+
+
 
 // Enterprise (Organizaciones B2B)
 export {

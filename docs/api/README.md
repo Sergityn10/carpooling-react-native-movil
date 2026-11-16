@@ -18,6 +18,8 @@ Documentación de los endpoints de la API REST del backend de carpooling para us
 | [payment.md](./payment.md)                                     | Pagos y Stripe                      | `/api/payment`                          | Stripe Connect, clientes, monedero, payment intents, payouts, recargas                                         |
 | [webhooks.md](./webhooks.md)                                   | Webhooks                            | `/api/webhook`                          | Recepción y procesamiento de eventos de Stripe                                                                 |
 | [routines.md](./routines.md)                                   | Disponibilidad semanal              | `/api/routines`                         | CRUD de rutinas/disponibilidad semanal de transporte                                                           |
+| [feedback.md](./feedback.md)                                   | Feedback y Buzón de Sugerencias     | `/api/feedback`, `/api/admin/feedback`  | Endpoints para envío desde app móvil y gestión completa en panel de administración Back-Office                  |
+
 
 ## Guías de Implementación Frontend
 

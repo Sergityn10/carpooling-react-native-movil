@@ -40,6 +40,7 @@
       }
     },
     "plugins": [
+      "./plugins/withAndroidVersionCode",
       "./plugins/withGoogleServicesFile",
       "./plugins/withAndroidSigning",
       [

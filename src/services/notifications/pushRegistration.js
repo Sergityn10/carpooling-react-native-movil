@@ -5,17 +5,49 @@ import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import { notificacionService } from "./notificacionService";
 import notificationsHttpClient from "./httpClient";
+import tokenStorage from "../tokenStorage";
+import { PERMISSION_TYPES } from "../../constants/permissionsConfig";
 
 const DEVICE_TOKEN_KEY = "@youconnext_device_push_token";
 const DEVICE_ID_KEY = "@youconnext_device_id";
+export const TRIP_ALERTS_CHANNEL_ID = "trip-alerts";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
   }),
 });
+
+export async function ensureTripAlertNotificationChannel() {
+  if (Platform.OS !== "android") return null;
+  try {
+    return await Notifications.setNotificationChannelAsync(
+      TRIP_ALERTS_CHANNEL_ID,
+      {
+        name: "Alertas de trayectos",
+        description:
+          "Avisos cuando se publica un viaje a un destino o evento de tu interés.",
+        importance: Notifications.AndroidImportance.HIGH,
+        sound: "default",
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: "#0B7A3B",
+        enableVibrate: true,
+        enableLights: true,
+      },
+    );
+  } catch (error) {
+    if (__DEV__) {
+      console.warn(
+        "[PushRegistration] Error setting Android notification channel:",
+        error?.message,
+      );
+    }
+    return null;
+  }
+}
 
 async function getProjectId() {
   return (
@@ -103,6 +135,8 @@ export async function registerPushDevice(userId, jwtToken, force = false) {
         error: "Permiso de notificaciones denegado",
       };
     }
+
+    await ensureTripAlertNotificationChannel();
 
     if (jwtToken) {
       notificationsHttpClient.setToken(jwtToken);
@@ -217,4 +251,54 @@ export function listenForTokenRefresh(userId, jwtToken, callback) {
  */
 export async function getStoredPushToken() {
   return AsyncStorage.getItem(DEVICE_TOKEN_KEY);
+}
+
+/**
+ * Consulta el estado actual de permisos del sistema y si existe un token push guardado.
+ */
+export async function getNotificationPushStatus() {
+  try {
+    const [{ status, canAskAgain }, storedToken] = await Promise.all([
+      Notifications.getPermissionsAsync(),
+      AsyncStorage.getItem(DEVICE_TOKEN_KEY),
+    ]);
+    return {
+      permissionStatus: status,
+      granted: status === "granted",
+      canAskAgain: Boolean(canAskAgain),
+      hasRegisteredToken: Boolean(storedToken),
+      token: storedToken || null,
+    };
+  } catch {
+    return {
+      permissionStatus: "undetermined",
+      granted: false,
+      canAskAgain: true,
+      hasRegisteredToken: false,
+      token: null,
+    };
+  }
+}
+
+/**
+ * Solicita permiso de notificaciones mediante Prominent Disclosure y registra el token FCM en /api/device-tokens.
+ */
+export async function enablePushNotificationsForUser({
+  requestPermissionWithDisclosure,
+  userId,
+}) {
+  if (typeof requestPermissionWithDisclosure !== "function") {
+    return { granted: false };
+  }
+  const res = await requestPermissionWithDisclosure(
+    PERMISSION_TYPES.NOTIFICATIONS,
+    { forcePrompt: true },
+  );
+  if (res?.granted && userId) {
+    const jwtToken = await tokenStorage.getAuthToken();
+    if (jwtToken) {
+      await registerPushDevice(userId, jwtToken, true);
+    }
+  }
+  return { granted: Boolean(res?.granted) };
 }

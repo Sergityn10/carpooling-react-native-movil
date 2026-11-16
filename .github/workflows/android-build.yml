@@ -24,8 +24,27 @@ jobs:
       - name: 📦 Instalar dependencias de React Native
         run: npm install
 
+      - name: 🔢 Calcular Android versionCode
+        env:
+          VERSION_CODE_OFFSET: 45
+        run: |
+          VERSION_CODE=$((VERSION_CODE_OFFSET + ${{ github.run_number }}))
+          if [ "$VERSION_CODE" -lt 60 ]; then
+            echo "::error::El versionCode calculado ($VERSION_CODE) es menor que 60"
+            exit 1
+          fi
+          echo "ANDROID_VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+          echo "Android versionCode calculado: $VERSION_CODE (run_number=${{ github.run_number }}, offset=$VERSION_CODE_OFFSET)"
+
       - name: 🏗️ Generar carpetas nativas (Expo Prebuild)
-        run: npx expo prebuild --platform android
+        run: |
+          npx expo prebuild --platform android
+          grep -E "^\s*versionCode\s+${ANDROID_VERSION_CODE}\b" android/app/build.gradle || {
+            echo "::error::android/app/build.gradle no contiene versionCode $ANDROID_VERSION_CODE"
+            grep -n "versionCode\|versionName" android/app/build.gradle || true
+            exit 1
+          }
+          grep -n "versionCode\|versionName" android/app/build.gradle
 
       - name: ☕ Configurar Java (JDK)
         uses: actions/setup-java@v5
@@ -86,6 +105,15 @@ jobs:
         run: |
           echo "=== Huella digital del AAB compilado ==="
           keytool -printcert -jarfile android/app/build/outputs/bundle/release/app-release.aab
+          MERGED_MANIFEST="android/app/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml"
+          if [ -f "$MERGED_MANIFEST" ]; then
+            grep -E 'android:version(Code|Name)=' "$MERGED_MANIFEST" || true
+          fi
+          {
+            echo "### Build Android AAB"
+            echo "- **run_number**: ${{ github.run_number }}"
+            echo "- **versionCode**: \`$ANDROID_VERSION_CODE\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: 📤 Subir el AAB a GitHub Artifacts
         uses: actions/upload-artifact@v4

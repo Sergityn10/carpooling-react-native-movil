@@ -10,6 +10,7 @@ import authService from "./authService";
 import usuarioService from "./usuarioService";
 import viajeService from "./viajeService";
 import ubicacionService from "./ubicacionService";
+import feedbackService from "./feedbackService";
 
 // Proxy que delega al httpClient + servicios específicos
 const apiService = {
@@ -29,6 +30,10 @@ const apiService = {
 
   // Ubicaciones
   ...ubicacionService,
+
+  // Feedback
+  ...feedbackService,
+
 
   // Helpers
   healthCheck: () => httpClient.healthCheck(),
